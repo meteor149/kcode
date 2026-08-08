@@ -1,0 +1,34 @@
+name: iosApp
+options:
+  bundleIdPrefix: app.kcode
+  deploymentTarget:
+    iOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+    OTHER_LDFLAGS: "$(inherited) -framework KcodeShared"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.kcode.ios
+        PRODUCT_NAME: kcode
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Allow H5 apps to access your location when you approve it."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Allow H5 apps to use the camera when you approve it."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Allow H5 apps to record audio when you approve it."
+        INFOPLIST_KEY_NSMotionUsageDescription: "Allow H5 apps to read motion sensors when you approve it."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Allow H5 apps to select photos when you approve it."
+    preBuildScripts:
+      - name: Build shared Compose framework
+        script: |
+          cd "$SRCROOT/../.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false

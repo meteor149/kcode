@@ -2,18 +2,18 @@
 
 ## Project Structure & Module Organization
 
-This is a Kotlin Multiplatform project built with Compose Multiplatform and Koog. Shared UI and domain logic live in `composeApp/src/commonMain`; the Koog runtime shared by Android, Desktop, iOS, and Web lives in `agentMain`, and the Android/Desktop DataStore implementation lives in `jvmAndAndroidMain`. Platform implementations are in `androidMain`, `desktopMain`, `iosMain`, and `wasmJsMain`. `androidApp` contains the Android launcher, while `iosApp` is the SwiftUI host. Persistence is isolated in `historyStore`, web search in `webSearch`, local H5 execution in `h5Container`, and the browser SQLite worker in `sqliteWasmWorker`.
+This is a Kotlin Multiplatform project built with Compose Multiplatform and Koog. `shared` is the unified KMP module: `commonMain` contains UI, domain logic, Room persistence, and web search; `agentMain` contains the shared Koog runtime; `jvmAndAndroidMain` contains DataStore; and platform implementations live in `androidMain`, `desktopMain`, `iosMain`, and `wasmJsMain`. Application hosts are under `apps/androidApp` and `apps/iosApp`. The browser SQLite worker is isolated at `apps/web/sqliteWasmWorker`, and the local H5 runtime remains an independent extension at `extensions/h5Container`.
 
 ## Build, Test, and Development Commands
 
 Use the checked-in Gradle wrapper with JDK 21 (the application targets Java 17 bytecode):
 
-- `./gradlew :composeApp:run` — run the desktop application.
-- `./gradlew :androidApp:installDebug` — build and install Android debug output on a connected API 35+ device.
-- `./gradlew :composeApp:wasmJsBrowserDevelopmentRun` — start the browser development build.
-- `./gradlew :composeApp:allTests` — run shared and platform unit tests for the main module.
+- `./gradlew :shared:run` — run the desktop application.
+- `./gradlew :apps:androidApp:installDebug` — build and install Android debug output on a connected API 35+ device.
+- `./gradlew :shared:wasmJsBrowserDevelopmentRun` — start the browser development build.
+- `./gradlew :shared:allTests` — run shared and platform unit tests for the main module.
 - `./gradlew allTests` — run all available multiplatform tests across modules.
-- `./gradlew :androidApp:assembleDebug` — produce an Android debug APK without installing it.
+- `./gradlew :apps:androidApp:assembleDebug` — produce an Android debug APK without installing it.
 
 On Windows, use `gradlew.bat` in place of `./gradlew` when needed.
 

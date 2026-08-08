@@ -62,7 +62,7 @@ Use the checked-in Gradle wrapper from the repository root. On Windows, replace 
 ### Desktop
 
 ```bash
-./gradlew :composeApp:run
+./gradlew :shared:run
 ```
 
 ### Android
@@ -70,19 +70,19 @@ Use the checked-in Gradle wrapper from the repository root. On Windows, replace 
 Start an API 35+ emulator or connect a device, then run:
 
 ```bash
-./gradlew :androidApp:installDebug
+./gradlew :apps:androidApp:installDebug
 ```
 
 ### Web
 
 ```bash
-./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+./gradlew :shared:wasmJsBrowserDevelopmentRun
 ```
 
 ### iOS
 
 ```bash
-cd iosApp
+cd apps/iosApp
 xcodegen generate
 open iosApp.xcodeproj
 ```
@@ -113,16 +113,18 @@ Please report security-sensitive issues privately to the maintainers instead of 
 ## Architecture
 
 ```text
-androidApp/         Android application host
-composeApp/         Shared UI, agent runtime, settings, and platform bridges
-  commonMain/       UI, state, localization, models, and service contracts
-  agentMain/        Koog runtime and cross-platform agent tools
-  *Main/            Android, iOS, desktop, and Web implementations
-historyStore/       Room 3 schema and cross-platform SQLite persistence
-h5Container/        Isolated local H5 runtimes and capability bridges
-webSearch/          Google, Exa, and Bright Data search tool
-sqliteWasmWorker/   SQLite Wasm worker and OPFS bridge
-iosApp/             Lightweight SwiftUI host
+apps/
+  androidApp/       Android application host
+  iosApp/           Lightweight SwiftUI host
+  web/
+    sqliteWasmWorker/ SQLite Wasm worker module and OPFS bridge
+shared/             Unified Compose Multiplatform shared module
+  src/commonMain/   UI, state, Room schema, search, and service contracts
+  src/agentMain/    Koog runtime and cross-platform agent tools
+  src/*Main/        Android, iOS, desktop, and Web implementations
+  schemas/          Room migration schemas
+extensions/
+  h5Container/      Isolated local H5 runtimes and capability bridges
 docs/               Design and engineering documentation
 ```
 
@@ -132,16 +134,16 @@ Android/iOS/desktop use the same Room schema with bundled SQLite. Web keeps the 
 
 ```bash
 # Main multiplatform tests
-./gradlew :composeApp:allTests
+./gradlew :shared:allTests
 
 # All available module tests
 ./gradlew allTests
 
 # Android debug APK
-./gradlew :androidApp:assembleDebug
+./gradlew :apps:androidApp:assembleDebug
 
 # Production-style Web bundle
-./gradlew :composeApp:wasmJsBrowserProductionWebpack
+./gradlew :shared:wasmJsBrowserProductionWebpack
 ```
 
 ## Contributing

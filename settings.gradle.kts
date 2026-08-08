@@ -17,9 +17,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "kcode"
-include(":composeApp")
-include(":androidApp")
-include(":historyStore")
-include(":sqliteWasmWorker")
-include(":h5Container")
-include(":webSearch")
+include(":shared")
+include(":apps:androidApp")
+include(":apps:web:sqliteWasmWorker")
+include(":extensions:h5Container")

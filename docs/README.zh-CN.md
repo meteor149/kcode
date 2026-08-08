@@ -62,7 +62,7 @@ kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-
 ### 桌面端
 
 ```bash
-./gradlew :composeApp:run
+./gradlew :shared:run
 ```
 
 ### Android
@@ -70,19 +70,19 @@ kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-
 启动 API 35 或更高版本的模拟器，或连接 Android 设备，然后执行：
 
 ```bash
-./gradlew :androidApp:installDebug
+./gradlew :apps:androidApp:installDebug
 ```
 
 ### Web
 
 ```bash
-./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+./gradlew :shared:wasmJsBrowserDevelopmentRun
 ```
 
 ### iOS
 
 ```bash
-cd iosApp
+cd apps/iosApp
 xcodegen generate
 open iosApp.xcodeproj
 ```
@@ -113,16 +113,18 @@ Xcode Target 会自动构建并嵌入共享的 `KcodeShared` Framework，最低�
 ## 工程结构
 
 ```text
-androidApp/         Android 应用入口
-composeApp/         共享 UI、Agent 运行时、设置与平台桥接
-  commonMain/       UI、状态、本地化、模型与服务协议
-  agentMain/        Koog 运行时与跨平台 Agent 工具
-  *Main/            Android、iOS、桌面和 Web 平台实现
-historyStore/       Room 3 Schema 与跨平台 SQLite 持久化
-h5Container/        隔离 H5 运行时与硬件能力桥
-webSearch/          Google、Exa 与 Bright Data 搜索工具
-sqliteWasmWorker/   SQLite Wasm Worker 与 OPFS 桥接
-iosApp/             轻量 SwiftUI Host
+apps/
+  androidApp/       Android 应用入口
+  iosApp/           轻量 SwiftUI Host
+  web/
+    sqliteWasmWorker/ SQLite Wasm Worker 模块与 OPFS 桥接
+shared/             统一的 Compose Multiplatform 共享模块
+  src/commonMain/   UI、状态、Room Schema、搜索与服务协议
+  src/agentMain/    Koog 运行时与跨平台 Agent 工具
+  src/*Main/        Android、iOS、桌面和 Web 平台实现
+  schemas/          Room 迁移 Schema
+extensions/
+  h5Container/      隔离 H5 运行时与硬件能力桥
 docs/               设计与工程文档
 ```
 
@@ -132,16 +134,16 @@ Android、iOS 与桌面端使用相同的 Room Schema 和 Bundled SQLite；Web �
 
 ```bash
 # 主模块跨平台测试
-./gradlew :composeApp:allTests
+./gradlew :shared:allTests
 
 # 所有可用模块测试
 ./gradlew allTests
 
 # 构建 Android Debug APK
-./gradlew :androidApp:assembleDebug
+./gradlew :apps:androidApp:assembleDebug
 
 # 构建 Web 生产包
-./gradlew :composeApp:wasmJsBrowserProductionWebpack
+./gradlew :shared:wasmJsBrowserProductionWebpack
 ```
 
 ## 参与贡献
