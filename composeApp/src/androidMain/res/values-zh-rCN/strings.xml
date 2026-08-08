@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tool_confirmation_title">允许使用 %1$s？</string>
+    <string name="tool_confirmation_message">kcode 请求使用该工具。\n\n用途\n%1$s\n\n参数\n%2$s</string>
+    <string name="tool_confirmation_allow">允许</string>
+    <string name="tool_confirmation_deny">拒绝</string>
+</resources>

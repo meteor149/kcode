@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="h5_preview_default_title">H5 预览</string>
+    <string name="h5_preview_live">运行中</string>
+    <string name="h5_preview_close">关闭预览</string>
+    <string name="h5_preview_reload">刷新预览</string>
+    <string name="h5_preview_invalid">H5 入口文件不可用。</string>
+    <string name="h5_capability_allow_title">允许使用设备能力？</string>
+    <string name="h5_capability_allow_message">这个本地 H5 应用希望使用 %1$s。是否在本次预览期间允许？</string>
+    <string name="h5_capability_allow">允许</string>
+    <string name="h5_capability_deny">拒绝</string>
+</resources>

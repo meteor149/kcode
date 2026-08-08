@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tool_confirmation_title">Allow %1$s?</string>
+    <string name="tool_confirmation_message">kcode wants to use this tool.\n\nPurpose\n%1$s\n\nInput\n%2$s</string>
+    <string name="tool_confirmation_allow">Allow</string>
+    <string name="tool_confirmation_deny">Deny</string>
+</resources>

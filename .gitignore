@@ -1,0 +1,16 @@
+.gradle/
+.kotlin/
+.idea/
+**/build/
+kotlin-js-store/
+local.properties
+*.iml
+*.log
+*.tmp
+.DS_Store
+out/
+/screenshots/
+/captures/
+/device-*.png
+/kcode-*.png
+/kcode-*.xml
