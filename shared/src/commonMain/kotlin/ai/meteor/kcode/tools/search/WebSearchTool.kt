@@ -233,13 +233,13 @@ class WebSearchTool(
         const val REQUEST_TIMEOUT_MS = 25_000L
         const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36"
         val SearchJson = Json { ignoreUnknownKeys = true; explicitNulls = false }
-        val GOOGLE_RESULT_PATTERN = Regex("""<a[^>]+href=["']([^"']+)["'][^>]*>\s*<h3[^>]*>(.*?)</h3>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        val GOOGLE_RESULT_PATTERN = Regex("""(?is)<a[^>]+href=["']([^"']+)["'][^>]*>\s*<h3[^>]*>(.*?)</h3>""")
         val TAG_PATTERN = Regex("<[^>]+>")
-        val RSS_ITEM_PATTERN = Regex("<item>(.*?)</item>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        val RSS_TITLE_PATTERN = Regex("<title>(?:<!\\[CDATA\\[)?(.*?)(?:]]>)?</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        val RSS_LINK_PATTERN = Regex("<link>(.*?)</link>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        val RSS_DESCRIPTION_PATTERN = Regex("<description>(?:<!\\[CDATA\\[)?(.*?)(?:]]>)?</description>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        val RSS_DATE_PATTERN = Regex("<pubDate>(.*?)</pubDate>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        val RSS_ITEM_PATTERN = Regex("(?is)<item>(.*?)</item>")
+        val RSS_TITLE_PATTERN = Regex("(?is)<title>(?:<!\\[CDATA\\[)?(.*?)(?:]]>)?</title>")
+        val RSS_LINK_PATTERN = Regex("(?is)<link>(.*?)</link>")
+        val RSS_DESCRIPTION_PATTERN = Regex("(?is)<description>(?:<!\\[CDATA\\[)?(.*?)(?:]]>)?</description>")
+        val RSS_DATE_PATTERN = Regex("(?is)<pubDate>(.*?)</pubDate>")
     }
 }
 

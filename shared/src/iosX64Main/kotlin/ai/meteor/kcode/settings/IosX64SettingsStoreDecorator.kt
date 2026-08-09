@@ -19,7 +19,7 @@ private class IosX64SeededSettingsStore(
         return stored.copy(
             provider = "DeepSeek",
             modelId = "deepseek-v4-flash",
-            apiKey = deepSeekKey,
+            modelApiKeys = stored.modelApiKeys + ("DeepSeek" to deepSeekKey),
             temperature = 0.4,
             webSearchProvider = "exa",
             exaSearchApiKey = exaKey,
