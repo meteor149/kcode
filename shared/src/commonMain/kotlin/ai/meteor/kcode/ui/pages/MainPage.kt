@@ -46,6 +46,9 @@ import ai.meteor.kcode.ui.pages.setting.SettingsPageOverlay
 import ai.meteor.kcode.ui.pages.setting.toModelConfiguration
 import ai.meteor.kcode.ui.pages.setting.withConfiguration
 import ai.meteor.kcode.ui.pages.sidebar.SidebarScaffold
+import ai.meteor.kcode.ui.pages.sidebar.MainDestination
+import ai.meteor.kcode.ui.pages.artifact.ArtifactsPage
+import ai.meteor.kcode.artifact.ArtifactRepository
 import kotlinx.coroutines.launch
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -55,6 +58,7 @@ internal fun KcodeMain(
     chatService: ChatService,
     generationRunner: ChatGenerationRunner,
     webContainerController: WebContainerController?,
+    artifactRepository: ArtifactRepository,
     settingsStore: AppSettingsStore,
     historyRepository: ConversationHistoryRepository,
     imageSaver: ConversationImageSaver,
@@ -66,6 +70,7 @@ internal fun KcodeMain(
     val scope = rememberCoroutineScope()
     val conversationSession = rememberConversationSessionState(historyRepository)
     var sidebarOpen by remember { mutableStateOf(false) }
+    var destination by rememberSaveable { mutableStateOf(MainDestination.Chat) }
     var appSettings by remember { mutableStateOf(StoredAppSettings()) }
     var configuration by remember { mutableStateOf<ModelConfiguration?>(null) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -110,6 +115,7 @@ internal fun KcodeMain(
         conversationSession.startNewConversation()
         sidebarOpen = false
         settingsOpen = false
+        destination = MainDestination.Chat
     }
 
     CompositionLocalProvider(LocalAppLanguage provides AppLanguage.fromCode(appSettings.language)) {
@@ -126,42 +132,58 @@ internal fun KcodeMain(
                 BoxWithResponsiveWidth { width ->
                     val mainContent: @Composable (Modifier, Boolean) -> Unit =
                         { contentModifier, isCompact ->
-                            val active = conversationSession.conversations
-                                .firstOrNull { it.id == conversationSession.activeId }
-                            ChatPane(
-                                modifier = contentModifier,
-                                compact = isCompact,
-                                conversation = active,
-                                service = chatService,
-                                generationRunner = generationRunner,
-                                configuration = configuration,
-                                onConfigurationChange = ::updateConfiguration,
-                                onMenu = { sidebarOpen = true },
-                                onSettings = { settingsOpen = true },
-                                onNewConversation = ::newConversation,
-                                onSendToNew = conversationSession::ensureConversation,
-                                historyRepository = historyRepository,
-                                imageSaver = imageSaver,
-                                toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                                toolPermissionMode = ToolPermissionMode.fromCode(appSettings.toolPermissionMode),
-                                onToolPermissionModeChange = {
-                                    onToolPermissionModeChanged(it)
-                                    updateSettings(appSettings.copy(toolPermissionMode = it.code))
-                                },
-                            )
+                            when (destination) {
+                                MainDestination.Chat -> {
+                                    val active = conversationSession.conversations
+                                        .firstOrNull { it.id == conversationSession.activeId }
+                                    ChatPane(
+                                        modifier = contentModifier,
+                                        compact = isCompact,
+                                        conversation = active,
+                                        service = chatService,
+                                        generationRunner = generationRunner,
+                                        configuration = configuration,
+                                        onConfigurationChange = ::updateConfiguration,
+                                        onMenu = { sidebarOpen = true },
+                                        onSettings = { settingsOpen = true },
+                                        onNewConversation = ::newConversation,
+                                        onSendToNew = conversationSession::ensureConversation,
+                                        historyRepository = historyRepository,
+                                        imageSaver = imageSaver,
+                                        toolPermissionControlsAvailable = toolPermissionControlsAvailable,
+                                        toolPermissionMode = ToolPermissionMode.fromCode(appSettings.toolPermissionMode),
+                                        onToolPermissionModeChange = {
+                                            onToolPermissionModeChanged(it)
+                                            updateSettings(appSettings.copy(toolPermissionMode = it.code))
+                                        },
+                                    )
+                                }
+                                MainDestination.Artifacts -> ArtifactsPage(
+                                    repository = artifactRepository,
+                                    webContainerController = webContainerController,
+                                    compact = isCompact,
+                                    onMenu = { sidebarOpen = true },
+                                    modifier = contentModifier,
+                                )
+                            }
                         }
 
                     SidebarScaffold(
                         width = width,
                         sidebarOpen = sidebarOpen,
+                        destination = destination,
                         conversations = conversationSession.conversations,
                         activeId = conversationSession.activeId,
                         onSidebarOpenChange = { sidebarOpen = it },
                         onNew = ::newConversation,
-                        onSelect = conversationSession::selectConversation,
+                        onSelect = {
+                            conversationSession.selectConversation(it)
+                            destination = MainDestination.Chat
+                        },
                         onPin = conversationSession::toggleConversationPinned,
                         onDelete = conversationSession::deleteConversation,
                         onSettings = { settingsOpen = true },
+                        onDestination = { destination = it },
                         content = mainContent,
                     )
                 }

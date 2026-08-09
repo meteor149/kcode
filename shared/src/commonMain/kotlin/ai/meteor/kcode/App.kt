@@ -3,6 +3,8 @@
 package ai.meteor.kcode
 
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.artifact.ArtifactRepository
+import ai.meteor.kcode.artifact.EmptyArtifactRepository
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.UnsupportedConversationImageSaver
@@ -24,6 +26,7 @@ fun KcodeApp(
     chatService: ChatService,
     generationRunner: ChatGenerationRunner? = null,
     webContainerController: WebContainerController? = null,
+    artifactRepository: ArtifactRepository = EmptyArtifactRepository,
     settingsStore: AppSettingsStore = TransientAppSettingsStore,
     historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
     imageSaver: ConversationImageSaver = UnsupportedConversationImageSaver,
@@ -39,6 +42,7 @@ fun KcodeApp(
             chatService,
             activeGenerationRunner,
             webContainerController,
+            artifactRepository,
             settingsStore,
             historyRepository,
             imageSaver,

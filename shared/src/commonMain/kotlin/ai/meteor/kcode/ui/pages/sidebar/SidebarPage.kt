@@ -92,6 +92,7 @@ import kotlin.math.roundToInt
 internal fun SidebarScaffold(
     width: Dp,
     sidebarOpen: Boolean,
+    destination: MainDestination,
     conversations: List<ConversationState>,
     activeId: Long?,
     onSidebarOpenChange: (Boolean) -> Unit,
@@ -100,6 +101,7 @@ internal fun SidebarScaffold(
     onPin: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onSettings: () -> Unit,
+    onDestination: (MainDestination) -> Unit,
     content: @Composable (Modifier, Boolean) -> Unit,
 ) {
     val compact = width < 760.dp
@@ -108,6 +110,7 @@ internal fun SidebarScaffold(
             Sidebar(
                 conversations = conversations,
                 activeId = activeId,
+                destination = destination,
                 compact = false,
                 width = 276.dp,
                 onNew = onNew,
@@ -115,6 +118,7 @@ internal fun SidebarScaffold(
                 onPin = onPin,
                 onDelete = onDelete,
                 onSettings = onSettings,
+                onDestination = onDestination,
             )
             content(Modifier.weight(1f), false)
         }
@@ -153,6 +157,7 @@ internal fun SidebarScaffold(
             Sidebar(
                 conversations = conversations,
                 activeId = activeId,
+                destination = destination,
                 compact = true,
                 width = drawerWidth,
                 onNew = onNew,
@@ -163,6 +168,10 @@ internal fun SidebarScaffold(
                 onPin = onPin,
                 onDelete = onDelete,
                 onSettings = onSettings,
+                onDestination = {
+                    onDestination(it)
+                    onSidebarOpenChange(false)
+                },
             )
         }
         Box(
@@ -223,6 +232,7 @@ internal fun SidebarScaffold(
 internal fun Sidebar(
     conversations: List<ConversationState>,
     activeId: Long?,
+    destination: MainDestination,
     compact: Boolean,
     width: Dp,
     onNew: () -> Unit,
@@ -230,6 +240,7 @@ internal fun Sidebar(
     onPin: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onSettings: () -> Unit,
+    onDestination: (MainDestination) -> Unit,
 ) {
     Column(
         Modifier.requiredWidth(width)
@@ -247,8 +258,18 @@ internal fun Sidebar(
             fontWeight = FontWeight.Normal,
             letterSpacing = (-0.6).sp,
         )
-        SidebarDestination(SidebarIcon.Chats, text(UiText.Chats))
-        SidebarDestination(SidebarIcon.Artifacts, text(UiText.Artifacts))
+        SidebarDestination(
+            icon = SidebarIcon.Chats,
+            label = text(UiText.Chats),
+            selected = destination == MainDestination.Chat,
+            onClick = { onDestination(MainDestination.Chat) },
+        )
+        SidebarDestination(
+            icon = SidebarIcon.Artifacts,
+            label = text(UiText.Artifacts),
+            selected = destination == MainDestination.Artifacts,
+            onClick = { onDestination(MainDestination.Artifacts) },
+        )
         Text(
             text(UiText.Recent),
             Modifier.padding(top = KcodeSpacing.lg, bottom = KcodeSpacing.xs, start = KcodeSpacing.hair),
@@ -288,10 +309,23 @@ internal fun Sidebar(
 
 private enum class SidebarIcon { Chats, Artifacts }
 
+internal enum class MainDestination { Chat, Artifacts }
+
 @Composable
-private fun SidebarDestination(icon: SidebarIcon, label: String) {
+private fun SidebarDestination(
+    icon: SidebarIcon,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().height(56.dp).padding(horizontal = KcodeSpacing.hair),
+        Modifier.fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(KcodeRadius.control))
+            .background(if (selected) Color(0xFFEAEAE8) else Color.Transparent)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = KcodeSpacing.hair),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(34.dp), contentAlignment = Alignment.CenterStart) {

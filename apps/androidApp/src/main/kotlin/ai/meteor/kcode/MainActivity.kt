@@ -20,6 +20,7 @@ import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.search.WebSearchConfiguration
 import ai.meteor.kcode.tools.search.WebSearchProvider
+import ai.meteor.kcode.artifact.createAndroidArtifactRepository
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
         val settingsStore = createAndroidAppSettingsStore(applicationContext)
         val historyRepository = createAndroidConversationHistoryRepository(applicationContext)
         val imageSaver = AndroidConversationImageSaver(this)
+        val artifactRepository = createAndroidArtifactRepository(applicationContext)
         val shellExecutionMode = AtomicReference(ShellExecutionMode.App)
         val toolPermissionMode = AtomicReference(ToolPermissionMode.Ask)
         val runtime = createAndroidKoogChatRuntime(
@@ -58,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 chatService = runtime.chatService,
                 generationRunner = (application as KcodeApplication).generationRunner,
                 webContainerController = runtime.webContainerController,
+                artifactRepository = artifactRepository,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
                 imageSaver = imageSaver,

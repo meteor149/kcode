@@ -169,4 +169,11 @@
     <string name="web_collapse_background_zh">收起后台 Web 容器</string>
     <string name="web_restore_container_zh">将 %1$s 切换到前台</string>
     <string name="web_close_container_zh">关闭 %1$s</string>
+    <string name="artifact_library_zh">制品</string>
+    <string name="artifact_count_zh">共 %1$d 个制品</string>
+    <string name="empty_artifacts_zh">还没有保存的制品。</string>
+    <string name="artifact_load_failed_zh">无法读取制品：%1$s</string>
+    <string name="refresh_artifacts_zh">刷新</string>
+    <string name="open_artifact_zh">打开</string>
+    <string name="web_app_artifact_zh">Web 应用</string>
 </resources>
