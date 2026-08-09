@@ -5,6 +5,7 @@ package ai.meteor.kcode.ui.pages.setting
 
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.model.ModelProvider
+import ai.meteor.kcode.model.DashscopeRegion
 import ai.meteor.kcode.model.modelOption
 import ai.meteor.kcode.model.modelsFor
 import ai.meteor.kcode.settings.ShellExecutionMode
@@ -36,12 +37,16 @@ internal fun SettingsPageOverlay(
     persistenceFailure: PersistenceFailure?,
     shellSettingsAvailable: Boolean,
     onSettingsChange: (StoredAppSettings) -> Unit,
-    onConfigurationChange: (ModelConfiguration) -> Unit,
+    onModelSettingsChange: (ModelConfiguration, Map<String, String>) -> Unit,
     onShellExecutionModeChanged: (ShellExecutionMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     SettingsDialog(
         current = current,
+        storedProvider = ModelProvider.entries.firstOrNull { it.name == appSettings.provider }
+            ?: ModelProvider.OpenAI,
+        modelApiKeys = appSettings.modelApiKeys,
+        dashscopeRegion = DashscopeRegion.fromCode(appSettings.dashscopeRegion),
         persistenceFailure = persistenceFailure,
         language = AppLanguage.fromCode(appSettings.language),
         shellSettingsAvailable = shellSettingsAvailable,
@@ -63,13 +68,12 @@ internal fun SettingsPageOverlay(
                 ),
             )
         },
-        onSave = { saved ->
+        onSave = { saved, apiKeys ->
             val provider = saved.provider
-            val existingModel = current?.modelId
-                ?.let(::modelOption)
-                ?.takeIf { it.provider == provider }
+            val existingModel = current?.takeIf { it.provider == provider }
+                ?.let { modelOption(provider, it.modelId) }
             val model = existingModel ?: modelsFor(provider).first()
-            onConfigurationChange(
+            onModelSettingsChange(
                 saved.copy(
                     modelId = model.id,
                     temperature = if (existingModel != null) {
@@ -78,6 +82,7 @@ internal fun SettingsPageOverlay(
                         model.defaultTemperature
                     },
                 ),
+                apiKeys,
             )
         },
         onDismiss = onDismiss,
@@ -87,6 +92,9 @@ internal fun SettingsPageOverlay(
 @Composable
 internal fun SettingsDialog(
     current: ModelConfiguration?,
+    storedProvider: ModelProvider,
+    modelApiKeys: Map<String, String>,
+    dashscopeRegion: DashscopeRegion,
     persistenceFailure: PersistenceFailure?,
     language: AppLanguage,
     shellSettingsAvailable: Boolean,
@@ -97,18 +105,29 @@ internal fun SettingsDialog(
     onLanguageChange: (AppLanguage) -> Unit,
     onShellExecutionModeChange: (ShellExecutionMode) -> Unit,
     onWebSearchSettingsSave: (WebSearchProvider, String, String) -> Unit,
-    onSave: (ModelConfiguration) -> Unit,
+    onSave: (ModelConfiguration, Map<String, String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var route by rememberSaveable(stateSaver = SettingsRouteSaver) {
         mutableStateOf(SettingsRoute.Home)
     }
-    var provider by remember(current) { mutableStateOf(current?.provider ?: ModelProvider.OpenAI) }
-    var apiKey by remember(current) { mutableStateOf(current?.apiKey.orEmpty()) }
+    var provider by remember(current, storedProvider) {
+        mutableStateOf(current?.provider ?: storedProvider)
+    }
+    var apiKeys by remember(modelApiKeys, current) {
+        mutableStateOf(
+            if (current == null || current.apiKey.isBlank()) {
+                modelApiKeys
+            } else {
+                modelApiKeys + (current.provider.name to current.apiKey)
+            },
+        )
+    }
     var endpoint by remember(current) { mutableStateOf(current?.endpoint.orEmpty()) }
     var region by remember(current) { mutableStateOf(current?.region.orEmpty()) }
     var deployment by remember(current) { mutableStateOf(current?.deployment.orEmpty()) }
     var apiVersion by remember(current) { mutableStateOf(current?.apiVersion.orEmpty()) }
+    var selectedDashscopeRegion by remember(dashscopeRegion) { mutableStateOf(dashscopeRegion) }
     var showKey by remember { mutableStateOf(false) }
     var searchApiKey by remember(webSearchApiKey) { mutableStateOf(webSearchApiKey) }
     var exaApiKey by remember(exaSearchApiKey) { mutableStateOf(exaSearchApiKey) }
@@ -161,7 +180,8 @@ internal fun SettingsDialog(
 
                     SettingsRoute.ModelService -> ModelServiceSettings(
                         provider = provider,
-                        apiKey = apiKey,
+                        apiKey = apiKeys[provider.name].orEmpty(),
+                        dashscopeRegion = selectedDashscopeRegion,
                         endpoint = endpoint,
                         region = region,
                         deployment = deployment,
@@ -171,14 +191,16 @@ internal fun SettingsDialog(
                         onProviderChange = {
                             provider = it
                             if (current?.provider != it) {
-                                apiKey = ""
                                 endpoint = if (it == ModelProvider.Ollama) "http://localhost:11434" else ""
                                 region = if (it == ModelProvider.Bedrock) "us-west-2" else ""
                                 deployment = ""
                                 apiVersion = if (it == ModelProvider.AzureOpenAI) "2024-10-21" else ""
                             }
                         },
-                        onApiKeyChange = { apiKey = it },
+                        onApiKeyChange = { apiKey ->
+                            apiKeys = apiKeys + (provider.name to apiKey)
+                        },
+                        onDashscopeRegionChange = { selectedDashscopeRegion = it },
                         onEndpointChange = { endpoint = it },
                         onRegionChange = { region = it },
                         onDeploymentChange = { deployment = it },
@@ -189,13 +211,14 @@ internal fun SettingsDialog(
                             onSave(ModelConfiguration(
                                 provider = provider,
                                 modelId = model.id,
-                                apiKey = apiKey.trim(),
+                                apiKey = apiKeys[provider.name].orEmpty().trim(),
                                 temperature = model.defaultTemperature,
                                 endpoint = endpoint.trim(),
                                 region = region.trim(),
                                 deployment = deployment.trim(),
                                 apiVersion = apiVersion.trim(),
-                            ))
+                                dashscopeRegion = selectedDashscopeRegion,
+                            ), apiKeys.mapValues { it.value.trim() })
                             route = SettingsRoute.Home
                         },
                     )

@@ -1,5 +1,6 @@
 package ai.meteor.kcode.settings
 
+import ai.meteor.kcode.model.ModelProvider
 import kotlinx.browser.localStorage
 
 object WebAppSettingsStore : AppSettingsStore {
@@ -8,14 +9,21 @@ object WebAppSettingsStore : AppSettingsStore {
     override val protection = SettingsProtection.BrowserLocalStorage
 
     override suspend fun load(): StoredAppSettings {
+        val provider = localStorage.getItem(Prefix + "provider") ?: "OpenAI"
+        val storedApiKeys = ModelProvider.entries.mapNotNull { modelProvider ->
+            localStorage.getItem(Prefix + "modelApiKey." + modelProvider.name)
+                ?.takeIf(String::isNotBlank)
+                ?.let { modelProvider.name to it }
+        }.toMap()
         return StoredAppSettings(
-            provider = localStorage.getItem(Prefix + "provider") ?: "OpenAI",
+            provider = provider,
             modelId = localStorage.getItem(Prefix + "modelId") ?: "gpt-4o-mini",
-            apiKey = localStorage.getItem(Prefix + "apiKey").orEmpty(),
+            modelApiKeys = storedApiKeys,
             modelEndpoint = localStorage.getItem(Prefix + "modelEndpoint").orEmpty(),
             modelRegion = localStorage.getItem(Prefix + "modelRegion").orEmpty(),
             modelDeployment = localStorage.getItem(Prefix + "modelDeployment").orEmpty(),
             modelApiVersion = localStorage.getItem(Prefix + "modelApiVersion").orEmpty(),
+            dashscopeRegion = localStorage.getItem(Prefix + "dashscopeRegion") ?: "china_mainland",
             webSearchApiKey = localStorage.getItem(Prefix + "webSearchApiKey").orEmpty(),
             exaSearchApiKey = localStorage.getItem(Prefix + "exaSearchApiKey").orEmpty(),
             webSearchProvider = localStorage.getItem(Prefix + "webSearchProvider")
@@ -32,11 +40,17 @@ object WebAppSettingsStore : AppSettingsStore {
     override suspend fun save(settings: StoredAppSettings) {
         localStorage.setItem(Prefix + "provider", settings.provider)
         localStorage.setItem(Prefix + "modelId", settings.modelId)
-        localStorage.setItem(Prefix + "apiKey", settings.apiKey)
         localStorage.setItem(Prefix + "modelEndpoint", settings.modelEndpoint)
         localStorage.setItem(Prefix + "modelRegion", settings.modelRegion)
         localStorage.setItem(Prefix + "modelDeployment", settings.modelDeployment)
         localStorage.setItem(Prefix + "modelApiVersion", settings.modelApiVersion)
+        localStorage.setItem(Prefix + "dashscopeRegion", settings.dashscopeRegion)
+        ModelProvider.entries.forEach { provider ->
+            localStorage.setItem(
+                Prefix + "modelApiKey." + provider.name,
+                settings.modelApiKeys[provider.name].orEmpty(),
+            )
+        }
         localStorage.setItem(Prefix + "webSearchApiKey", settings.webSearchApiKey)
         localStorage.setItem(Prefix + "exaSearchApiKey", settings.exaSearchApiKey)
         localStorage.setItem(Prefix + "webSearchProvider", settings.webSearchProvider)

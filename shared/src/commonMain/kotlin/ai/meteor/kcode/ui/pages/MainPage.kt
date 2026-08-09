@@ -100,6 +100,12 @@ internal fun KcodeMain(
 
     fun updateConfiguration(value: ModelConfiguration) = updateSettings(appSettings.withConfiguration(value))
 
+    fun updateModelSettings(value: ModelConfiguration, apiKeys: Map<String, String>) {
+        updateSettings(
+            appSettings.copy(modelApiKeys = apiKeys).withConfiguration(value),
+        )
+    }
+
     fun newConversation() {
         conversationSession.startNewConversation()
         sidebarOpen = false
@@ -166,7 +172,7 @@ internal fun KcodeMain(
                         persistenceFailure = persistenceFailure,
                         shellSettingsAvailable = shellSettingsAvailable,
                         onSettingsChange = ::updateSettings,
-                        onConfigurationChange = ::updateConfiguration,
+                        onModelSettingsChange = ::updateModelSettings,
                         onShellExecutionModeChanged = onShellExecutionModeChanged,
                         onDismiss = { settingsOpen = false },
                     )

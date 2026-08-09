@@ -46,6 +46,9 @@
     <string name="protection_transient_zh">当前平台使用临时设置。</string>
     <string name="provider_zh">供应商</string>
     <string name="api_key_zh">API Key</string>
+    <string name="dashscope_china_mainland_zh">中国内地（北京）</string>
+    <string name="dashscope_singapore_zh">新加坡</string>
+    <string name="dashscope_united_states_zh">美国（弗吉尼亚）</string>
     <string name="endpoint_zh">服务地址</string>
     <string name="region_zh">区域</string>
     <string name="deployment_zh">部署</string>

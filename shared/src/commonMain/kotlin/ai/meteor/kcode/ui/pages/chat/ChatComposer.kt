@@ -112,7 +112,9 @@ private fun MobileModelSelector(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                configuration?.let { modelOption(it.modelId)?.let { option -> modelName(option) } }
+                configuration?.let {
+                    modelOption(it.provider, it.modelId)?.let { option -> modelName(option) }
+                }
                     ?: text(UiText.ChooseModel),
                 color = Ink,
                 style = MaterialTheme.typography.labelMedium,

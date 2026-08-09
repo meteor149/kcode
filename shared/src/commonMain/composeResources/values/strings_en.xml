@@ -46,6 +46,9 @@
     <string name="protection_transient_en">This platform currently uses temporary settings.</string>
     <string name="provider_en">Provider</string>
     <string name="api_key_en">API Key</string>
+    <string name="dashscope_china_mainland_en">China (Beijing)</string>
+    <string name="dashscope_singapore_en">Singapore</string>
+    <string name="dashscope_united_states_en">United States (Virginia)</string>
     <string name="endpoint_en">Endpoint</string>
     <string name="region_en">Region</string>
     <string name="deployment_en">Deployment</string>

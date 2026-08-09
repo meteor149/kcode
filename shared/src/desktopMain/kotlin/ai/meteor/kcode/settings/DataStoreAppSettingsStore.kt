@@ -1,5 +1,6 @@
 package ai.meteor.kcode.settings
 
+import ai.meteor.kcode.model.ModelProvider
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -19,14 +20,22 @@ class DataStoreAppSettingsStore(
 ) : AppSettingsStore {
     override suspend fun load(): StoredAppSettings {
         val values = dataStore.data.first()
+        val provider = values[Provider] ?: "OpenAI"
+        val storedApiKeys = ModelProvider.entries.mapNotNull { modelProvider ->
+            values[modelApiKey(modelProvider.name)]
+                ?.let(reveal::transform)
+                ?.takeIf(String::isNotBlank)
+                ?.let { modelProvider.name to it }
+        }.toMap()
         return StoredAppSettings(
-            provider = values[Provider] ?: "OpenAI",
+            provider = provider,
             modelId = values[ModelId] ?: "gpt-4o-mini",
-            apiKey = values[ApiKey]?.let(reveal::transform).orEmpty(),
+            modelApiKeys = storedApiKeys,
             modelEndpoint = values[ModelEndpoint].orEmpty(),
             modelRegion = values[ModelRegion].orEmpty(),
             modelDeployment = values[ModelDeployment].orEmpty(),
             modelApiVersion = values[ModelApiVersion].orEmpty(),
+            dashscopeRegion = values[DashscopeRegion] ?: "china_mainland",
             webSearchApiKey = values[WebSearchApiKey]?.let(reveal::transform).orEmpty(),
             exaSearchApiKey = values[ExaSearchApiKey]?.let(reveal::transform).orEmpty(),
             webSearchProvider = values[WebSearchProvider]
@@ -44,11 +53,16 @@ class DataStoreAppSettingsStore(
         dataStore.edit { values ->
             values[Provider] = settings.provider
             values[ModelId] = settings.modelId
-            values[ApiKey] = protect.transform(settings.apiKey)
             values[ModelEndpoint] = settings.modelEndpoint
             values[ModelRegion] = settings.modelRegion
             values[ModelDeployment] = settings.modelDeployment
             values[ModelApiVersion] = settings.modelApiVersion
+            values[DashscopeRegion] = settings.dashscopeRegion
+            ModelProvider.entries.forEach { provider ->
+                values[modelApiKey(provider.name)] = protect.transform(
+                    settings.modelApiKeys[provider.name].orEmpty(),
+                )
+            }
             values[WebSearchApiKey] = protect.transform(settings.webSearchApiKey)
             values[ExaSearchApiKey] = protect.transform(settings.exaSearchApiKey)
             values[WebSearchProvider] = settings.webSearchProvider
@@ -63,11 +77,12 @@ class DataStoreAppSettingsStore(
     private companion object {
         val Provider = stringPreferencesKey("model_provider")
         val ModelId = stringPreferencesKey("model_id")
-        val ApiKey = stringPreferencesKey("api_key")
+        fun modelApiKey(provider: String) = stringPreferencesKey("model_api_key.$provider")
         val ModelEndpoint = stringPreferencesKey("model_endpoint")
         val ModelRegion = stringPreferencesKey("model_region")
         val ModelDeployment = stringPreferencesKey("model_deployment")
         val ModelApiVersion = stringPreferencesKey("model_api_version")
+        val DashscopeRegion = stringPreferencesKey("dashscope_region")
         val WebSearchApiKey = stringPreferencesKey("web_search_api_key")
         val ExaSearchApiKey = stringPreferencesKey("exa_search_api_key")
         val WebSearchProvider = stringPreferencesKey("web_search_provider")

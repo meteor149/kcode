@@ -15,7 +15,7 @@ class ModelConfigurationTest {
 
     @Test
     fun modelLookupReturnsProviderMetadata() {
-        val model = assertNotNull(modelOption("deepseek-v4-pro"))
+        val model = assertNotNull(modelOption(ModelProvider.DeepSeek, "deepseek-v4-pro"))
         assertEquals(ModelProvider.DeepSeek, model.provider)
         assertEquals("deepseek-v4-pro", model.id)
         assertEquals(0.3, model.defaultTemperature)

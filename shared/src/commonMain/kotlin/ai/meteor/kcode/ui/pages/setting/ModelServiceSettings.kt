@@ -4,6 +4,8 @@ package ai.meteor.kcode.ui.pages.setting
 
 import ai.meteor.kcode.ui.design.Mist
 import ai.meteor.kcode.ui.design.Leaf
+import ai.meteor.kcode.ui.design.LeafInk
+import ai.meteor.kcode.ui.design.Ink
 import ai.meteor.kcode.ui.design.SoftInk
 import ai.meteor.kcode.ui.design.Hairline
 import ai.meteor.kcode.ui.design.Error
@@ -13,21 +15,28 @@ import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.design.KcodeSpacing
 
 import ai.meteor.kcode.model.ModelProvider
+import ai.meteor.kcode.model.DashscopeRegion
 import ai.meteor.kcode.model.requiresApiKey
 import ai.meteor.kcode.model.requiresDeployment
 import ai.meteor.kcode.model.requiresEndpoint
 import ai.meteor.kcode.model.requiresRegion
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressScale
+import ai.meteor.kcode.ui.component.pressClickable
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,12 +51,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import ai.meteor.kcode.ui.component.ApiKeyField
 @Composable
 internal fun ModelServiceSettings(
     provider: ModelProvider,
     apiKey: String,
+    dashscopeRegion: DashscopeRegion,
     endpoint: String,
     region: String,
     deployment: String,
@@ -56,6 +68,7 @@ internal fun ModelServiceSettings(
     persistenceFailure: PersistenceFailure?,
     onProviderChange: (ModelProvider) -> Unit,
     onApiKeyChange: (String) -> Unit,
+    onDashscopeRegionChange: (DashscopeRegion) -> Unit,
     onEndpointChange: (String) -> Unit,
     onRegionChange: (String) -> Unit,
     onDeploymentChange: (String) -> Unit,
@@ -90,6 +103,26 @@ internal fun ModelServiceSettings(
                     onApiKeyChange,
                     onToggleKey
                 )
+            }
+        }
+        if (provider == ModelProvider.Alibaba) {
+            CompactSectionLabel(text(UiText.Region), Modifier.padding(top = KcodeSpacing.lg))
+            CompactSettingsGroup(
+                contentPadding = PaddingValues(
+                    horizontal = KcodeSpacing.md,
+                    vertical = KcodeSpacing.hair,
+                ),
+            ) {
+                DashscopeRegion.entries.forEachIndexed { index, item ->
+                    DashscopeRegionRow(
+                        region = item,
+                        selected = dashscopeRegion == item,
+                        onClick = { onDashscopeRegionChange(item) },
+                    )
+                    if (index != DashscopeRegion.entries.lastIndex) {
+                        HorizontalDivider(thickness = .5.dp, color = Hairline)
+                    }
+                }
             }
         }
         if (provider.requiresEndpoint) {
@@ -142,6 +175,37 @@ internal fun ModelServiceSettings(
             ),
         ) {
             Text(text(UiText.SaveSettings), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun DashscopeRegionRow(
+    region: DashscopeRegion,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = KcodeSize.touchTarget)
+            .pressClickable(onClick = onClick)
+            .clip(RoundedCornerShape(KcodeRadius.control))
+            .padding(horizontal = KcodeSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text(
+                when (region) {
+                    DashscopeRegion.ChinaMainland -> UiText.DashscopeChinaMainland
+                    DashscopeRegion.Singapore -> UiText.DashscopeSingapore
+                    DashscopeRegion.UnitedStates -> UiText.DashscopeUnitedStates
+                },
+            ),
+            Modifier.weight(1f),
+            color = Ink,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (selected) {
+            KcodeIcon(KcodeIconAsset.Check, LeafInk, Modifier.size(20.dp))
         }
     }
 }

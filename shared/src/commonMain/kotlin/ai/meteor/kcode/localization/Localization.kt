@@ -88,6 +88,18 @@ object UiText {
     val ToolPermissionBypassDescription = LocalizedText(Res.string.tool_permission_bypass_desc_en, Res.string.tool_permission_bypass_desc_zh)
     val Provider = LocalizedText(Res.string.provider_en, Res.string.provider_zh)
     val ApiKey = LocalizedText(Res.string.api_key_en, Res.string.api_key_zh)
+    val DashscopeChinaMainland = LocalizedText(
+        Res.string.dashscope_china_mainland_en,
+        Res.string.dashscope_china_mainland_zh,
+    )
+    val DashscopeSingapore = LocalizedText(
+        Res.string.dashscope_singapore_en,
+        Res.string.dashscope_singapore_zh,
+    )
+    val DashscopeUnitedStates = LocalizedText(
+        Res.string.dashscope_united_states_en,
+        Res.string.dashscope_united_states_zh,
+    )
     val Endpoint = LocalizedText(Res.string.endpoint_en, Res.string.endpoint_zh)
     val Region = LocalizedText(Res.string.region_en, Res.string.region_zh)
     val Deployment = LocalizedText(Res.string.deployment_en, Res.string.deployment_zh)

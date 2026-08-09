@@ -164,7 +164,9 @@ internal fun ModelBadge(
                     .background(if (configuration == null) SoftInk.copy(.35f) else Leaf),
             )
             Text(
-                modelOption(configuration?.modelId)?.let { modelName(it) } ?: text(UiText.SelectModel),
+                configuration?.let { modelOption(it.provider, it.modelId) }
+                    ?.let { modelName(it) }
+                    ?: text(UiText.SelectModel),
                 Modifier.padding(start = KcodeSpacing.xs),
                 color = SoftInk,
                 style = MaterialTheme.typography.labelSmall,

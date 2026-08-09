@@ -3,16 +3,22 @@ package ai.meteor.kcode
 import ai.koog.http.client.KoogHttpClient
 import ai.koog.prompt.executor.clients.LLMClient
 import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
-import ai.koog.prompt.executor.clients.dashscope.DashscopeLLMClient
+import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
+import ai.koog.prompt.executor.clients.dashscope.DashscopeClientSettings
+import ai.koog.prompt.executor.clients.dashscope.DashscopeModels
 import ai.koog.prompt.executor.clients.deepseek.DeepSeekLLMClient
 import ai.koog.prompt.executor.clients.deepseek.DeepSeekModels
 import ai.koog.prompt.executor.clients.google.GoogleLLMClient
+import ai.koog.prompt.executor.clients.google.GoogleModels
 import ai.koog.prompt.executor.clients.mistralai.MistralAILLMClient
+import ai.koog.prompt.executor.clients.mistralai.MistralAIModels
 import ai.koog.prompt.executor.clients.openai.OpenAIClientSettings
 import ai.koog.prompt.executor.clients.openai.OpenAILLMClient
 import ai.koog.prompt.executor.clients.openai.OpenAIModels
 import ai.koog.prompt.executor.clients.openrouter.OpenRouterLLMClient
+import ai.koog.prompt.executor.clients.openrouter.OpenRouterModels
 import ai.koog.prompt.executor.ollama.client.OllamaClient
+import ai.koog.prompt.executor.ollama.client.OllamaModels
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLModel
 import ai.koog.prompt.llm.LLMProvider
@@ -30,14 +36,10 @@ internal fun createAgentModelRuntime(
 ): AgentModelRuntime {
     val (client, model) = when (configuration.provider) {
         ModelProvider.OpenAI -> {
-            val model = when (configuration.modelId) {
-                "gpt-4o" -> OpenAIModels.Chat.GPT4o
-                else -> OpenAIModels.Chat.GPT4oMini
-            }
             OpenAILLMClient(
                 apiKey = configuration.apiKey,
                 httpClientFactory = httpClientFactory,
-            ) to model
+            ) to OpenAIModels.requireModel(configuration.modelId)
         }
 
         ModelProvider.AzureOpenAI -> {
@@ -52,81 +54,96 @@ internal fun createAgentModelRuntime(
                 baseUrl = endpoint,
                 headers = mapOf("api-key" to configuration.apiKey),
             )
-            AzureOpenAICompatibleClient(settings, httpClient) to
-                providerModel(LLMProvider.Azure, configuration.modelId)
+            AzureOpenAICompatibleClient(settings, httpClient) to OpenAIModels
+                .requireModel(configuration.modelId)
+                .copy(provider = LLMProvider.Azure)
         }
 
         ModelProvider.Anthropic -> AnthropicLLMClient(
             apiKey = configuration.apiKey,
             httpClientFactory = httpClientFactory,
-        ) to providerModel(LLMProvider.Anthropic, configuration.modelId)
+        ) to AnthropicModels.requireModel(configuration.modelId)
 
         ModelProvider.Google -> GoogleLLMClient(
             apiKey = configuration.apiKey,
             httpClientFactory = httpClientFactory,
-        ) to providerModel(LLMProvider.Google, configuration.modelId)
+        ) to GoogleModels.requireModel(configuration.modelId)
 
-        ModelProvider.DeepSeek -> {
-            val model = when (configuration.modelId) {
-                "deepseek-v4-pro" -> DeepSeekModels.DeepSeekV4Pro
-                else -> DeepSeekModels.DeepSeekV4Flash
-            }
-            DeepSeekLLMClient(
-                apiKey = configuration.apiKey,
-                httpClientFactory = httpClientFactory,
-            ) to model
-        }
+        ModelProvider.DeepSeek -> DeepSeekLLMClient(
+            apiKey = configuration.apiKey,
+            httpClientFactory = httpClientFactory,
+        ) to DeepSeekModels.requireModel(configuration.modelId)
 
         ModelProvider.OpenRouter -> OpenRouterLLMClient(
             apiKey = configuration.apiKey,
             httpClientFactory = httpClientFactory,
-        ) to providerModel(LLMProvider.OpenRouter, configuration.modelId)
+        ) to OpenRouterModels.requireModel(configuration.modelId)
 
         ModelProvider.Bedrock -> createBedrockClient(configuration) to
-            providerModel(LLMProvider.Bedrock, configuration.modelId)
+            createBedrockModel(configuration.modelId)
 
         ModelProvider.Mistral -> MistralAILLMClient(
             apiKey = configuration.apiKey,
             httpClientFactory = httpClientFactory,
-        ) to providerModel(LLMProvider.MistralAI, configuration.modelId)
+        ) to MistralAIModels.requireModel(configuration.modelId)
 
-        ModelProvider.Alibaba -> DashscopeLLMClient(
-            apiKey = configuration.apiKey,
-            httpClientFactory = httpClientFactory,
-        ) to providerModel(LLMProvider.Alibaba, configuration.modelId)
+        ModelProvider.Alibaba -> {
+            val model = if (configuration.modelId == "qwen3.8-max") {
+                providerModel(LLMProvider.Alibaba, configuration.modelId)
+            } else {
+                DashscopeModels.requireModel(configuration.modelId)
+            }
+            KcodeDashscopeLLMClient(
+                apiKey = configuration.apiKey,
+                settings = DashscopeClientSettings(
+                    baseUrl = configuration.dashscopeRegion.baseUrl,
+                    chatCompletionsPath = "compatible-mode/v1/chat/completions",
+                ),
+                httpClientFactory = httpClientFactory,
+            ) to model
+        }
 
-        ModelProvider.Ollama -> OllamaClient(
-            httpClientFactory = httpClientFactory,
-            baseUrl = configuration.endpoint,
-        ) to providerModel(LLMProvider.Ollama, configuration.modelId, toolChoice = false)
+        ModelProvider.Ollama -> {
+            val model = OllamaModels.requireModel(configuration.modelId)
+            OllamaClient(
+                httpClientFactory = httpClientFactory,
+                baseUrl = configuration.endpoint,
+            ) to model.copy(
+                capabilities = model.capabilities.orEmpty() - LLMCapability.ToolChoice,
+            )
+        }
 
         ModelProvider.GLM -> ZhipuCompatibleClient(
             configuration.apiKey,
             httpClientFactory,
-        ) to LLModel(
-            provider = LLMProvider.ZhipuAI,
-            id = configuration.modelId,
+        ) to providerModel(LLMProvider.ZhipuAI, configuration.modelId).copy(
+            capabilities = providerModelCapabilities + LLMCapability.OpenAIEndpoint.Completions,
         )
     }
     return AgentModelRuntime(client, model)
 }
 
-private fun providerModel(
-    provider: LLMProvider,
-    id: String,
-    toolChoice: Boolean = true,
-): LLModel = LLModel(
-    provider = provider,
-    id = id,
-    capabilities = buildList {
-        add(LLMCapability.Temperature)
-        add(LLMCapability.Completion)
-        add(LLMCapability.Tools)
-        if (toolChoice) add(LLMCapability.ToolChoice)
-    },
+internal expect fun createBedrockClient(configuration: ModelConfiguration): LLMClient
+
+internal expect fun createBedrockModel(modelId: String): LLModel
+
+private val providerModelCapabilities: List<LLMCapability> = listOf(
+    LLMCapability.Temperature,
+    LLMCapability.Completion,
+    LLMCapability.Tools,
+    LLMCapability.ToolChoice,
 )
 
-internal expect fun createBedrockClient(configuration: ModelConfiguration): LLMClient
+private fun providerModel(provider: LLMProvider, modelId: String): LLModel = LLModel(
+    provider = provider,
+    id = modelId,
+    capabilities = providerModelCapabilities,
+)
+
+private fun ai.koog.prompt.executor.clients.LLModelDefinitions.requireModel(modelId: String): LLModel =
+    requireNotNull(models.firstOrNull { it.id == modelId }) {
+        "Model '$modelId' is not supported by Koog for this provider"
+    }
 
 private class ZhipuCompatibleClient(
     apiKey: String,
@@ -134,7 +151,7 @@ private class ZhipuCompatibleClient(
 ) : OpenAILLMClient(
     apiKey = apiKey,
     settings = OpenAIClientSettings(
-        baseUrl = "https://open.bigmodel.cn",
+        baseUrl = "https://open.bigmodel.cn/",
         chatCompletionsPath = "api/paas/v4/chat/completions",
     ),
     httpClientFactory = httpClientFactory,

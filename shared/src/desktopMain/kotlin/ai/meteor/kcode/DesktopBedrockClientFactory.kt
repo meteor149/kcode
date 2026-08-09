@@ -3,6 +3,8 @@ package ai.meteor.kcode
 import ai.koog.prompt.executor.clients.LLMClient
 import ai.koog.prompt.executor.clients.bedrock.BedrockClientSettings
 import ai.koog.prompt.executor.clients.bedrock.BedrockLLMClient
+import ai.koog.prompt.executor.clients.bedrock.BedrockModels
+import ai.koog.prompt.llm.LLModel
 import ai.meteor.kcode.model.ModelConfiguration
 import aws.smithy.kotlin.runtime.collections.Attributes
 import aws.smithy.kotlin.runtime.collections.mutableAttributes
@@ -21,3 +23,8 @@ internal actual fun createBedrockClient(configuration: ModelConfiguration): LLMC
         },
         settings = BedrockClientSettings(region = configuration.region),
     )
+
+internal actual fun createBedrockModel(modelId: String): LLModel =
+    requireNotNull(BedrockModels.models.firstOrNull { it.id == modelId }) {
+        "Model '$modelId' is not supported by Koog for Amazon Bedrock"
+    }

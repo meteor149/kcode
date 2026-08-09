@@ -4,11 +4,12 @@ package ai.meteor.kcode.settings
 data class StoredAppSettings(
     val provider: String = "OpenAI",
     val modelId: String = "gpt-4o-mini",
-    val apiKey: String = "",
+    val modelApiKeys: Map<String, String> = emptyMap(),
     val modelEndpoint: String = "",
     val modelRegion: String = "",
     val modelDeployment: String = "",
     val modelApiVersion: String = "",
+    val dashscopeRegion: String = "china_mainland",
     val webSearchApiKey: String = "",
     val exaSearchApiKey: String = "",
     val webSearchProvider: String = "google",
