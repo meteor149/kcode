@@ -38,8 +38,8 @@
     <string name="tool_permission_deny_desc_en">Deny every tool call without prompting</string>
     <string name="tool_permission_ask_desc_en">Ask before every tool call</string>
     <string name="tool_permission_bypass_desc_en">Run tool calls without confirmation</string>
-    <string name="protection_android_en">Preferences use DataStore; API keys are encrypted with Android Keystore.</string>
-    <string name="protection_ios_en">Preferences use platform storage; API keys are protected by iOS Keychain.</string>
+    <string name="protection_android_en">Settings use encrypted MMKV storage; its key is protected by Android Keystore.</string>
+    <string name="protection_ios_en">Settings use encrypted MMKV storage; its key is protected by iOS Keychain.</string>
     <string name="protection_desktop_en">Settings are stored in your app data folder; desktop keychain support is planned.</string>
     <string name="protection_web_en">Settings use browser storage. Prefer a server-side model gateway.</string>
     <string name="protection_transient_en">This platform currently uses temporary settings.</string>

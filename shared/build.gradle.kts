@@ -86,16 +86,17 @@ kotlin {
                 implementation("ai.koog:prompt-executor-dashscope-client:1.0.0-beta")
             }
         }
-        val jvmAndAndroidMain by creating {
-            dependsOn(agentMain)
+        val mobileMain by creating {
+            dependsOn(commonMain)
             dependencies {
-                implementation("androidx.datastore:datastore-preferences:1.2.1")
+                implementation("com.tencent:mmkv-kmp:2.4.1")
             }
         }
         val desktopMain by getting {
-            dependsOn(jvmAndAndroidMain)
+            dependsOn(agentMain)
             dependsOn(nativeSqliteMain)
             dependencies {
+                implementation("androidx.datastore:datastore-preferences:1.2.1")
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
                 implementation("ai.koog:prompt-executor-bedrock-client:1.0.0")
@@ -103,7 +104,8 @@ kotlin {
             }
         }
         val androidMain by getting {
-            dependsOn(jvmAndAndroidMain)
+            dependsOn(agentMain)
+            dependsOn(mobileMain)
             dependsOn(nativeSqliteMain)
             dependencies {
                 implementation("androidx.core:core-ktx:1.15.0")
@@ -122,6 +124,7 @@ kotlin {
         }
         val iosMain by creating {
             dependsOn(agentMain)
+            dependsOn(mobileMain)
             dependsOn(nativeSqliteMain)
             dependencies {
                 implementation("io.ktor:ktor-client-darwin:3.3.3")

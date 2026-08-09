@@ -38,8 +38,8 @@
     <string name="tool_permission_deny_desc_zh">拒绝所有工具调用，不弹出确认</string>
     <string name="tool_permission_ask_desc_zh">每次调用工具前询问</string>
     <string name="tool_permission_bypass_desc_zh">不经确认直接执行工具调用</string>
-    <string name="protection_android_zh">普通设置由 DataStore 持久化；API Key 由 Android Keystore 加密。</string>
-    <string name="protection_ios_zh">普通设置使用平台存储；API Key 由 iOS Keychain 保护。</string>
+    <string name="protection_android_zh">设置统一使用加密 MMKV 存储；密钥由 Android Keystore 保护。</string>
+    <string name="protection_ios_zh">设置统一使用加密 MMKV 存储；密钥由 iOS Keychain 保护。</string>
     <string name="protection_desktop_zh">设置保存在当前用户的应用数据目录；桌面系统密钥环适配将在后续接入。</string>
     <string name="protection_web_zh">设置保存在浏览器本地存储；请优先使用服务端模型网关。</string>
     <string name="protection_transient_zh">当前平台使用临时设置。</string>
