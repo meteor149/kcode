@@ -156,6 +156,7 @@ internal fun MobileComposer(
 ) {
     var value by remember { mutableStateOf("") }
     val sendInteraction = remember { MutableInteractionSource() }
+    val sendDescription = text(if (generating) UiText.StopGeneration else UiText.SendMessage)
 
     fun submit() {
         if (value.isNotBlank() && !generating) {
@@ -236,7 +237,9 @@ internal fun MobileComposer(
                         sendInteraction,
                         PressScaleStyle.Button,
                         generating || value.isNotBlank(),
-                    ).size(actionSize),
+                    ).size(actionSize).semantics {
+                        contentDescription = sendDescription
+                    },
                     interactionSource = sendInteraction,
                     shape = CircleShape,
                     contentPadding = PaddingValues(0.dp),
@@ -272,6 +275,7 @@ internal fun Composer(
 ) {
     var value by remember { mutableStateOf("") }
     val sendInteraction = remember { MutableInteractionSource() }
+    val sendDescription = text(if (generating) UiText.StopGeneration else UiText.SendMessage)
 
     fun submit() {
         if (value.isNotBlank() && !generating) {
@@ -343,7 +347,9 @@ internal fun Composer(
                         sendInteraction,
                         PressScaleStyle.Button,
                         generating || value.isNotBlank(),
-                    ).size(KcodeSize.compactControl),
+                    ).size(KcodeSize.compactControl).semantics {
+                        contentDescription = sendDescription
+                    },
                     interactionSource = sendInteraction,
                     shape = CircleShape,
                     contentPadding = PaddingValues(0.dp),

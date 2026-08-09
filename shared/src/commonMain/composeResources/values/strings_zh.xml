@@ -84,6 +84,8 @@
     <string name="thinking_zh">正在思考</string>
     <string name="message_placeholder_zh">给 kcode 发消息…</string>
     <string name="send_shortcut_zh">Ctrl ↵ 发送</string>
+    <string name="send_message_zh">发送消息</string>
+    <string name="stop_generation_zh">停止生成</string>
     <string name="browser_gateway_status_zh">浏览器版需要先连接安全的模型网关。</string>
     <string name="browser_gateway_error_zh">请配置服务端模型网关，避免在浏览器中暴露供应商密钥。</string>
     <string name="ios_gateway_status_zh">iOS 版需要先连接安全的模型网关。</string>

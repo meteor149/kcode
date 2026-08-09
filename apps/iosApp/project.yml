@@ -5,7 +5,7 @@ options:
     iOS: "14.0"
 settings:
   base:
-    SWIFT_VERSION: "5.9"
+    SWIFT_VERSION: "5.5"
     FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
     OTHER_LDFLAGS: "$(inherited) -framework KcodeShared"
 targets:
@@ -18,8 +18,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.meteor.kcode.ios
         PRODUCT_NAME: kcode
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.0.0
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        GENERATE_INFOPLIST_FILE: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: iosApp/Info.plist
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Allow H5 apps to access your location when you approve it."
         INFOPLIST_KEY_NSCameraUsageDescription: "Allow H5 apps to use the camera when you approve it."
@@ -32,3 +35,23 @@ targets:
           cd "$SRCROOT/../.."
           ./gradlew :shared:embedAndSignAppleFrameworkForXcode
         basedOnDependencyAnalysis: false
+  iosAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: iosAppUITests
+    dependencies:
+      - target: iosApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.meteor.kcode.ios.uitests
+        TEST_TARGET_NAME: iosApp
+schemes:
+  iosApp:
+    build:
+      targets:
+        iosApp: all
+        iosAppUITests: [test]
+    test:
+      targets:
+        - iosAppUITests

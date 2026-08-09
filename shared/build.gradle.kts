@@ -33,6 +33,7 @@ kotlin {
     }
     listOf(
         iosArm64(),
+        iosX64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
@@ -44,7 +45,6 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                api("androidx.room3:room3-runtime:3.0.1")
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
@@ -66,8 +66,14 @@ kotlin {
                 implementation("io.ktor:ktor-client-mock:3.3.3")
             }
         }
-        val nativeSqliteMain by creating {
+        val roomMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                api("androidx.room3:room3-runtime:3.0.1")
+            }
+        }
+        val nativeSqliteMain by creating {
+            dependsOn(roomMain)
             dependencies {
                 implementation("androidx.sqlite:sqlite-bundled:2.7.0")
             }
@@ -94,6 +100,7 @@ kotlin {
         }
         val desktopMain by getting {
             dependsOn(agentMain)
+            dependsOn(roomMain)
             dependsOn(nativeSqliteMain)
             dependencies {
                 implementation("androidx.datastore:datastore-preferences:1.2.1")
@@ -106,6 +113,7 @@ kotlin {
         val androidMain by getting {
             dependsOn(agentMain)
             dependsOn(mobileMain)
+            dependsOn(roomMain)
             dependsOn(nativeSqliteMain)
             dependencies {
                 implementation("androidx.core:core-ktx:1.15.0")
@@ -116,6 +124,7 @@ kotlin {
         }
         val wasmJsMain by getting {
             dependsOn(agentMain)
+            dependsOn(roomMain)
             dependencies {
                 implementation(project(":apps:web:sqliteWasmWorker"))
                 implementation("io.ktor:ktor-client-js:3.3.3")
@@ -125,13 +134,18 @@ kotlin {
         val iosMain by creating {
             dependsOn(agentMain)
             dependsOn(mobileMain)
-            dependsOn(nativeSqliteMain)
             dependencies {
                 implementation("io.ktor:ktor-client-darwin:3.3.3")
             }
         }
-        getByName("iosArm64Main").dependsOn(iosMain)
-        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        val iosRoomMain by creating {
+            dependsOn(iosMain)
+            dependsOn(roomMain)
+            dependsOn(nativeSqliteMain)
+        }
+        getByName("iosArm64Main").dependsOn(iosRoomMain)
+        getByName("iosX64Main").dependsOn(iosMain)
+        getByName("iosSimulatorArm64Main").dependsOn(iosRoomMain)
     }
 }
 
@@ -139,6 +153,7 @@ dependencies {
     add("kspAndroid", "androidx.room3:room3-compiler:3.0.1")
     add("kspDesktop", "androidx.room3:room3-compiler:3.0.1")
     add("kspIosArm64", "androidx.room3:room3-compiler:3.0.1")
+    add("kspIosX64", "androidx.room3:room3-compiler:3.0.1")
     add("kspIosSimulatorArm64", "androidx.room3:room3-compiler:3.0.1")
     add("kspWasmJs", "androidx.room3:room3-compiler:3.0.1")
 }

@@ -148,6 +148,8 @@ object UiText {
     val SelectedMessages = LocalizedText(Res.string.selected_messages_en, Res.string.selected_messages_zh)
     val ShareOpened = LocalizedText(Res.string.share_opened_en, Res.string.share_opened_zh)
     val SendShortcut = LocalizedText(Res.string.send_shortcut_en, Res.string.send_shortcut_zh)
+    val SendMessage = LocalizedText(Res.string.send_message_en, Res.string.send_message_zh)
+    val StopGeneration = LocalizedText(Res.string.stop_generation_en, Res.string.stop_generation_zh)
     val BrowserGatewayStatus = LocalizedText(Res.string.browser_gateway_status_en, Res.string.browser_gateway_status_zh)
     val BrowserGatewayError = LocalizedText(Res.string.browser_gateway_error_en, Res.string.browser_gateway_error_zh)
     val IosGatewayStatus = LocalizedText(Res.string.ios_gateway_status_en, Res.string.ios_gateway_status_zh)

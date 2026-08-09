@@ -19,7 +19,7 @@ kotlin {
     wasmJs {
         browser()
     }
-    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+    listOf(iosArm64(), iosX64(), iosSimulatorArm64()).forEach { target ->
         target.binaries.framework {
             baseName = "KcodeH5Container"
             isStatic = true
@@ -43,6 +43,7 @@ kotlin {
             dependsOn(commonMain.get())
         }
         getByName("iosArm64Main").dependsOn(iosMain)
+        getByName("iosX64Main").dependsOn(iosMain)
         getByName("iosSimulatorArm64Main").dependsOn(iosMain)
     }
 }

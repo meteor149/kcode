@@ -7,17 +7,28 @@ import com.tencent.mmkv.kmp.MMKVConfig
 import com.tencent.mmkv.kmp.initialize
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
-import kotlinx.cinterop.COpaquePointerVar
+import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import platform.CoreFoundation.CFDataCreate
+import platform.CoreFoundation.CFDataGetBytePtr
+import platform.CoreFoundation.CFDataGetLength
+import platform.CoreFoundation.CFDictionaryCreateMutable
 import platform.CoreFoundation.CFDictionaryRef
-import platform.Foundation.NSData
-import platform.Foundation.CFBridgingRelease
-import platform.Foundation.NSMutableDictionary
-import platform.Foundation.create
+import platform.CoreFoundation.CFDictionarySetValue
+import platform.CoreFoundation.CFMutableDictionaryRef
+import platform.CoreFoundation.CFRelease
+import platform.CoreFoundation.CFStringCreateWithCString
+import platform.CoreFoundation.CFTypeRefVar
+import platform.CoreFoundation.kCFAllocatorDefault
+import platform.CoreFoundation.kCFBooleanTrue
+import platform.CoreFoundation.kCFStringEncodingUTF8
+import platform.CoreFoundation.kCFTypeDictionaryKeyCallBacks
+import platform.CoreFoundation.kCFTypeDictionaryValueCallBacks
 import platform.Security.SecItemAdd
 import platform.Security.SecItemCopyMatching
 import platform.Security.SecItemDelete
@@ -30,7 +41,6 @@ import platform.Security.kSecClassGenericPassword
 import platform.Security.kSecReturnData
 import platform.Security.kSecRandomDefault
 import platform.Security.kSecValueData
-import platform.darwin.NSObject
 
 class IosAppSettingsStore private constructor(
     delegate: AppSettingsStore,
@@ -44,14 +54,16 @@ private fun createIosMmkvSettingsStore(): AppSettingsStore {
     val cryptKey = cryptKeyStore.read()
         ?.takeIf { it.length == CRYPT_KEY_LENGTH }
         ?: createCryptKey().also(cryptKeyStore::write)
-    return MmkvAppSettingsStore(
+    return decorateIosSettingsStore(MmkvAppSettingsStore(
         mmkv = MMKV.mmkvWithID(
             SETTINGS_MMAP_ID,
             MMKVConfig(cryptKey = cryptKey, aes256 = true),
         ),
         protection = SettingsProtection.IosKeychain,
-    )
+    ))
 }
+
+internal expect fun decorateIosSettingsStore(delegate: AppSettingsStore): AppSettingsStore
 
 private fun createCryptKey(): String {
     val randomBytes = ByteArray(16)
@@ -69,28 +81,57 @@ private const val CRYPT_KEY_LENGTH = 32
 
 private class IosKeychain(private val account: String) {
     fun read(): String? = memScoped {
-        val query = baseQuery().apply { setObject(true, kSecReturnData as platform.Foundation.NSString) }
-        val result = alloc<COpaquePointerVar>()
-        if (SecItemCopyMatching(query as CFDictionaryRef, result.ptr) != errSecSuccess) return null
-        val data = CFBridgingRelease(result.value) as? NSData ?: return null
-        data.bytes?.readBytes(data.length.toInt())?.decodeToString()
+        val query = baseQuery() ?: return null
+        CFDictionarySetValue(query, kSecReturnData, kCFBooleanTrue)
+        val result = alloc<CFTypeRefVar>()
+        if (SecItemCopyMatching(query, result.ptr) != errSecSuccess) {
+            CFRelease(query)
+            return null
+        }
+        val data = result.value ?: run {
+            CFRelease(query)
+            return null
+        }
+        val length = CFDataGetLength(data.reinterpret()).toInt()
+        val value = CFDataGetBytePtr(data.reinterpret())?.readBytes(length)?.decodeToString()
+        CFRelease(data)
+        CFRelease(query)
+        value
     }
 
     fun write(value: String) {
-        val query = baseQuery()
-        SecItemDelete(query as CFDictionaryRef)
-        if (value.isEmpty()) return
+        val query = baseQuery() ?: return
+        SecItemDelete(query)
+        if (value.isEmpty()) {
+            CFRelease(query)
+            return
+        }
         val bytes = value.encodeToByteArray()
         val data = bytes.usePinned { pinned ->
-            NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong())
+            CFDataCreate(kCFAllocatorDefault, pinned.addressOf(0).reinterpret(), bytes.size.toLong())
         }
-        query.setObject(data, kSecValueData as platform.Foundation.NSString)
-        SecItemAdd(query as CFDictionaryRef, null)
+        CFDictionarySetValue(query, kSecValueData, data)
+        SecItemAdd(query, null)
+        CFRelease(data)
+        CFRelease(query)
     }
 
-    private fun baseQuery() = NSMutableDictionary().apply {
-        setObject(kSecClassGenericPassword as NSObject, kSecClass as platform.Foundation.NSString)
-        setObject("ai.meteor.kcode.credentials", kSecAttrService as platform.Foundation.NSString)
-        setObject(account, kSecAttrAccount as platform.Foundation.NSString)
+    private fun baseQuery(): CFMutableDictionaryRef? {
+        val query = CFDictionaryCreateMutable(
+            kCFAllocatorDefault,
+            0,
+            kCFTypeDictionaryKeyCallBacks.ptr,
+            kCFTypeDictionaryValueCallBacks.ptr,
+        ) ?: return null
+        CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword)
+        setString(query, kSecAttrService, "ai.meteor.kcode.credentials")
+        setString(query, kSecAttrAccount, account)
+        return query
+    }
+
+    private fun setString(query: CFMutableDictionaryRef, key: COpaquePointer?, value: String) {
+        val string = CFStringCreateWithCString(kCFAllocatorDefault, value, kCFStringEncodingUTF8) ?: return
+        CFDictionarySetValue(query, key, string)
+        CFRelease(string)
     }
 }

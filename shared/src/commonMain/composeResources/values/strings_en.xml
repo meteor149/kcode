@@ -84,6 +84,8 @@
     <string name="thinking_en">Thinking</string>
     <string name="message_placeholder_en">Message kcode…</string>
     <string name="send_shortcut_en">Ctrl ↵ to send</string>
+    <string name="send_message_en">Send message</string>
+    <string name="stop_generation_en">Stop generating</string>
     <string name="browser_gateway_status_en">The browser app needs a secure model gateway.</string>
     <string name="browser_gateway_error_en">Configure a server-side model gateway to keep provider keys out of the browser.</string>
     <string name="ios_gateway_status_en">Connect a secure model gateway to use the iOS client.</string>

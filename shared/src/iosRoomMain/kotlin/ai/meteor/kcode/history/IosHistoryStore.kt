@@ -7,7 +7,7 @@ import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
-fun createIosConversationHistoryRepository(): ConversationHistoryRepository {
+internal actual fun createIosConversationHistoryRepository(): ConversationHistoryRepository {
     val directory = requireNotNull(
         NSFileManager.defaultManager.URLForDirectory(
             directory = NSDocumentDirectory,
