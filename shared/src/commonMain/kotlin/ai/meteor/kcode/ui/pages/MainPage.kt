@@ -38,6 +38,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import ai.meteor.kcode.ui.component.BoxWithResponsiveWidth
+import ai.meteor.kcode.ui.component.kcodeHazeSource
+import ai.meteor.kcode.ui.component.rememberKcodeHazeState
 import ai.meteor.kcode.ui.component.WebBackgroundContainersOverlay
 import ai.meteor.kcode.ui.pages.chat.ChatPane
 import ai.meteor.kcode.ui.state.rememberConversationSessionState
@@ -50,8 +52,6 @@ import ai.meteor.kcode.ui.pages.sidebar.MainDestination
 import ai.meteor.kcode.ui.pages.artifact.ArtifactsPage
 import ai.meteor.kcode.artifact.ArtifactRepository
 import kotlinx.coroutines.launch
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 @Composable
 internal fun KcodeMain(
@@ -119,7 +119,7 @@ internal fun KcodeMain(
     }
 
     CompositionLocalProvider(LocalAppLanguage provides AppLanguage.fromCode(appSettings.language)) {
-        val hazeState = rememberHazeState()
+        val hazeState = rememberKcodeHazeState()
         Box(
             Modifier
                 .fillMaxSize()
@@ -128,7 +128,7 @@ internal fun KcodeMain(
                     WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
                 ),
         ) {
-            Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
+            Box(Modifier.fillMaxSize().kcodeHazeSource(hazeState)) {
                 BoxWithResponsiveWidth { width ->
                     val mainContent: @Composable (Modifier, Boolean) -> Unit =
                         { contentModifier, isCompact ->

@@ -37,7 +37,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -51,9 +50,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -63,7 +59,7 @@ import kotlin.math.roundToInt
 @Composable
 internal fun WebBackgroundContainersOverlay(
     controller: WebContainerController,
-    hazeState: HazeState,
+    hazeState: KcodeHazeState,
     modifier: Modifier = Modifier,
 ) {
     var containers by remember(controller) { mutableStateOf(emptyList<WebContainerInfo>()) }
@@ -130,17 +126,8 @@ internal fun WebBackgroundContainersOverlay(
             if (!expanded) collapsedCenter = draggedCenter
         }
     }
-    val glassBackground = MaterialTheme.colorScheme.surface
-    val glassTint = glassBackground.copy(alpha = 0.72f)
-    fun glassModifier(shape: Shape) = Modifier
-        .clip(shape)
-        .hazeEffect(hazeState) {
-            backgroundColor = glassBackground
-            blurRadius = 14.dp
-            tints = listOf(HazeTint(glassTint))
-            noiseFactor = 0.025f
-            blurredEdgeTreatment = BlurredEdgeTreatment(shape)
-        }
+    @Composable
+    fun glassModifier(shape: Shape) = Modifier.kcodeGlassEffect(hazeState, shape)
     val border = BorderStroke(
         width = 1.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f),

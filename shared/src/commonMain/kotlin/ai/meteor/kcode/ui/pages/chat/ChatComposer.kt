@@ -89,7 +89,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
+import ai.meteor.kcode.ui.component.KcodeHazeState
 @Composable
 private fun MobileModelSelector(
     configuration: ModelConfiguration?,
@@ -146,7 +146,7 @@ private fun MobileModelSelector(
 @Composable
 internal fun MobileComposer(
     modifier: Modifier,
-    hazeState: HazeState,
+    hazeState: KcodeHazeState,
     configuration: ModelConfiguration?,
     generating: Boolean,
     replying: Boolean,
@@ -274,7 +274,7 @@ internal fun MobileComposer(
 @Composable
 internal fun Composer(
     modifier: Modifier,
-    hazeState: HazeState,
+    hazeState: KcodeHazeState,
     generating: Boolean,
     focusRequester: FocusRequester,
     onFocus: () -> Unit,

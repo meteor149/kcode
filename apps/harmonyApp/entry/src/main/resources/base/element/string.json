@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "kcode AI workspace"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "kcode AI workspace"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "kcode"
+    },
+    {
+      "name": "vibrate_permission_reason",
+      "value": "用于触控反馈功能"
+    }
+  ]
+}

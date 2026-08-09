@@ -47,9 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
+import ai.meteor.kcode.ui.component.KcodeHazeState
 
-internal val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
+internal val LocalChatHazeState = staticCompositionLocalOf<KcodeHazeState?> { null }
 
 @Composable
 internal fun KcodeBubblePopup(

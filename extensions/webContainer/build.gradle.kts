@@ -4,6 +4,22 @@ plugins {
     id("com.android.library")
 }
 
+configurations.configureEach {
+    val isOhosConfiguration = name.contains("ohos", ignoreCase = true)
+    resolutionStrategy.eachDependency {
+        when {
+            requested.group == "org.jetbrains.kotlinx" &&
+                requested.name.startsWith("kotlinx-coroutines") -> {
+                useVersion(if (isOhosConfiguration) "1.10.2-0.4.0" else "1.10.2")
+            }
+            requested.group == "org.jetbrains.kotlinx" &&
+                requested.name.startsWith("kotlinx-serialization") -> {
+                useVersion(if (isOhosConfiguration) "1.9.1-0.3.0" else "1.10.0")
+            }
+        }
+    }
+}
+
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
     androidTarget {
@@ -19,6 +35,8 @@ kotlin {
     wasmJs {
         browser()
     }
+    ohosArm64()
+    ohosX64()
     listOf(iosArm64(), iosX64(), iosSimulatorArm64()).forEach { target ->
         target.binaries.framework {
             baseName = "KcodeWebContainer"

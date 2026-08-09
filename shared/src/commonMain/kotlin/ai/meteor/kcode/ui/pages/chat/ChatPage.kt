@@ -71,8 +71,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
+import ai.meteor.kcode.ui.component.kcodeHazeSource
+import ai.meteor.kcode.ui.component.rememberKcodeHazeState
 @Composable
 internal fun ChatPane(
     modifier: Modifier,
@@ -92,7 +92,7 @@ internal fun ChatPane(
     toolPermissionMode: ToolPermissionMode,
     onToolPermissionModeChange: (ToolPermissionMode) -> Unit,
 ) {
-    val hazeState = rememberHazeState()
+    val hazeState = rememberKcodeHazeState()
     val scope = rememberCoroutineScope()
     val streamScrollFollower = remember { StreamScrollFollower() }
     val connectionFailedMessage = text(UiText.ModelConnectionFailed)
@@ -268,7 +268,7 @@ internal fun ChatPane(
                 )
             } else {
                 ConversationMessageList(
-                    modifier = centeredContent.hazeSource(hazeState),
+                    modifier = centeredContent.kcodeHazeSource(hazeState),
                     compact = true,
                     conversation = conversation,
                     listState = listState,
@@ -432,7 +432,7 @@ internal fun ChatPane(
             } else {
                 ConversationMessageList(
                     modifier = Modifier.weight(1f).fillMaxWidth()
-                        .hazeSource(hazeState)
+                        .kcodeHazeSource(hazeState)
                         .then(conversationContentMotion),
                     compact = false,
                     conversation = conversation,

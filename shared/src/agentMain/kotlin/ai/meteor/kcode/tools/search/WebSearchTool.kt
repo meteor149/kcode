@@ -23,22 +23,6 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-enum class WebSearchProvider(val code: String, val requiresApiKey: Boolean) {
-    Google("google", false),
-    Exa("exa", true),
-    BrightData("bright_data", true);
-
-    companion object {
-        fun fromCode(code: String): WebSearchProvider = entries.firstOrNull { it.code == code } ?: Google
-    }
-}
-
-data class WebSearchConfiguration(
-    val provider: WebSearchProvider = WebSearchProvider.Google,
-    val brightDataApiKey: String = "",
-    val exaApiKey: String = "",
-)
-
 /** One cross-platform Koog tool that routes through the search engine selected by the user. */
 class WebSearchTool(
     private val configurationProvider: suspend () -> WebSearchConfiguration,

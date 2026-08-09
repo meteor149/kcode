@@ -1,27 +1,18 @@
 package ai.meteor.kcode.ui.component
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+
+expect class KcodeHazeState
 
 @Composable
-internal fun Modifier.kcodeGlassEffect(
-    hazeState: HazeState,
+internal expect fun rememberKcodeHazeState(): KcodeHazeState
+
+internal expect fun Modifier.kcodeHazeSource(state: KcodeHazeState): Modifier
+
+@Composable
+internal expect fun Modifier.kcodeGlassEffect(
+    hazeState: KcodeHazeState,
     shape: Shape,
-): Modifier {
-    val background = MaterialTheme.colorScheme.surface
-    return clip(shape).hazeEffect(hazeState) {
-        backgroundColor = background
-        blurRadius = 16.dp
-        tints = listOf(HazeTint(background.copy(alpha = 0.72f)))
-        noiseFactor = 0.025f
-        blurredEdgeTreatment = BlurredEdgeTreatment(shape)
-    }
-}
+): Modifier

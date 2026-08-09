@@ -82,8 +82,8 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
+import ai.meteor.kcode.ui.component.KcodeHazeState
+import ai.meteor.kcode.ui.component.kcodeHazeSource
 import kotlinx.coroutines.delay
 import kcode.shared.generated.resources.Res
 import kcode.shared.generated.resources.kcode_mark
@@ -177,7 +177,7 @@ internal fun ConversationMessageList(
 internal fun Welcome(
     modifier: Modifier,
     compact: Boolean,
-    hazeState: HazeState,
+    hazeState: KcodeHazeState,
     configuration: ModelConfiguration?,
     setupMessage: String?,
     focusRequester: FocusRequester,
@@ -192,7 +192,7 @@ internal fun Welcome(
     val focusManager = LocalFocusManager.current
     if (compact) {
         Box(modifier.fillMaxSize()) {
-            Box(Modifier.matchParentSize().hazeSource(hazeState)) {
+            Box(Modifier.matchParentSize().kcodeHazeSource(hazeState)) {
                 Box(Modifier.fillMaxSize().background(Paper))
             }
             Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {

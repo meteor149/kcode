@@ -67,7 +67,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
+import ai.meteor.kcode.ui.component.KcodeHazeState
 
 @Composable
 internal fun DesktopChatHeader(
@@ -254,7 +254,7 @@ private fun ConversationMoreBubble(
 @Composable
 internal fun CompactChatHeader(
     modifier: Modifier = Modifier,
-    hazeState: HazeState,
+    hazeState: KcodeHazeState,
     selectionMode: Boolean,
     selectedCount: Int,
     onCancelSelection: () -> Unit,

@@ -10,6 +10,28 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+configurations.configureEach {
+    val isOhosConfiguration = name.contains("ohos", ignoreCase = true)
+    resolutionStrategy.eachDependency {
+        when {
+            requested.group == "org.jetbrains.compose.material3" -> {
+                useVersion(if (isOhosConfiguration) "1.9.2-0.4.0" else "1.9.0")
+            }
+            requested.group.startsWith("org.jetbrains.compose") -> {
+                useVersion(if (isOhosConfiguration) "1.9.2-0.4.0" else "1.9.2")
+            }
+            requested.group == "org.jetbrains.kotlinx" &&
+                requested.name.startsWith("kotlinx-coroutines") -> {
+                useVersion(if (isOhosConfiguration) "1.10.2-0.4.0" else "1.10.2")
+            }
+            requested.group == "org.jetbrains.kotlinx" &&
+                requested.name.startsWith("kotlinx-serialization") -> {
+                useVersion(if (isOhosConfiguration) "1.9.1-0.3.0" else "1.10.0")
+            }
+        }
+    }
+}
+
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
     jvm("desktop") {
@@ -31,6 +53,20 @@ kotlin {
         }
         binaries.executable()
     }
+    ohosArm64 {
+        binaries.sharedLib {
+            baseName = "kn"
+            export("org.jetbrains.compose.export:export:1.9.2-0.4.0")
+            linkerOpts("-lz")
+        }
+    }
+    ohosX64 {
+        binaries.sharedLib {
+            baseName = "kn"
+            export("org.jetbrains.compose.export:export:1.9.2-0.4.0")
+            linkerOpts("-lz")
+        }
+    }
     listOf(
         iosArm64(),
         iosX64(),
@@ -49,24 +85,16 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
-                implementation("org.jetbrains.compose.ui:ui-backhandler:1.8.2")
+                implementation("org.jetbrains.compose.ui:ui-backhandler:1.9.2")
                 implementation(compose.components.resources)
                 api(project(":extensions:webContainer"))
-                implementation("dev.chrisbanes.haze:haze:1.6.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
-                implementation("ai.koog:agents-tools:1.1.1")
-                implementation("io.ktor:ktor-client-core:3.3.3")
-                implementation("io.ktor:ktor-client-content-negotiation:3.3.3")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:3.3.3")
             }
         }
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("ai.koog:agents-tools:1.1.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
-                implementation("io.ktor:ktor-client-mock:3.3.3")
             }
         }
         val roomMain by creating {
@@ -84,6 +112,8 @@ kotlin {
         val agentMain by creating {
             dependsOn(commonMain)
             dependencies {
+                implementation("dev.chrisbanes.haze:haze:1.6.0")
+                implementation("ai.koog:agents-tools:1.1.1")
                 implementation("ai.koog:koog-agents:1.1.1")
                 implementation("ai.koog:agents-ext:1.1.1-beta")
                 implementation("ai.koog:http-client-ktor:1.1.1")
@@ -92,6 +122,9 @@ kotlin {
                 implementation("ai.koog:prompt-executor-openrouter-client:1.1.1")
                 implementation("ai.koog:prompt-executor-mistralai-client:1.1.1-beta")
                 implementation("ai.koog:prompt-executor-dashscope-client:1.1.1-beta")
+                implementation("io.ktor:ktor-client-core:3.3.3")
+                implementation("io.ktor:ktor-client-content-negotiation:3.3.3")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.3.3")
             }
         }
         val mobileMain by creating {
@@ -100,6 +133,14 @@ kotlin {
                 implementation("com.tencent:mmkv-kmp:2.4.1")
             }
         }
+        val ohosMain by creating {
+            dependsOn(commonMain)
+            dependencies {
+                api("org.jetbrains.compose.export:export:1.9.2-0.4.0")
+            }
+        }
+        getByName("ohosArm64Main").dependsOn(ohosMain)
+        getByName("ohosX64Main").dependsOn(ohosMain)
         val desktopMain by getting {
             dependsOn(agentMain)
             dependsOn(roomMain)
@@ -110,6 +151,13 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
                 implementation("ai.koog:prompt-executor-bedrock-client:1.1.1")
                 implementation("io.ktor:ktor-client-cio:3.3.3")
+            }
+        }
+        val desktopTest by getting {
+            dependencies {
+                implementation("ai.koog:agents-tools:1.1.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+                implementation("io.ktor:ktor-client-mock:3.3.3")
             }
         }
         val androidMain by getting {
@@ -158,6 +206,44 @@ dependencies {
     add("kspIosX64", "androidx.room3:room3-compiler:3.0.1")
     add("kspIosSimulatorArm64", "androidx.room3:room3-compiler:3.0.1")
     add("kspWasmJs", "androidx.room3:room3-compiler:3.0.1")
+}
+
+arrayOf("debug", "release").forEach { type ->
+    val buildType = type.replaceFirstChar { it.uppercase() }
+    val harmonyApp = rootProject.file("apps/harmonyApp")
+    val resourcePackage = "${rootProject.name}.${project.name.lowercase()}.generated.resources"
+    val publishArm64 = tasks.register<Copy>("publish${buildType}BinariesToHarmonyAppArm64") {
+        group = "harmony"
+        dependsOn("link${buildType}SharedOhosArm64")
+        into(harmonyApp)
+        from("build/bin/ohosArm64/${type}Shared/libkn_api.h") {
+            into("entry/src/main/cpp/include/arm64-v8a")
+        }
+        from("build/bin/ohosArm64/${type}Shared/libkn.so") {
+            into("entry/libs/arm64-v8a")
+        }
+        from("src/commonMain/composeResources") {
+            into("entry/src/main/resources/rawfile/composeResources/$resourcePackage")
+        }
+    }
+    val publishX64 = tasks.register<Copy>("publish${buildType}BinariesToHarmonyAppX64") {
+        group = "harmony"
+        dependsOn("link${buildType}SharedOhosX64")
+        into(harmonyApp)
+        from("build/bin/ohosX64/${type}Shared/libkn_api.h") {
+            into("entry/src/main/cpp/include/x86_64")
+        }
+        from("build/bin/ohosX64/${type}Shared/libkn.so") {
+            into("entry/libs/x86_64")
+        }
+        from("src/commonMain/composeResources") {
+            into("entry/src/main/resources/rawfile/composeResources/$resourcePackage")
+        }
+    }
+    tasks.register("publish${buildType}BinariesToHarmonyApp") {
+        group = "harmony"
+        dependsOn(publishArm64, publishX64)
+    }
 }
 
 room3 {
