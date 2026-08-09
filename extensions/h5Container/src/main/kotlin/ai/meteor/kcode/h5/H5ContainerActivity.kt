@@ -52,6 +52,7 @@ class H5ContainerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.isNavigationBarContrastEnforced = false
         buildContent()
         onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
             if (webView.canGoBack()) webView.goBack() else finish()

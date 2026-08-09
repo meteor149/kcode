@@ -8,6 +8,7 @@
     <string name="recent_zh">最近</string>
     <string name="empty_conversations_zh">你的对话会安静地待在这里。</string>
     <string name="pin_conversation_zh">置顶</string>
+    <string name="unpin_conversation_zh">取消置顶</string>
     <string name="delete_conversation_zh">删除</string>
     <string name="open_settings_zh">打开设置</string>
     <string name="select_model_zh">选择模型</string>
@@ -67,6 +68,8 @@
     <string name="creativity_light_zh">轻度</string>
     <string name="permission_level_zh">权限等级</string>
     <string name="export_action_zh">导出方式</string>
+    <string name="export_zh">导出</string>
+    <string name="more_zh">更多</string>
     <string name="cancel_zh">取消</string>
     <string name="copy_text_zh">复制</string>
     <string name="apply_configuration_zh">应用配置</string>

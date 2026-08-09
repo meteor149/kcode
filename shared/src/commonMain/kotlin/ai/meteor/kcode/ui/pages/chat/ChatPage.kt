@@ -47,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +69,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 @Composable
 internal fun ChatPane(
     modifier: Modifier,
@@ -86,6 +89,7 @@ internal fun ChatPane(
     toolPermissionMode: ToolPermissionMode,
     onToolPermissionModeChange: (ToolPermissionMode) -> Unit,
 ) {
+    val hazeState = rememberHazeState()
     val scope = rememberCoroutineScope()
     val streamScrollFollower = remember { StreamScrollFollower() }
     val connectionFailedMessage = text(UiText.ModelConnectionFailed)
@@ -216,6 +220,7 @@ internal fun ChatPane(
         conversation = conversation,
     )
 
+    CompositionLocalProvider(LocalChatHazeState provides hazeState) {
     if (compact) {
         BoxWithConstraints(modifier.fillMaxSize().background(Paper)) {
             val extraCompact = maxWidth < 360.dp
@@ -241,6 +246,7 @@ internal fun ChatPane(
                 Welcome(
                     modifier = centeredContent,
                     compact = true,
+                    hazeState = hazeState,
                     configuration = configuration,
                     setupMessage = if (configuration == null) text(UiText.SetupModelFirst)
                         else service.availability?.let { availabilityStatus(it) },
@@ -255,7 +261,7 @@ internal fun ChatPane(
                 )
             } else {
                 ConversationMessageList(
-                    modifier = centeredContent,
+                    modifier = centeredContent.hazeSource(hazeState),
                     compact = true,
                     conversation = conversation,
                     listState = listState,
@@ -307,6 +313,7 @@ internal fun ChatPane(
                         .fillMaxWidth()
                         .onSizeChanged { mobileComposerHeightPx = it.height }
                         .padding(horizontal = composerOuterPadding, vertical = 10.dp),
+                    hazeState = hazeState,
                     configuration = configuration,
                     generating = conversation.isGenerating,
                     replying = true,
@@ -338,6 +345,7 @@ internal fun ChatPane(
             }
             CompactChatHeader(
                 modifier = Modifier.align(Alignment.TopCenter),
+                hazeState = hazeState,
                 selectionMode = messageSelection.active,
                 selectedCount = messageSelection.count,
                 onCancelSelection = messageSelection::clear,
@@ -396,6 +404,7 @@ internal fun ChatPane(
                 Welcome(
                     modifier = Modifier.weight(1f).then(conversationContentMotion),
                     compact = false,
+                    hazeState = hazeState,
                     configuration = configuration,
                     setupMessage = if (configuration == null) text(UiText.SetupModelFirst)
                         else service.availability?.let { availabilityStatus(it) },
@@ -410,7 +419,9 @@ internal fun ChatPane(
                 )
             } else {
                 ConversationMessageList(
-                    modifier = Modifier.weight(1f).fillMaxWidth().then(conversationContentMotion),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                        .hazeSource(hazeState)
+                        .then(conversationContentMotion),
                     compact = false,
                     conversation = conversation,
                     listState = listState,
@@ -433,6 +444,7 @@ internal fun ChatPane(
                         .widthIn(max = 760.dp)
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 20.dp),
+                    hazeState = hazeState,
                     generating = conversation.isGenerating,
                     focusRequester = focusRequester,
                     onFocus = prepareForKeyboard,
@@ -444,6 +456,7 @@ internal fun ChatPane(
                 )
             }
         }
+    }
     }
 
 }

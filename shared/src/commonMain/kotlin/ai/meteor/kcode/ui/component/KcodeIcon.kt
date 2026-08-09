@@ -24,6 +24,7 @@ import kcode.shared.generated.resources.icon_info
 import kcode.shared.generated.resources.icon_language
 import kcode.shared.generated.resources.icon_menu
 import kcode.shared.generated.resources.icon_model
+import kcode.shared.generated.resources.icon_more
 import kcode.shared.generated.resources.icon_openai
 import kcode.shared.generated.resources.icon_deepseek
 import kcode.shared.generated.resources.icon_glm
@@ -59,6 +60,7 @@ enum class KcodeIconAsset(internal val resource: DrawableResource) {
     Language(Res.drawable.icon_language),
     Menu(Res.drawable.icon_menu),
     Model(Res.drawable.icon_model),
+    More(Res.drawable.icon_more),
     OpenAI(Res.drawable.icon_openai),
     DeepSeek(Res.drawable.icon_deepseek),
     Glm(Res.drawable.icon_glm),

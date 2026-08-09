@@ -6,6 +6,7 @@ import ai.meteor.kcode.ui.design.Mist
 import ai.meteor.kcode.ui.design.Panel
 import ai.meteor.kcode.ui.design.Leaf
 import ai.meteor.kcode.ui.design.Ink
+import ai.meteor.kcode.ui.design.Paper
 import ai.meteor.kcode.ui.design.SoftInk
 import ai.meteor.kcode.ui.design.Hairline
 
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -75,6 +77,8 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.delay
 import kcode.shared.generated.resources.Res
 import kcode.shared.generated.resources.kcode_mark
@@ -133,6 +137,7 @@ internal fun ConversationMessageList(
 internal fun Welcome(
     modifier: Modifier,
     compact: Boolean,
+    hazeState: HazeState,
     configuration: ModelConfiguration?,
     setupMessage: String?,
     focusRequester: FocusRequester,
@@ -146,46 +151,52 @@ internal fun Welcome(
 ) {
     val focusManager = LocalFocusManager.current
     if (compact) {
-        Column(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-            Box(
-                Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
-                    detectTapGestures { focusManager.clearFocus(force = true) }
-                },
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    KcodeMark(size = 52.dp)
-                    Text(
-                        text(UiText.WelcomeTitle),
-                        Modifier.padding(top = KcodeSpacing.lg),
-                        color = Ink,
-                        style = MaterialTheme.typography.displaySmall,
-                    )
-                    if (configuration == null || setupMessage != null) {
+        Box(modifier.fillMaxSize()) {
+            Box(Modifier.matchParentSize().hazeSource(hazeState)) {
+                Box(Modifier.fillMaxSize().background(Paper))
+            }
+            Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+                Box(
+                    Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
+                        detectTapGestures { focusManager.clearFocus(force = true) }
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        KcodeMark(size = 52.dp)
                         Text(
-                            setupMessage ?: text(UiText.WelcomeBody),
-                            Modifier.padding(top = KcodeSpacing.sm, start = KcodeSpacing.lg, end = KcodeSpacing.lg),
-                            color = SoftInk,
-                            style = MaterialTheme.typography.bodySmall,
+                            text(UiText.WelcomeTitle),
+                            Modifier.padding(top = KcodeSpacing.lg),
+                            color = Ink,
+                            style = MaterialTheme.typography.displaySmall,
                         )
+                        if (configuration == null || setupMessage != null) {
+                            Text(
+                                setupMessage ?: text(UiText.WelcomeBody),
+                                Modifier.padding(top = KcodeSpacing.sm, start = KcodeSpacing.lg, end = KcodeSpacing.lg),
+                                color = SoftInk,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
+                MobileComposer(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    hazeState = hazeState,
+                    configuration = configuration,
+                    generating = false,
+                    replying = false,
+                    focusRequester = focusRequester,
+                    onFocus = onFocus,
+                    onModelClick = onModelClick,
+                    onConfigurationChange = onConfigurationChange,
+                    onSend = onSend,
+                    onStop = {},
+                    toolPermissionControlsAvailable = toolPermissionControlsAvailable,
+                    toolPermissionMode = toolPermissionMode,
+                    onToolPermissionModeChange = onToolPermissionModeChange,
+                )
             }
-            MobileComposer(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                configuration = configuration,
-                generating = false,
-                replying = false,
-                focusRequester = focusRequester,
-                onFocus = onFocus,
-                onModelClick = onModelClick,
-                onConfigurationChange = onConfigurationChange,
-                onSend = onSend,
-                onStop = {},
-                toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                toolPermissionMode = toolPermissionMode,
-                onToolPermissionModeChange = onToolPermissionModeChange,
-            )
         }
         return
     }
@@ -210,6 +221,7 @@ internal fun Welcome(
         )
         Composer(
             modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f),
+            hazeState = hazeState,
             generating = false,
             focusRequester = focusRequester,
             onFocus = onFocus,

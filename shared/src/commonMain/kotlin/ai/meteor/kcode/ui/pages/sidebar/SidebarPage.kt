@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
@@ -234,7 +235,8 @@ internal fun Sidebar(
         Modifier.requiredWidth(width)
             .fillMaxHeight()
             .background(SidebarPaper)
-            .padding(horizontal = if (compact) KcodeSpacing.sm else KcodeSpacing.md),
+            .padding(horizontal = if (compact) KcodeSpacing.sm else KcodeSpacing.md)
+            .navigationBarsPadding(),
     ) {
         Text(
             "kcode",
@@ -386,7 +388,7 @@ private fun ConversationRow(
     ) {
         SwipeConversationAction(
             modifier = Modifier.fillMaxHeight().width(82.dp).align(Alignment.CenterStart),
-            label = text(UiText.PinConversation),
+            label = text(if (pinned) UiText.UnpinConversation else UiText.PinConversation),
             color = PaleMint,
             contentColor = LeafInk,
             isPin = true,

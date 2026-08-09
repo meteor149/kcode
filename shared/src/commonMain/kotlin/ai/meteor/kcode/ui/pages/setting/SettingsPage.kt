@@ -24,6 +24,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -98,7 +100,9 @@ internal fun SettingsDialog(
     onSave: (ModelConfiguration) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var route by remember { mutableStateOf(SettingsRoute.Home) }
+    var route by rememberSaveable(stateSaver = SettingsRouteSaver) {
+        mutableStateOf(SettingsRoute.Home)
+    }
     var provider by remember(current) { mutableStateOf(current?.provider ?: ModelProvider.OpenAI) }
     var apiKey by remember(current) { mutableStateOf(current?.apiKey.orEmpty()) }
     var endpoint by remember(current) { mutableStateOf(current?.endpoint.orEmpty()) }
@@ -116,7 +120,12 @@ internal fun SettingsDialog(
         focusManager.clearFocus(force = true)
     }
 
-    BottomSheetOverlay(onDismissRequest = onDismiss) { dismissSheet ->
+    BottomSheetOverlay(
+        onDismissRequest = onDismiss,
+        onBackRequest = if (route == SettingsRoute.Home) null else {
+            { route = SettingsRoute.Home }
+        },
+    ) { dismissSheet ->
         Column(Modifier.fillMaxSize()) {
             SettingsWindowHeader(
                 title = when (route) {
@@ -217,3 +226,8 @@ internal fun SettingsDialog(
 }
 
 private enum class SettingsRoute { Home, Language, ModelService, ShellExecution, InternetSearch }
+
+private val SettingsRouteSaver = Saver<SettingsRoute, String>(
+    save = { it.name },
+    restore = SettingsRoute::valueOf,
+)

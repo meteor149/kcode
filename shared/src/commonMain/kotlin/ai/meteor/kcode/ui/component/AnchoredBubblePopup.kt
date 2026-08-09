@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import dev.chrisbanes.haze.HazeState
 
 enum class BubblePlacement { Above, Below }
 
@@ -51,6 +52,7 @@ fun AnchoredBubblePopup(
     shape: Shape,
     surfaceColor: Color,
     borderColor: Color,
+    hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
     minWidth: Dp = 276.dp,
     maxWidth: Dp = 340.dp,
@@ -128,11 +130,18 @@ fun AnchoredBubblePopup(
                     modifier = modifier.widthIn(min = minWidth, max = maxWidth).heightIn(max = maxHeight)
                         .shadow(shadowElevation, shape = shape, clip = false),
                     shape = shape,
-                    color = surfaceColor,
+                    color = if (hazeState == null) surfaceColor else Color.Transparent,
                     border = BorderStroke(1.dp, borderColor),
                     shadowElevation = 0.dp,
                 ) {
-                    Column(content = content)
+                    Box {
+                        if (hazeState != null) {
+                            Box(
+                                Modifier.matchParentSize().kcodeGlassEffect(hazeState, shape),
+                            )
+                        }
+                        Column(content = content)
+                    }
                 }
             }
         }

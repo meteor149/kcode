@@ -8,6 +8,7 @@
     <string name="recent_en">Recent</string>
     <string name="empty_conversations_en">Your conversations will appear here.</string>
     <string name="pin_conversation_en">Pin</string>
+    <string name="unpin_conversation_en">Unpin</string>
     <string name="delete_conversation_en">Delete</string>
     <string name="open_settings_en">Open settings</string>
     <string name="select_model_en">Select model</string>
@@ -67,6 +68,8 @@
     <string name="creativity_light_en">Light</string>
     <string name="permission_level_en">Permission level</string>
     <string name="export_action_en">Export method</string>
+    <string name="export_en">Export</string>
+    <string name="more_en">More</string>
     <string name="cancel_en">Cancel</string>
     <string name="copy_text_en">Copy</string>
     <string name="apply_configuration_en">Apply configuration</string>

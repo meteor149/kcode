@@ -6,7 +6,7 @@ struct KcodeIOSApp: App {
     var body: some Scene {
         WindowGroup {
             KcodeRootView()
-                .ignoresSafeArea(.keyboard)
+                .ignoresSafeArea()
         }
     }
 }

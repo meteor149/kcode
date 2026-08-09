@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -46,6 +47,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+
+internal val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
+
 @Composable
 internal fun KcodeBubblePopup(
     expanded: Boolean,
@@ -69,6 +74,7 @@ internal fun KcodeBubblePopup(
         shape = MaterialTheme.shapes.extraLarge,
         surfaceColor = Color.White.copy(alpha = .985f),
         borderColor = Hairline.copy(alpha = .72f),
+        hazeState = LocalChatHazeState.current,
         focusable = focusable,
         content = content,
     )

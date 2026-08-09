@@ -18,8 +18,13 @@ import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.LocalAppLanguage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -28,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import ai.meteor.kcode.ui.component.BoxWithResponsiveWidth
@@ -60,7 +66,7 @@ internal fun KcodeMain(
     var sidebarOpen by remember { mutableStateOf(false) }
     var appSettings by remember { mutableStateOf(StoredAppSettings()) }
     var configuration by remember { mutableStateOf<ModelConfiguration?>(null) }
-    var settingsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var persistenceFailure by remember { mutableStateOf<PersistenceFailure?>(null) }
     var settingsRevision by remember { mutableStateOf(0L) }
 
@@ -104,7 +110,9 @@ internal fun KcodeMain(
             Modifier
                 .fillMaxSize()
                 .background(Paper)
-                .safeDrawingPadding(),
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+                ),
         ) {
             Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
                 BoxWithResponsiveWidth { width ->
@@ -142,7 +150,7 @@ internal fun KcodeMain(
                         onSidebarOpenChange = { sidebarOpen = it },
                         onNew = ::newConversation,
                         onSelect = conversationSession::selectConversation,
-                        onPin = conversationSession::pinConversation,
+                        onPin = conversationSession::toggleConversationPinned,
                         onDelete = conversationSession::deleteConversation,
                         onSettings = { settingsOpen = true },
                         content = mainContent,
@@ -165,7 +173,7 @@ internal fun KcodeMain(
                 H5BackgroundContainersOverlay(
                     controller = controller,
                     hazeState = hazeState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                 )
             }
         }

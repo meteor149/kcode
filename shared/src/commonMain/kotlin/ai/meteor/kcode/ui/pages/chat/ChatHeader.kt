@@ -16,9 +16,16 @@ import ai.meteor.kcode.ui.component.BubblePlacement
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressClickable
 import ai.meteor.kcode.ui.component.pressScale
+import ai.meteor.kcode.ui.component.kcodeGlassEffect
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
 import ai.meteor.kcode.model.ModelConfiguration
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +67,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 
 @Composable
 internal fun DesktopChatHeader(
@@ -171,20 +180,73 @@ internal fun ExportOptionsBubble(
         maxWidth = 256.dp,
         maxHeight = 320.dp,
     ) {
-        Column(Modifier.fillMaxWidth().padding(vertical = KcodeSpacing.sm)) {
-            PopupNavigationRow(label = text(UiText.ExportConversation))
-            HorizontalDivider(Modifier.padding(horizontal = KcodeSpacing.md, vertical = KcodeSpacing.hair), color = Hairline, thickness = .7.dp)
-            PopupSectionLabel(text(UiText.ExportAction))
-            PopupChoiceRow(
-                title = text(UiText.SaveToPhotos),
-                showChevron = true,
-                onClick = onSave,
-            )
-            PopupChoiceRow(
-                title = text(UiText.ShareImage),
-                showChevron = true,
-                onClick = onShare,
-            )
+        ExportOptionsContent(onSave = onSave, onShare = onShare)
+    }
+}
+
+@Composable
+private fun ExportOptionsContent(
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = KcodeSpacing.sm)) {
+        PopupNavigationRow(label = text(UiText.ExportConversation))
+        HorizontalDivider(
+            Modifier.padding(horizontal = KcodeSpacing.md, vertical = KcodeSpacing.hair),
+            color = Hairline,
+            thickness = .7.dp,
+        )
+        PopupSectionLabel(text(UiText.ExportAction))
+        PopupChoiceRow(
+            title = text(UiText.SaveToPhotos),
+            showChevron = true,
+            onClick = onSave,
+        )
+        PopupChoiceRow(
+            title = text(UiText.ShareImage),
+            showChevron = true,
+            onClick = onShare,
+        )
+    }
+}
+
+private enum class ConversationMorePage { Actions, Export }
+
+@Composable
+private fun ConversationMoreBubble(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+) {
+    var page by remember { mutableStateOf(ConversationMorePage.Actions) }
+    LaunchedEffect(expanded) {
+        if (expanded) page = ConversationMorePage.Actions
+    }
+    KcodeBubblePopup(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        placement = BubblePlacement.Below,
+        minWidth = 216.dp,
+        maxWidth = 256.dp,
+        maxHeight = 320.dp,
+    ) {
+        if (page == ConversationMorePage.Actions) {
+            Column(Modifier.fillMaxWidth().padding(vertical = KcodeSpacing.sm)) {
+                PopupNavigationRow(label = text(UiText.More))
+                HorizontalDivider(
+                    Modifier.padding(horizontal = KcodeSpacing.md, vertical = KcodeSpacing.hair),
+                    color = Hairline,
+                    thickness = .7.dp,
+                )
+                PopupChoiceRow(
+                    title = text(UiText.Export),
+                    showChevron = true,
+                    onClick = { page = ConversationMorePage.Export },
+                )
+            }
+        } else {
+            ExportOptionsContent(onSave = onSave, onShare = onShare)
         }
     }
 }
@@ -192,6 +254,7 @@ internal fun ExportOptionsBubble(
 @Composable
 internal fun CompactChatHeader(
     modifier: Modifier = Modifier,
+    hazeState: HazeState,
     selectionMode: Boolean,
     selectedCount: Int,
     onCancelSelection: () -> Unit,
@@ -203,10 +266,11 @@ internal fun CompactChatHeader(
     onExportSave: () -> Unit,
     onExportShare: () -> Unit,
 ) {
-    var exportExpanded by remember { mutableStateOf(false) }
+    var moreExpanded by remember { mutableStateOf(false) }
     var selectionExportExpanded by remember { mutableStateOf(false) }
     val newChatDescription = text(UiText.NewChat)
-    val exportDescription = text(UiText.ExportConversation)
+    val moreDescription = text(UiText.More)
+    val shareImageDescription = text(UiText.ShareImage)
     BoxWithConstraints(modifier.fillMaxWidth()) {
     val extraCompact = maxWidth < 360.dp
     Row(
@@ -220,31 +284,56 @@ internal fun CompactChatHeader(
             FloatingCircleButton(
                 description = text(UiText.Cancel),
                 onClick = onCancelSelection,
+                backgroundModifier = Modifier.kcodeGlassEffect(hazeState, CircleShape),
                 size = if (extraCompact) 48.dp else 52.dp,
+                containerColor = Color.Transparent,
+                border = BorderStroke(1.dp, Hairline.copy(alpha = .58f)),
             ) { KcodeIcon(KcodeIconAsset.Close, Ink, Modifier.size(22.dp)) }
             Box {
                 Surface(
                     modifier = Modifier.height(if (extraCompact) 48.dp else 52.dp),
                     shape = RoundedCornerShape(26.dp),
-                    color = Color.White.copy(alpha = .96f),
+                    color = Color.Transparent,
                     border = BorderStroke(1.dp, Hairline.copy(alpha = .58f)),
                     shadowElevation = 8.dp,
                 ) {
-                    Row(
-                        Modifier.pressClickable(
-                            enabled = selectedCount > 0,
-                            style = PressScaleStyle.Button,
-                            onClick = { selectionExportExpanded = true },
-                        ).padding(horizontal = 18.dp),
-                        horizontalArrangement = Arrangement.spacedBy(9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text(UiText.SelectedMessages, selectedCount),
-                            color = if (selectedCount > 0) Ink else SoftInk,
-                            style = MaterialTheme.typography.labelLarge,
+                    Box {
+                        Box(
+                            Modifier.matchParentSize()
+                                .kcodeGlassEffect(hazeState, RoundedCornerShape(26.dp)),
                         )
-                        ExportMark()
+                        Row(
+                            Modifier.padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text(UiText.SelectedMessages, selectedCount),
+                                color = if (selectedCount > 0) Ink else SoftInk,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Box(
+                                Modifier.size(if (extraCompact) 40.dp else 44.dp)
+                                    .pressClickable(
+                                        enabled = selectedCount > 0,
+                                        style = PressScaleStyle.Button,
+                                        onClick = { selectionExportExpanded = true },
+                                    )
+                                    .clip(CircleShape)
+                                    .background(if (selectedCount > 0) Ink else Hairline)
+                                    .semantics {
+                                        contentDescription = shareImageDescription
+                                        role = Role.Button
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                KcodeIcon(
+                                    KcodeIconAsset.Share,
+                                    if (selectedCount > 0) Color.White else SoftInk,
+                                    Modifier.size(21.dp),
+                                )
+                            }
+                        }
                     }
                 }
                 ExportOptionsBubble(
@@ -266,50 +355,70 @@ internal fun CompactChatHeader(
         FloatingCircleButton(
             description = text(UiText.OpenSidebar),
             onClick = onMenu,
+            backgroundModifier = Modifier.kcodeGlassEffect(hazeState, CircleShape),
             size = if (extraCompact) 48.dp else 52.dp,
+            containerColor = Color.Transparent,
+            border = BorderStroke(1.dp, Hairline.copy(alpha = .58f)),
         ) {
             KcodeIcon(KcodeIconAsset.Menu, Ink, Modifier.size(22.dp))
         }
-        Surface(
-            modifier = Modifier.height(if (extraCompact) 50.dp else 54.dp),
-            shape = RoundedCornerShape(if (extraCompact) 25.dp else 27.dp),
-            color = Color.White.copy(alpha = .94f),
-            border = BorderStroke(1.dp, Hairline.copy(alpha = .58f)),
-            shadowElevation = 8.dp,
+        AnimatedVisibility(
+            visible = exportEnabled,
+            enter = fadeIn(tween(160)) + scaleIn(tween(190), initialScale = .9f),
+            exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = .92f),
         ) {
-            Row(
-                Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Surface(
+                modifier = Modifier.height(if (extraCompact) 50.dp else 54.dp),
+                shape = RoundedCornerShape(if (extraCompact) 25.dp else 27.dp),
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, Hairline.copy(alpha = .58f)),
+                shadowElevation = 8.dp,
             ) {
-                Box(
-                    Modifier.size(if (extraCompact) 40.dp else 44.dp)
-                        .pressClickable(style = PressScaleStyle.Button, onClick = onNew)
-                        .clip(CircleShape).background(Ink)
-                        .semantics { contentDescription = newChatDescription; role = Role.Button },
-                    contentAlignment = Alignment.Center,
-                ) { KcodeIcon(KcodeIconAsset.Add, Color.White, Modifier.size(24.dp)) }
                 Box {
                     Box(
-                        Modifier.size(width = if (extraCompact) 44.dp else 48.dp, height = if (extraCompact) 40.dp else 44.dp)
-                            .pressClickable(enabled = exportEnabled, style = PressScaleStyle.Button) { exportExpanded = true }
-                            .clip(CircleShape)
-                            .semantics { contentDescription = exportDescription; role = Role.Button },
-                        contentAlignment = Alignment.Center,
-                    ) { ExportMark() }
-                    ExportOptionsBubble(
-                        expanded = exportExpanded,
-                        placement = BubblePlacement.Below,
-                        onDismissRequest = { exportExpanded = false },
-                        onSave = {
-                            exportExpanded = false
-                            onExportSave()
-                        },
-                        onShare = {
-                            exportExpanded = false
-                            onExportShare()
-                        },
+                        Modifier.matchParentSize().kcodeGlassEffect(
+                            hazeState,
+                            RoundedCornerShape(if (extraCompact) 25.dp else 27.dp),
+                        ),
                     )
+                    Row(
+                        Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier.size(if (extraCompact) 40.dp else 44.dp)
+                                .pressClickable(style = PressScaleStyle.Button, onClick = onNew)
+                                .clip(CircleShape).background(Ink)
+                                .semantics { contentDescription = newChatDescription; role = Role.Button },
+                            contentAlignment = Alignment.Center,
+                        ) { KcodeIcon(KcodeIconAsset.Add, Color.White, Modifier.size(24.dp)) }
+                        Box {
+                            Box(
+                                Modifier.size(
+                                    width = if (extraCompact) 44.dp else 48.dp,
+                                    height = if (extraCompact) 40.dp else 44.dp,
+                                ).pressClickable(style = PressScaleStyle.Button) { moreExpanded = true }
+                                    .clip(CircleShape)
+                                    .semantics { contentDescription = moreDescription; role = Role.Button },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                KcodeIcon(KcodeIconAsset.More, Ink, Modifier.size(21.dp))
+                            }
+                            ConversationMoreBubble(
+                                expanded = moreExpanded,
+                                onDismissRequest = { moreExpanded = false },
+                                onSave = {
+                                    moreExpanded = false
+                                    onExportSave()
+                                },
+                                onShare = {
+                                    moreExpanded = false
+                                    onExportShare()
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }

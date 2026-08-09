@@ -3,6 +3,7 @@ package ai.meteor.kcode.ui.component
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,7 @@ internal fun FloatingCircleButton(
     description: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    backgroundModifier: Modifier = Modifier,
     size: Dp = 52.dp,
     width: Dp = size,
     containerColor: Color = MaterialTheme.colorScheme.surface,
@@ -45,6 +47,11 @@ internal fun FloatingCircleButton(
         border = border,
         shadowElevation = shadowElevation,
     ) {
-        Box(contentAlignment = Alignment.Center) { content() }
+        Box(Modifier.fillMaxSize()) {
+            Box(backgroundModifier.fillMaxSize())
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                content()
+            }
+        }
     }
 }

@@ -49,6 +49,7 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
+                implementation("org.jetbrains.compose.ui:ui-backhandler:1.8.2")
                 implementation(compose.components.resources)
                 api(project(":extensions:h5Container"))
                 implementation("dev.chrisbanes.haze:haze:1.6.0")

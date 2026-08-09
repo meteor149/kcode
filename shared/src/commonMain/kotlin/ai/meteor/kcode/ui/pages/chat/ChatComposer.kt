@@ -23,6 +23,7 @@ import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressClickable
 import ai.meteor.kcode.ui.component.pressScale
+import ai.meteor.kcode.ui.component.kcodeGlassEffect
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.modelName
 import ai.meteor.kcode.localization.text
@@ -44,6 +45,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -87,6 +89,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 @Composable
 private fun MobileModelSelector(
     configuration: ModelConfiguration?,
@@ -141,6 +144,7 @@ private fun MobileModelSelector(
 @Composable
 internal fun MobileComposer(
     modifier: Modifier,
+    hazeState: HazeState,
     configuration: ModelConfiguration?,
     generating: Boolean,
     replying: Boolean,
@@ -166,15 +170,19 @@ internal fun MobileComposer(
     }
 
     Surface(
-        modifier = modifier.imePadding(),
+        modifier = modifier.navigationBarsPadding().imePadding(),
         shape = RoundedCornerShape(KcodeRadius.panel),
-        color = Color.White.copy(alpha = .96f),
+        color = Color.Transparent,
         border = BorderStroke(1.dp, Hairline.copy(alpha = .55f)),
         shadowElevation = 16.dp,
     ) {
         BoxWithConstraints {
         val extraCompact = maxWidth < 340.dp
         val actionSize = KcodeSize.compactControl
+        Box(
+            Modifier.matchParentSize()
+                .kcodeGlassEffect(hazeState, RoundedCornerShape(KcodeRadius.panel)),
+        )
         Column(
             Modifier.padding(
                 start = if (extraCompact) KcodeSpacing.sm else KcodeSpacing.md,
@@ -264,6 +272,7 @@ internal fun MobileComposer(
 @Composable
 internal fun Composer(
     modifier: Modifier,
+    hazeState: HazeState,
     generating: Boolean,
     focusRequester: FocusRequester,
     onFocus: () -> Unit,
@@ -285,13 +294,25 @@ internal fun Composer(
     }
 
     Surface(
-        modifier = modifier.imePadding(),
+        modifier = modifier.navigationBarsPadding().imePadding(),
         shape = RoundedCornerShape(KcodeRadius.card),
-        color = Color.White,
+        color = Color.Transparent,
         border = BorderStroke(1.dp, Hairline),
         shadowElevation = 7.dp,
     ) {
-        Column(Modifier.padding(start = KcodeSpacing.md, top = KcodeSpacing.sm, end = KcodeSpacing.sm, bottom = KcodeSpacing.xs)) {
+        Box {
+            Box(
+                Modifier.matchParentSize()
+                    .kcodeGlassEffect(hazeState, RoundedCornerShape(KcodeRadius.card)),
+            )
+            Column(
+                Modifier.fillMaxWidth().padding(
+                    start = KcodeSpacing.md,
+                    top = KcodeSpacing.sm,
+                    end = KcodeSpacing.sm,
+                    bottom = KcodeSpacing.xs,
+                ),
+            ) {
             BasicTextField(
                 value = value,
                 onValueChange = { value = it },
@@ -365,6 +386,7 @@ internal fun Composer(
                         KcodeIcon(KcodeIconAsset.Send, Ink, Modifier.size(18.dp))
                     }
                 }
+            }
             }
         }
     }

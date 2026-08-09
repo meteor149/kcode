@@ -72,13 +72,19 @@ internal class ConversationSessionState(
         return created
     }
 
-    fun pinConversation(id: Long) {
+    fun toggleConversationPinned(id: Long) {
         val index = conversations.indexOfFirst { it.id == id }
         if (index < 0) return
         val conversation = conversations.removeAt(index)
-        conversation.isPinned = true
-        conversations.add(0, conversation)
-        scope.launch { runCatching { historyRepository.setPinned(id, true) } }
+        val pinned = !conversation.isPinned
+        conversation.isPinned = pinned
+        if (pinned) {
+            conversations.add(0, conversation)
+        } else {
+            val firstUnpinned = conversations.indexOfFirst { !it.isPinned }
+            conversations.add(if (firstUnpinned < 0) conversations.size else firstUnpinned, conversation)
+        }
+        scope.launch { runCatching { historyRepository.setPinned(id, pinned) } }
     }
 
     fun deleteConversation(id: Long) {
