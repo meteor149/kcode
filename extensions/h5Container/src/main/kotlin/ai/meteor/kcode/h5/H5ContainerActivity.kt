@@ -7,22 +7,28 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.GeolocationPermissions
+import android.webkit.ConsoleMessage
 import android.webkit.MimeTypeMap
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.net.Uri
-import android.widget.LinearLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -32,12 +38,16 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import java.io.File
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.serialization.json.Json
 
 class H5ContainerActivity : Activity() {
     internal lateinit var webView: WebView
     private lateinit var titleView: TextView
     private lateinit var pathView: TextView
     private lateinit var capabilityBridge: AndroidH5CapabilityBridge
+    private var containerId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +65,16 @@ class H5ContainerActivity : Activity() {
         loadPreview(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        containerId?.let { AndroidH5Sessions.setState(it, H5ContainerState.Foreground) }
+    }
+
+    override fun onPause() {
+        containerId?.let { id -> runCatching { AndroidH5Sessions.setState(id, H5ContainerState.Background) } }
+        super.onPause()
+    }
+
     @Suppress("SetJavaScriptEnabled")
     private fun buildContent() {
         val root = LinearLayout(this).apply {
@@ -70,10 +90,18 @@ class H5ContainerActivity : Activity() {
         val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), 0, dp(8), 0)
-            setBackgroundColor(Color.WHITE)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        toolbar.addView(toolbarButton(R.drawable.icon_close, getString(R.string.h5_preview_close)) { finish() })
+        toolbar.addView(floatingCloseButton())
+
+        val navigationPill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(7), dp(5), dp(5), dp(5))
+            background = floatingSurface(radiusDp = 27)
+            elevation = dp(8).toFloat()
+            clipToOutline = true
+        }
 
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -96,7 +124,7 @@ class H5ContainerActivity : Activity() {
         }
         identity.addView(titleView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         identity.addView(pathView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        toolbar.addView(identity, LinearLayout.LayoutParams(0, dp(48), 1f))
+        navigationPill.addView(identity, LinearLayout.LayoutParams(0, dp(44), 1f))
 
         val live = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -113,10 +141,20 @@ class H5ContainerActivity : Activity() {
                 setPadding(dp(5), 0, 0, 0)
             })
         }
-        toolbar.addView(live, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
-        toolbar.addView(toolbarButton(R.drawable.icon_reload, getString(R.string.h5_preview_reload)) { webView.reload() })
-        root.addView(toolbar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
-        root.addView(View(this).apply { setBackgroundColor(Color.rgb(228, 229, 226)) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+        navigationPill.addView(live, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+        navigationPill.addView(
+            toolbarButton(
+                R.drawable.icon_background,
+                getString(R.string.h5_preview_background),
+                ::movePreviewToBackground,
+            ),
+        )
+        navigationPill.addView(toolbarButton(R.drawable.icon_reload, getString(R.string.h5_preview_reload)) { webView.reload() })
+        toolbar.addView(
+            navigationPill,
+            LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(10) },
+        )
+        root.addView(toolbar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(74)))
 
         val assetLoader = WebViewAssetLoader.Builder()
             .setDomain(H5Workspace.PREVIEW_DOMAIN)
@@ -133,7 +171,38 @@ class H5ContainerActivity : Activity() {
             settings.displayZoomControls = false
             settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
             settings.mediaPlaybackRequiresUserGesture = true
-            webChromeClient = WebChromeClient()
+            settings.setGeolocationEnabled(true)
+            webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                    containerId?.let { id ->
+                        AndroidH5Sessions.recordConsole(
+                            id,
+                            consoleMessage.messageLevel().name.lowercase(),
+                            consoleMessage.message(),
+                            consoleMessage.sourceId(),
+                            consoleMessage.lineNumber(),
+                        )
+                    }
+                    return true
+                }
+
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    capabilityBridge.handleWebPermissionRequest(request)
+                }
+
+                override fun onGeolocationPermissionsShowPrompt(
+                    origin: String,
+                    callback: GeolocationPermissions.Callback,
+                ) {
+                    capabilityBridge.handleGeolocationPermission(origin, callback)
+                }
+
+                override fun onShowFileChooser(
+                    webView: WebView,
+                    filePathCallback: ValueCallback<Array<Uri>>,
+                    fileChooserParams: FileChooserParams,
+                ): Boolean = capabilityBridge.handleFileChooser(filePathCallback, fileChooserParams)
+            }
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assetLoader.shouldInterceptRequest(request.url)
@@ -171,6 +240,11 @@ class H5ContainerActivity : Activity() {
         titleView.text = intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() }
             ?: getString(R.string.h5_preview_default_title)
         pathView.text = virtualPath
+        val nextContainerId = intent.getStringExtra(EXTRA_CONTAINER_ID)
+            ?: error("H5 container ID is missing")
+        containerId?.takeIf { it != nextContainerId }?.let { AndroidH5Sessions.detach(it, this) }
+        containerId = nextContainerId
+        AndroidH5Sessions.attach(requireNotNull(containerId), this)
         webView.loadUrl(H5Workspace.previewUrl(H5Workspace.relativePath(this, entry)))
     }
 
@@ -190,7 +264,47 @@ class H5ContainerActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
         }
 
+    private fun floatingCloseButton(): ImageButton =
+        ImageButton(this).apply {
+            setImageResource(R.drawable.icon_close)
+            imageTintList = ColorStateList.valueOf(Color.rgb(32, 38, 34))
+            contentDescription = getString(R.string.h5_preview_close)
+            scaleType = ImageView.ScaleType.CENTER
+            setPadding(dp(15), dp(15), dp(15), dp(15))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { finish() }
+            background = RippleDrawable(
+                ColorStateList.valueOf(Color.argb(24, 32, 38, 34)),
+                floatingSurface(26),
+                null,
+            )
+            elevation = dp(8).toFloat()
+            clipToOutline = true
+            layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
+        }
+
+    private fun floatingSurface(radiusDp: Int): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(radiusDp).toFloat()
+            setColor(Color.argb(245, 255, 255, 255))
+            setStroke(dp(1), Color.argb(148, 228, 229, 226))
+        }
+
+    private fun movePreviewToBackground() {
+        val id = containerId ?: return
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent == null) {
+            Toast.makeText(this, R.string.h5_preview_background_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AndroidH5Sessions.setState(id, H5ContainerState.Background)
+        startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+    }
+
     override fun onDestroy() {
+        containerId?.let { AndroidH5Sessions.detach(it, this) }
         if (::capabilityBridge.isInitialized) capabilityBridge.close()
         if (::webView.isInitialized) {
             webView.stopLoading()
@@ -216,6 +330,14 @@ class H5ContainerActivity : Activity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    internal suspend fun evaluateDebugScript(script: String): String = suspendCancellableCoroutine { continuation ->
+        webView.evaluateJavascript(script) { encoded ->
+            if (!continuation.isActive) return@evaluateJavascript
+            runCatching { Json.decodeFromString<String>(encoded) }
+                .fold(continuation::resume) { continuation.cancel(IllegalStateException("H5 debug script failed: $encoded", it)) }
+        }
+    }
+
     internal class WorkspacePathHandler(private val context: Context) : WebViewAssetLoader.PathHandler {
         override fun handle(path: String): WebResourceResponse? {
             val file: File = H5Workspace.resolveAsset(context, path) ?: return null
@@ -239,5 +361,6 @@ class H5ContainerActivity : Activity() {
     companion object {
         const val EXTRA_ENTRY_PATH = "ai.meteor.kcode.h5.entry_path"
         const val EXTRA_TITLE = "ai.meteor.kcode.h5.title"
+        const val EXTRA_CONTAINER_ID = "ai.meteor.kcode.h5.container_id"
     }
 }

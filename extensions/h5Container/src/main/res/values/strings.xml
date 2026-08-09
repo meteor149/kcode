@@ -4,6 +4,8 @@
     <string name="h5_preview_live">Live</string>
     <string name="h5_preview_close">Close preview</string>
     <string name="h5_preview_reload">Reload preview</string>
+    <string name="h5_preview_background">Move preview to background</string>
+    <string name="h5_preview_background_unavailable">Could not return to kcode.</string>
     <string name="h5_preview_invalid">The H5 entry file is unavailable.</string>
     <string name="h5_capability_allow_title">Allow device capability?</string>
     <string name="h5_capability_allow_message">This local H5 app wants to use %1$s. Allow it for this preview session?</string>

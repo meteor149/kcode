@@ -1,9 +1,11 @@
 package ai.meteor.kcode.ui.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -23,20 +25,25 @@ internal fun FloatingCircleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     size: Dp = 52.dp,
+    width: Dp = size,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    border: BorderStroke? = null,
+    shadowElevation: Dp = 7.dp,
     content: @Composable () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
-        modifier = modifier.pressScale(interaction, PressScaleStyle.Button).size(size)
+        modifier = modifier.pressScale(interaction, PressScaleStyle.Button).size(width = width, height = size)
             .semantics {
                 contentDescription = description
                 role = Role.Button
             },
         interactionSource = interaction,
         shape = CircleShape,
-        color = Color.White,
-        shadowElevation = 7.dp,
+        color = containerColor,
+        border = border,
+        shadowElevation = shadowElevation,
     ) {
         Box(contentAlignment = Alignment.Center) { content() }
     }

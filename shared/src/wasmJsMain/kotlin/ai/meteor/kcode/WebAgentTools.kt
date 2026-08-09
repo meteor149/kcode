@@ -1,9 +1,21 @@
-@file:OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+@file:OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class, kotlin.js.ExperimentalWasmJsInterop::class)
 
 package ai.meteor.kcode
 
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.meteor.kcode.h5.H5ContainerLauncher
+import ai.meteor.kcode.h5.H5ContainerController
+import ai.meteor.kcode.h5.H5ContainerInfo
+import ai.meteor.kcode.h5.H5ContainerScreenshot
+import ai.meteor.kcode.h5.H5ContainerState
+import ai.meteor.kcode.h5.H5ConsoleEntry
+import ai.meteor.kcode.h5.H5ConsoleSnapshot
+import ai.meteor.kcode.h5.H5DebugScript
+import ai.meteor.kcode.h5.H5InteractionAction
+import ai.meteor.kcode.h5.H5InteractionRequest
+import ai.meteor.kcode.h5.H5InteractionResult
+import ai.meteor.kcode.h5.H5PageInspection
+import ai.meteor.kcode.h5.decodeH5Inspection
+import ai.meteor.kcode.h5.decodeH5InteractionTarget
 import ai.meteor.kcode.h5.H5PreviewRequest
 import ai.meteor.kcode.h5.H5PreviewResult
 import ai.meteor.kcode.h5.H5VirtualPath
@@ -15,12 +27,31 @@ import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.io.normalizeWorkspacePath
 import kotlin.io.encoding.Base64
+import kotlin.random.Random
 import kotlinx.browser.document
 import kotlinx.browser.localStorage
 import kotlinx.browser.window
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 import org.w3c.dom.HTMLButtonElement
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLIFrameElement
+import org.w3c.dom.HTMLCanvasElement
+import org.w3c.dom.HTMLImageElement
+import org.w3c.dom.CanvasRenderingContext2D
+import org.w3c.dom.MessageEvent
+import org.w3c.dom.events.Event
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.js.toJsString
 
 internal class WebToolPermissionState(
     var mode: ToolPermissionMode = ToolPermissionMode.Ask,
@@ -29,35 +60,51 @@ internal class WebToolPermissionState(
 internal fun createWebKoogChatService(
     settingsStore: AppSettingsStore,
     permissionState: WebToolPermissionState,
-): KoogChatService {
+): KoogChatService = createWebKoogChatRuntime(settingsStore, permissionState).chatService
+
+internal fun createWebKoogChatRuntime(
+    settingsStore: AppSettingsStore,
+    permissionState: WebToolPermissionState,
+): KcodeAgentRuntime {
     val workspace = WebAgentWorkspace()
-    return KoogChatService(
-        additionalTools = ToolRegistry {
-            tool(AgentReadFileTool(workspace))
-            tool(AgentListDirectoryTool(workspace))
-            tool(AgentWriteFileTool(workspace))
-            tool(AgentEditFileTool(workspace))
-            tool(H5PreviewTool(WebH5ContainerLauncher(workspace)))
-            tool(WebSearchTool(configurationProvider = {
-                settingsStore.load().let {
-                    WebSearchConfiguration(
-                        provider = WebSearchProvider.fromCode(it.webSearchProvider),
-                        brightDataApiKey = it.webSearchApiKey,
-                        exaApiKey = it.exaSearchApiKey,
-                    )
-                }
-            }))
-        },
-        toolPermissionModeProvider = { permissionState.mode },
-        toolCallApprover = ToolCallApprover { request ->
-            window.confirm(
-                buildString {
-                    append("Allow ").append(request.name).append("?\n\n")
-                    append(request.description.ifBlank { request.name }.take(2_048))
-                    append("\n\nInput\n").append(request.input.take(8_192))
-                },
-            )
-        },
+    val h5Controller = WebH5ContainerLauncher(workspace)
+    return KcodeAgentRuntime(
+        chatService = KoogChatService(
+            additionalTools = ToolRegistry {
+                tool(AgentReadFileTool(workspace))
+                tool(AgentListDirectoryTool(workspace))
+                tool(AgentWriteFileTool(workspace))
+                tool(AgentEditFileTool(workspace))
+                tool(H5PreviewTool(h5Controller))
+                tool(H5ListContainersTool(h5Controller))
+                tool(H5SetContainerStateTool(h5Controller))
+                tool(H5ScreenshotTool(h5Controller))
+                tool(H5InspectContainerTool(h5Controller))
+                tool(H5InteractContainerTool(h5Controller))
+                tool(H5ConsoleTool(h5Controller))
+                tool(H5CloseContainerTool(h5Controller))
+                tool(WebSearchTool(configurationProvider = {
+                    settingsStore.load().let {
+                        WebSearchConfiguration(
+                            provider = WebSearchProvider.fromCode(it.webSearchProvider),
+                            brightDataApiKey = it.webSearchApiKey,
+                            exaApiKey = it.exaSearchApiKey,
+                        )
+                    }
+                }))
+            },
+            toolPermissionModeProvider = { permissionState.mode },
+            toolCallApprover = ToolCallApprover { request ->
+                window.confirm(
+                    buildString {
+                        append("Allow ").append(request.name).append("?\n\n")
+                        append(request.description.ifBlank { request.name }.take(2_048))
+                        append("\n\nInput\n").append(request.input.take(8_192))
+                    },
+                )
+            },
+        ),
+        h5ContainerController = h5Controller,
     )
 }
 
@@ -120,21 +167,117 @@ internal class WebAgentWorkspace : AgentWorkspace {
     }
 }
 
-private class WebH5ContainerLauncher(
+internal class WebH5ContainerLauncher(
     private val workspace: WebAgentWorkspace,
-) : H5ContainerLauncher {
+) : H5ContainerController {
+    private data class Session(
+        var info: H5ContainerInfo,
+        val overlay: HTMLDivElement,
+        val frame: HTMLIFrameElement,
+        val screenshotToken: String,
+    )
+
+    private var active: Session? = null
+
     override suspend fun launch(request: H5PreviewRequest): H5PreviewResult {
         H5VirtualPath.relativeEntry(request.entryPath)
         val source = workspace.readTextOrNull(request.entryPath)
             ?: error("H5 entry does not exist: ${request.entryPath}")
-        val html = inlineLocalAssets(source, request.entryPath)
-        showPreview(request.title, html)
+        val containerId = "web-${Random.nextLong().toString(16)}"
+        val screenshotToken = "capture-${Random.nextLong().toString(16)}"
+        val html = installScreenshotResponder(inlineLocalAssets(source, request.entryPath), screenshotToken)
+        val preview = showPreview(
+            title = request.title,
+            html = html,
+            onBackground = {
+                active?.takeIf { it.info.id == containerId }?.let { session ->
+                    session.overlay.style.visibility = "hidden"
+                    session.overlay.style.setProperty("pointer-events", "none")
+                    session.info = session.info.copy(state = H5ContainerState.Background)
+                }
+            },
+            onClose = { active = null },
+        )
+        active = Session(
+            H5ContainerInfo(
+                containerId,
+                request.entryPath,
+                request.title,
+                "web-sandboxed-iframe",
+                H5ContainerState.Foreground,
+            ),
+            preview.first,
+            preview.second,
+            screenshotToken,
+        )
         return H5PreviewResult(
+            containerId = containerId,
             entryPath = request.entryPath,
             entrySize = source.encodeToByteArray().size.toLong(),
             presentation = "web-sandboxed-iframe",
         )
     }
+
+    override suspend fun list(): List<H5ContainerInfo> = active?.let { listOf(it.info) }.orEmpty()
+
+    override suspend fun screenshot(containerId: String): H5ContainerScreenshot {
+        val session = active?.takeIf { it.info.id == containerId }
+            ?: error("H5 container is not running: $containerId")
+        val width = session.frame.clientWidth.coerceAtLeast(1)
+        val height = session.frame.clientHeight.coerceAtLeast(1)
+        val serializedDocument = requestSerializedDocument(session)
+        val bytes = renderDocumentToPng(serializedDocument, width, height)
+        return H5ContainerScreenshot(containerId, bytes, width, height)
+    }
+
+    override suspend fun inspect(containerId: String): H5PageInspection {
+        val session = requireSession(containerId)
+        return decodeH5Inspection(containerId, requestDebugScript(session, H5DebugScript.inspect))
+    }
+
+    override suspend fun interact(request: H5InteractionRequest): H5InteractionResult {
+        val session = requireSession(request.containerId)
+        val target = decodeH5InteractionTarget(requestDebugScript(session, H5DebugScript.interact(request)))
+        return H5InteractionResult(request.containerId, request.action, target)
+    }
+
+    override suspend fun console(containerId: String, cursor: Long, limit: Int): H5ConsoleSnapshot {
+        val session = requireSession(containerId)
+        val encoded = requestDebugScript(
+            session,
+            "JSON.stringify((window.__kcodeDebugConsole||[]).filter(function(e){return e.sequence>${cursor.coerceAtLeast(0)}}).slice(0,${limit.coerceIn(1, 200)}))",
+        )
+        val entries = Json.parseToJsonElement(encoded).jsonArray.map { item ->
+            val entry = item.jsonObject
+            H5ConsoleEntry(
+                sequence = entry.getValue("sequence").jsonPrimitive.long,
+                level = entry.getValue("level").jsonPrimitive.content,
+                message = entry.getValue("message").jsonPrimitive.content,
+                source = entry["source"]?.jsonPrimitive?.contentOrNull,
+                line = entry["line"]?.jsonPrimitive?.intOrNull,
+            )
+        }
+        return H5ConsoleSnapshot(containerId, entries, entries.lastOrNull()?.sequence ?: cursor)
+    }
+
+    override suspend fun setState(containerId: String, state: H5ContainerState): H5ContainerInfo {
+        val session = active?.takeIf { it.info.id == containerId }
+            ?: error("H5 container is not running: $containerId")
+        session.overlay.style.visibility = if (state == H5ContainerState.Foreground) "visible" else "hidden"
+        session.overlay.style.setProperty("pointer-events", if (state == H5ContainerState.Foreground) "auto" else "none")
+        session.info = session.info.copy(state = state)
+        return session.info
+    }
+
+    override suspend fun close(containerId: String) {
+        val session = active?.takeIf { it.info.id == containerId }
+            ?: error("H5 container is not running: $containerId")
+        session.overlay.remove()
+        active = null
+    }
+
+    private fun requireSession(containerId: String): Session = active?.takeIf { it.info.id == containerId }
+        ?: error("H5 container is not running: $containerId")
 
     private fun inlineLocalAssets(html: String, entryPath: String): String {
         val baseDirectory = entryPath.substringBeforeLast('/', "/workspace")
@@ -153,9 +296,7 @@ private class WebH5ContainerLauncher(
             val content = workspace.readTextOrNull(path) ?: return@replace match.value
             "${match.groupValues[1]}${dataUrl(path, content)}${match.groupValues[3]}"
         }
-        val sdk = "<script>$WEB_CAPABILITY_SDK</script>"
-        val head = HEAD_PATTERN.find(rendered)
-        return if (head == null) sdk + rendered else rendered.replaceRange(head.range, head.value + sdk)
+        return rendered
     }
 
     private fun inlineCssAssets(css: String, baseDirectory: String): String = CSS_URL_PATTERN.replace(css) { match ->
@@ -196,7 +337,12 @@ private class WebH5ContainerLauncher(
         return "data:$mime;base64,${Base64.Default.encode(content.encodeToByteArray())}"
     }
 
-    private fun showPreview(title: String, html: String) {
+    private fun showPreview(
+        title: String,
+        html: String,
+        onBackground: () -> Unit,
+        onClose: () -> Unit,
+    ): Pair<HTMLDivElement, HTMLIFrameElement> {
         document.getElementById(PREVIEW_ID)?.remove()
         val overlay = document.createElement("div") as HTMLDivElement
         overlay.id = PREVIEW_ID
@@ -220,6 +366,19 @@ private class WebH5ContainerLauncher(
         bar.style.font = "600 15px system-ui, sans-serif"
         bar.style.borderBottom = "1px solid #e7e7e4"
 
+        val actions = document.createElement("div") as HTMLDivElement
+        actions.style.display = "flex"
+        actions.style.setProperty("gap", "8px")
+        val background = document.createElement("button") as HTMLButtonElement
+        background.textContent = "Background"
+        background.style.border = "1px solid #d7d9d5"
+        background.style.borderRadius = "999px"
+        background.style.padding = "8px 14px"
+        background.style.background = "white"
+        background.style.color = "#202622"
+        background.onclick = { onBackground(); null }
+        actions.appendChild(background)
+
         val close = document.createElement("button") as HTMLButtonElement
         close.textContent = "Close"
         close.style.border = "0"
@@ -227,8 +386,9 @@ private class WebH5ContainerLauncher(
         close.style.padding = "8px 14px"
         close.style.background = "#202622"
         close.style.color = "white"
-        close.onclick = { overlay.remove(); null }
-        bar.appendChild(close)
+        close.onclick = { overlay.remove(); onClose(); null }
+        actions.appendChild(close)
+        bar.appendChild(actions)
 
         val frame = document.createElement("iframe") as HTMLIFrameElement
         frame.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-downloads")
@@ -240,7 +400,146 @@ private class WebH5ContainerLauncher(
         overlay.appendChild(bar)
         overlay.appendChild(frame)
         requireNotNull(document.body).appendChild(overlay)
+        return overlay to frame
     }
+
+    private fun installScreenshotResponder(html: String, token: String): String {
+        val script = """
+            <script>(function(){
+              var sequence=0,entries=[];window.__kcodeDebugConsole=entries;
+              function text(value){try{return typeof value==='string'?value:JSON.stringify(value);}catch(_){return String(value);}}
+              function record(level,args,source,line){entries.push({sequence:++sequence,level:level,message:Array.from(args).map(text).join(' '),source:source||null,line:line||null});if(entries.length>500)entries.shift();}
+              ['log','info','warn','error','debug'].forEach(function(level){var original=console[level];console[level]=function(){record(level,arguments);return original.apply(console,arguments);};});
+              addEventListener('error',function(e){record('error',[e.message],e.filename,e.lineno);});
+              addEventListener('unhandledrejection',function(e){record('error',['Unhandled promise rejection',e.reason]);});
+              window.addEventListener('message',function(event){
+                if(event.data===${jsString("kcode-screenshot:$token")}){
+                  try{var xml=new XMLSerializer().serializeToString(document.documentElement);parent.postMessage(${jsString("kcode-screenshot-result:$token:")}+xml,'*');}
+                  catch(error){parent.postMessage(${jsString("kcode-screenshot-error:$token:")}+String(error),'*');}return;
+                }
+                if(typeof event.data!=='string'||event.data.indexOf(${jsString("kcode-debug-request:$token:")})!==0)return;
+                try{var request=JSON.parse(event.data.slice(${"kcode-debug-request:$token:".length}));var value=(0,eval)(request.script);
+                  parent.postMessage(${jsString("kcode-debug-result:$token:")}+request.id+':'+JSON.stringify({value:value}),'*');}
+                catch(error){parent.postMessage(${jsString("kcode-debug-result:$token:")}+request.id+':'+JSON.stringify({error:String(error&&error.message||error)}),'*');}
+              });
+            })();</script>
+        """.trimIndent()
+        val bodyIndex = html.lastIndexOf("</body>", ignoreCase = true)
+        return if (bodyIndex >= 0) html.substring(0, bodyIndex) + script + html.substring(bodyIndex) else html + script
+    }
+
+    private suspend fun requestDebugScript(session: Session, script: String): String = suspendCancellableCoroutine { continuation ->
+        val requestId = Random.nextLong().toString(16)
+        val responsePrefix = "kcode-debug-result:${session.screenshotToken}:$requestId:"
+        val requestPayload = buildJsonObject {
+            put("id", requestId)
+            put("script", script)
+        }.toString()
+        lateinit var listener: (Event) -> Unit
+        var retryHandle = 0
+        var timeoutHandle = 0
+        fun cleanup() {
+            window.removeEventListener("message", listener)
+            window.clearInterval(retryHandle)
+            window.clearTimeout(timeoutHandle)
+        }
+        listener = { event ->
+            val message = (event as? MessageEvent)?.data?.toString().orEmpty()
+            if (message.startsWith(responsePrefix)) {
+                cleanup()
+                val response = Json.parseToJsonElement(message.removePrefix(responsePrefix)).jsonObject
+                val error = response["error"]?.jsonPrimitive?.contentOrNull
+                if (!continuation.isActive) Unit
+                else if (error != null) continuation.resumeWithException(IllegalStateException(error))
+                else continuation.resume(response.getValue("value").jsonPrimitive.content)
+            }
+        }
+        window.addEventListener("message", listener)
+        val send: () -> JsAny? = {
+            session.frame.contentWindow?.postMessage(
+                "kcode-debug-request:${session.screenshotToken}:$requestPayload".toJsString(),
+                "*",
+            )
+            null
+        }
+        retryHandle = window.setInterval(send, 25)
+        timeoutHandle = window.setTimeout({
+            cleanup()
+            if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Timed out waiting for H5 debug response"))
+            null
+        }, 2_000)
+        continuation.invokeOnCancellation { cleanup() }
+        send()
+    }
+
+    private suspend fun requestSerializedDocument(session: Session): String = suspendCancellableCoroutine { continuation ->
+        val successPrefix = "kcode-screenshot-result:${session.screenshotToken}:"
+        val errorPrefix = "kcode-screenshot-error:${session.screenshotToken}:"
+        lateinit var listener: (Event) -> Unit
+        var retryHandle = 0
+        var timeoutHandle = 0
+        fun cleanup() {
+            window.removeEventListener("message", listener)
+            window.clearInterval(retryHandle)
+            window.clearTimeout(timeoutHandle)
+        }
+        listener = { event ->
+            val message = (event as? MessageEvent)?.data?.toString().orEmpty()
+            when {
+                message.startsWith(successPrefix) -> {
+                    cleanup()
+                    if (continuation.isActive) continuation.resume(message.removePrefix(successPrefix))
+                }
+                message.startsWith(errorPrefix) -> {
+                    cleanup()
+                    if (continuation.isActive) continuation.resumeWithException(IllegalStateException(message.removePrefix(errorPrefix)))
+                }
+            }
+        }
+        window.addEventListener("message", listener)
+        val request: () -> JsAny? = {
+            session.frame.contentWindow?.postMessage("kcode-screenshot:${session.screenshotToken}".toJsString(), "*")
+            null
+        }
+        retryHandle = window.setInterval(request, 25)
+        timeoutHandle = window.setTimeout({
+            cleanup()
+            if (continuation.isActive) continuation.resumeWithException(
+                IllegalStateException("Timed out waiting for the H5 container to become ready"),
+            )
+            null
+        }, 1_500)
+        continuation.invokeOnCancellation { cleanup() }
+        request()
+    }
+
+    private suspend fun renderDocumentToPng(xml: String, width: Int, height: Int): ByteArray =
+        suspendCancellableCoroutine { continuation ->
+            val svg = """<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height"><foreignObject width="100%" height="100%">$xml</foreignObject></svg>"""
+            val image = document.createElement("img") as HTMLImageElement
+            image.onload = {
+                runCatching {
+                    val canvas = document.createElement("canvas") as HTMLCanvasElement
+                    canvas.width = width
+                    canvas.height = height
+                    val context = canvas.getContext("2d") as CanvasRenderingContext2D
+                    context.drawImage(image, 0.0, 0.0)
+                    val encoded = canvas.toDataURL("image/png").substringAfter(',')
+                    Base64.Default.decode(encoded)
+                }.fold(
+                    onSuccess = { if (continuation.isActive) continuation.resume(it) },
+                    onFailure = { if (continuation.isActive) continuation.resumeWithException(it) },
+                )
+                null
+            }
+            image.onerror = { _, _, _, _, _ ->
+                if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Could not render H5 screenshot"))
+                null
+            }
+            image.src = "data:image/svg+xml;base64,${Base64.Default.encode(svg.encodeToByteArray())}"
+        }
+
+    private fun jsString(value: String): String = "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
     private companion object {
         const val PREVIEW_ID = "kcode-h5-preview"
@@ -254,112 +553,5 @@ private class WebH5ContainerLauncher(
         )
         val SOURCE_PATTERN = Regex("""(\bsrc\s*=\s*["'])([^"']+)(["'])""", RegexOption.IGNORE_CASE)
         val CSS_URL_PATTERN = Regex("""url\(\s*(["']?)([^"')]+)\1\s*\)""", RegexOption.IGNORE_CASE)
-        val HEAD_PATTERN = Regex("""<head(?:\s[^>]*)?>""", RegexOption.IGNORE_CASE)
-        val WEB_CAPABILITY_SDK = """
-            (function () {
-              if (window.kcode && window.kcode.capabilities) return;
-              var subscriptions = new Map();
-              var sequence = 0;
-              function descriptor(id, available, subscription, sensitive, reason) {
-                return { id: id, available: available, subscription: !!subscription, sensitive: !!sensitive,
-                  platform: 'web', reason: reason || null };
-              }
-              function list() {
-                return Promise.resolve([
-                  descriptor('camera.capture', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), false, true),
-                  descriptor('camera.pick', true, false, true),
-                  descriptor('location.current', !!navigator.geolocation, false, true),
-                  descriptor('location.watch', !!navigator.geolocation, true, true),
-                  descriptor('sensor.compass', 'DeviceOrientationEvent' in window, true, true),
-                  descriptor('sensor.orientation', 'DeviceOrientationEvent' in window, true, true),
-                  descriptor('sensor.accelerometer', 'DeviceMotionEvent' in window, true, true),
-                  descriptor('sensor.gyroscope', 'DeviceMotionEvent' in window, true, true),
-                  descriptor('sensor.magneticField', false, true, true, 'Browser API unavailable'),
-                  descriptor('sensor.pressure', false, true, false, 'Browser API unavailable'),
-                  descriptor('sensor.light', false, true, false, 'Browser API unavailable'),
-                  descriptor('sensor.proximity', false, true, true, 'Browser API unavailable'),
-                  descriptor('device.vibrate', typeof navigator.vibrate === 'function', false, true),
-                  descriptor('device.flashlight', false, false, true, 'Use a camera MediaStream track directly'),
-                  descriptor('device.battery', typeof navigator.getBattery === 'function', false, false),
-                  descriptor('device.network', true, false, false),
-                  descriptor('device.openSettings', false, false, true, 'Browsers do not expose a settings URI'),
-                  descriptor('media.recordAudio', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), false, true),
-                  descriptor('media.scanQrCode', 'BarcodeDetector' in window, false, true)
-                ]);
-              }
-              function chooseImage(capture) {
-                return new Promise(function (resolve, reject) {
-                  var input = document.createElement('input');
-                  input.type = 'file'; input.accept = 'image/*';
-                  if (capture) input.setAttribute('capture', 'environment');
-                  input.onchange = function () {
-                    var file = input.files && input.files[0];
-                    if (!file) { reject(new Error('No image selected')); return; }
-                    var reader = new FileReader();
-                    reader.onerror = function () { reject(reader.error || new Error('Image read failed')); };
-                    reader.onload = function () { resolve({ name: file.name, type: file.type, size: file.size, dataUrl: reader.result }); };
-                    reader.readAsDataURL(file);
-                  };
-                  input.click();
-                });
-              }
-              function currentLocation(params) {
-                return new Promise(function (resolve, reject) {
-                  if (!navigator.geolocation) { reject(new Error('Geolocation unavailable')); return; }
-                  navigator.geolocation.getCurrentPosition(function (position) {
-                    resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude,
-                      accuracy: position.coords.accuracy, altitude: position.coords.altitude,
-                      heading: position.coords.heading, speed: position.coords.speed, timestamp: position.timestamp });
-                  }, reject, { enableHighAccuracy: !!(params && params.highAccuracy),
-                    timeout: (params && params.timeoutMs) || 15000, maximumAge: 0 });
-                });
-              }
-              function invoke(method, params) {
-                params = params || {};
-                if (method === 'camera.capture') return chooseImage(true);
-                if (method === 'camera.pick') return chooseImage(false);
-                if (method === 'location.current') return currentLocation(params);
-                if (method === 'device.vibrate') return Promise.resolve({ vibrated: !!(navigator.vibrate && navigator.vibrate(params.durationMs || 100)) });
-                if (method === 'device.network') return Promise.resolve({ online: navigator.onLine,
-                  type: navigator.connection && navigator.connection.effectiveType || null });
-                if (method === 'device.battery' && navigator.getBattery) return navigator.getBattery().then(function (battery) {
-                  return { level: battery.level, charging: battery.charging, chargingTime: battery.chargingTime,
-                    dischargingTime: battery.dischargingTime };
-                });
-                return Promise.reject(new Error(method + ' is unavailable in this browser container'));
-              }
-              function subscribe(method, params, callback) {
-                if (typeof callback !== 'function') return Promise.reject(new TypeError('callback is required'));
-                var id = 'web-sub-' + (++sequence);
-                var dispose;
-                if (method === 'location.watch' && navigator.geolocation) {
-                  var watch = navigator.geolocation.watchPosition(function (position) {
-                    callback({ latitude: position.coords.latitude, longitude: position.coords.longitude,
-                      accuracy: position.coords.accuracy, heading: position.coords.heading,
-                      speed: position.coords.speed, timestamp: position.timestamp });
-                  }, function (error) { callback({ error: error.message }); }, { enableHighAccuracy: true });
-                  dispose = function () { navigator.geolocation.clearWatch(watch); };
-                } else if (method === 'sensor.compass' || method === 'sensor.orientation') {
-                  var orientation = function (event) { callback({ heading: event.webkitCompassHeading || event.alpha,
-                    alpha: event.alpha, beta: event.beta, gamma: event.gamma, absolute: event.absolute }); };
-                  window.addEventListener('deviceorientation', orientation);
-                  dispose = function () { window.removeEventListener('deviceorientation', orientation); };
-                } else if (method === 'sensor.accelerometer' || method === 'sensor.gyroscope') {
-                  var motion = function (event) { var value = method === 'sensor.gyroscope' ? event.rotationRate : event.accelerationIncludingGravity;
-                    callback(value ? { x: value.alpha === undefined ? value.x : value.alpha,
-                      y: value.beta === undefined ? value.y : value.beta,
-                      z: value.gamma === undefined ? value.z : value.gamma, interval: event.interval } : {}); };
-                  window.addEventListener('devicemotion', motion);
-                  dispose = function () { window.removeEventListener('devicemotion', motion); };
-                } else return Promise.reject(new Error(method + ' subscriptions are unavailable'));
-                subscriptions.set(id, dispose);
-                return Promise.resolve(Object.freeze({ id: id, unsubscribe: function () { return unsubscribe(id); } }));
-              }
-              function unsubscribe(id) { var dispose = subscriptions.get(id); if (dispose) dispose(); subscriptions.delete(id); return Promise.resolve({ id: id }); }
-              window.kcode = Object.freeze({ capabilities: Object.freeze({ list: list, invoke: invoke,
-                subscribe: subscribe, unsubscribe: unsubscribe }), version: '1.0.0' });
-              window.dispatchEvent(new CustomEvent('kcode-ready'));
-            })();
-        """.trimIndent()
     }
 }

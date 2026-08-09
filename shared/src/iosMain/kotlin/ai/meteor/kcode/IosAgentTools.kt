@@ -52,29 +52,52 @@ internal fun createIosKoogChatService(
     workspaceRoot: String,
     permissionState: IosToolPermissionState,
     presentingViewController: () -> UIViewController?,
-): KoogChatService {
+): KoogChatService = createIosKoogChatRuntime(
+    settingsStore,
+    workspaceRoot,
+    permissionState,
+    presentingViewController,
+).chatService
+
+internal fun createIosKoogChatRuntime(
+    settingsStore: AppSettingsStore,
+    workspaceRoot: String,
+    permissionState: IosToolPermissionState,
+    presentingViewController: () -> UIViewController?,
+): KcodeAgentRuntime {
     val workspace = IosAgentWorkspace(workspaceRoot)
-    return KoogChatService(
-        additionalTools = ToolRegistry {
-            tool(AgentReadFileTool(workspace))
-            tool(AgentListDirectoryTool(workspace))
-            tool(AgentWriteFileTool(workspace))
-            tool(AgentEditFileTool(workspace))
-            tool(H5PreviewTool(IosH5ContainerLauncher(workspaceRoot, presentingViewController)))
-            tool(WebSearchTool(configurationProvider = {
-                settingsStore.load().let {
-                    WebSearchConfiguration(
-                        provider = WebSearchProvider.fromCode(it.webSearchProvider),
-                        brightDataApiKey = it.webSearchApiKey,
-                        exaApiKey = it.exaSearchApiKey,
-                    )
-                }
-            }))
-        },
-        toolPermissionModeProvider = { permissionState.mode },
-        toolCallApprover = ToolCallApprover { request ->
-            confirmIosToolCall(presentingViewController, request)
-        },
+    val h5Controller = IosH5ContainerLauncher(workspaceRoot, presentingViewController)
+    return KcodeAgentRuntime(
+        chatService = KoogChatService(
+            additionalTools = ToolRegistry {
+                tool(AgentReadFileTool(workspace))
+                tool(AgentListDirectoryTool(workspace))
+                tool(AgentWriteFileTool(workspace))
+                tool(AgentEditFileTool(workspace))
+                tool(H5PreviewTool(h5Controller))
+                tool(H5ListContainersTool(h5Controller))
+                tool(H5SetContainerStateTool(h5Controller))
+                tool(H5ScreenshotTool(h5Controller))
+                tool(H5InspectContainerTool(h5Controller))
+                tool(H5InteractContainerTool(h5Controller))
+                tool(H5ConsoleTool(h5Controller))
+                tool(H5CloseContainerTool(h5Controller))
+                tool(WebSearchTool(configurationProvider = {
+                    settingsStore.load().let {
+                        WebSearchConfiguration(
+                            provider = WebSearchProvider.fromCode(it.webSearchProvider),
+                            brightDataApiKey = it.webSearchApiKey,
+                            exaApiKey = it.exaSearchApiKey,
+                        )
+                    }
+                }))
+            },
+            toolPermissionModeProvider = { permissionState.mode },
+            toolCallApprover = ToolCallApprover { request ->
+                confirmIosToolCall(presentingViewController, request)
+            },
+        ),
+        h5ContainerController = h5Controller,
     )
 }
 

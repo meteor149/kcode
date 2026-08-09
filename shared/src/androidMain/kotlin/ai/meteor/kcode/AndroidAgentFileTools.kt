@@ -38,28 +38,56 @@ fun createAndroidKoogChatService(
     permissionModeProvider: suspend () -> ToolPermissionMode,
     webSearchConfigurationProvider: suspend () -> WebSearchConfiguration,
     toolCallApprover: ToolCallApprover,
-): KoogChatService {
+): KoogChatService = createAndroidKoogChatRuntime(
+    activity,
+    modeProvider,
+    permissionModeProvider,
+    webSearchConfigurationProvider,
+    toolCallApprover,
+).chatService
+
+fun createAndroidKoogChatRuntime(
+    activity: Activity,
+    modeProvider: suspend () -> ShellExecutionMode,
+    permissionModeProvider: suspend () -> ToolPermissionMode,
+    webSearchConfigurationProvider: suspend () -> WebSearchConfiguration,
+    toolCallApprover: ToolCallApprover,
+): KcodeAgentRuntime {
     val fileSystem = AndroidAgentWorkspaceFileSystem(activity.applicationContext)
     val shellExecutor = AndroidShellExecutors(
         activity = activity,
         appWorkspace = fileSystem.workspaceRoot,
         modeProvider = modeProvider,
     )
+    val h5Controller = AndroidH5ContainerLauncher(activity.applicationContext)
     val fileTools = ToolRegistry {
         tool(ReadFileTool(fileSystem))
         tool(ListDirectoryTool(fileSystem))
         tool(WriteFileTool(fileSystem))
         tool(EditFileTool(fileSystem))
-        tool(H5PreviewTool(AndroidH5ContainerLauncher(activity.applicationContext)))
+        tool(H5PreviewTool(h5Controller))
+        tool(H5ListContainersTool(h5Controller))
+        tool(H5SetContainerStateTool(h5Controller))
+        tool(H5ScreenshotTool(h5Controller))
+        tool(H5InspectContainerTool(h5Controller))
+        tool(H5InteractContainerTool(h5Controller))
+        tool(H5ConsoleTool(h5Controller))
+        tool(H5CloseContainerTool(h5Controller))
         tool(WebSearchTool(webSearchConfigurationProvider))
         tool(ExecuteShellCommandTool(shellExecutor, BraveModeConfirmationHandler()))
     }
-    return KoogChatService(
-        additionalTools = fileTools,
-        toolPermissionModeProvider = permissionModeProvider,
-        toolCallApprover = toolCallApprover,
+    return KcodeAgentRuntime(
+        chatService = KoogChatService(
+            additionalTools = fileTools,
+            toolPermissionModeProvider = permissionModeProvider,
+            toolCallApprover = toolCallApprover,
+        ),
+        h5ContainerController = h5Controller,
     )
 }
+
+/** Keeps permission prompts visible while an agent-controlled H5 preview is in front. */
+fun activeAndroidH5ContainerActivity(): Activity? = AndroidH5ContainerLauncher.activeContainerActivity()
 
 /**
  * Maps the virtual absolute path `/workspace/...` onto app-private storage.

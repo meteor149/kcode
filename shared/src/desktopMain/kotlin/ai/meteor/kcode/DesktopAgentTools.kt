@@ -29,38 +29,52 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.swing.Swing
 import javax.swing.JOptionPane
 
-fun createDesktopKoogChatService(settingsStore: AppSettingsStore): KoogChatService {
+fun createDesktopKoogChatService(settingsStore: AppSettingsStore): KoogChatService =
+    createDesktopKoogChatRuntime(settingsStore).chatService
+
+fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRuntime {
     val workspace = Files.createDirectories(
         Path.of(System.getProperty("user.home"), ".kcode", "workspace"),
     ).toRealPath()
     val fileSystem = DesktopAgentWorkspaceFileSystem(workspace)
-    return KoogChatService(
-        additionalTools = ToolRegistry {
-            tool(ReadFileTool(fileSystem))
-            tool(ListDirectoryTool(fileSystem))
-            tool(WriteFileTool(fileSystem))
-            tool(EditFileTool(fileSystem))
-            tool(
-                ExecuteShellCommandTool(
-                    executor = DesktopShellCommandExecutor(workspace),
-                    confirmationHandler = BraveModeConfirmationHandler(),
-                ),
-            )
-            tool(H5PreviewTool(DesktopH5ContainerLauncher(workspace)))
-            tool(WebSearchTool(configurationProvider = {
-                settingsStore.load().let {
-                    WebSearchConfiguration(
-                        provider = WebSearchProvider.fromCode(it.webSearchProvider),
-                        brightDataApiKey = it.webSearchApiKey,
-                        exaApiKey = it.exaSearchApiKey,
-                    )
-                }
-            }))
-        },
-        toolPermissionModeProvider = {
-            ToolPermissionMode.fromCode(settingsStore.load().toolPermissionMode)
-        },
-        toolCallApprover = ToolCallApprover { request -> confirmDesktopToolCall(request) },
+    val h5Controller = DesktopH5ContainerLauncher(workspace)
+    return KcodeAgentRuntime(
+        chatService = KoogChatService(
+            additionalTools = ToolRegistry {
+                tool(ReadFileTool(fileSystem))
+                tool(ListDirectoryTool(fileSystem))
+                tool(WriteFileTool(fileSystem))
+                tool(EditFileTool(fileSystem))
+                tool(
+                    ExecuteShellCommandTool(
+                        executor = DesktopShellCommandExecutor(workspace),
+                        confirmationHandler = BraveModeConfirmationHandler(),
+                    ),
+                )
+                tool(H5PreviewTool(h5Controller))
+                tool(H5ListContainersTool(h5Controller))
+                tool(H5SetContainerStateTool(h5Controller))
+                tool(H5ScreenshotTool(h5Controller))
+                tool(H5InspectContainerTool(h5Controller))
+                tool(H5InteractContainerTool(h5Controller))
+                tool(H5ConsoleTool(h5Controller))
+                tool(H5CloseContainerTool(h5Controller))
+                tool(WebSearchTool(configurationProvider = {
+                    settingsStore.load().let {
+                        WebSearchConfiguration(
+                            provider = WebSearchProvider.fromCode(it.webSearchProvider),
+                            brightDataApiKey = it.webSearchApiKey,
+                            exaApiKey = it.exaSearchApiKey,
+                        )
+                    }
+                }))
+            },
+            toolPermissionModeProvider = {
+                ToolPermissionMode.fromCode(settingsStore.load().toolPermissionMode)
+            },
+            toolCallApprover = ToolCallApprover { request -> confirmDesktopToolCall(request) },
+        ),
+        h5ContainerController = h5Controller,
     )
 }
 

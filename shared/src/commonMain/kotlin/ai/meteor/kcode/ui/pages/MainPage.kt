@@ -8,6 +8,7 @@ import ai.meteor.kcode.chat.ChatService
 
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.h5.H5ContainerController
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
@@ -30,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import ai.meteor.kcode.ui.component.BoxWithResponsiveWidth
+import ai.meteor.kcode.ui.component.H5BackgroundContainersOverlay
 import ai.meteor.kcode.ui.pages.chat.ChatPane
 import ai.meteor.kcode.ui.state.rememberConversationSessionState
 import ai.meteor.kcode.ui.pages.setting.PersistenceFailure
@@ -38,10 +40,13 @@ import ai.meteor.kcode.ui.pages.setting.toModelConfiguration
 import ai.meteor.kcode.ui.pages.setting.withConfiguration
 import ai.meteor.kcode.ui.pages.sidebar.SidebarScaffold
 import kotlinx.coroutines.launch
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 
 @Composable
 internal fun KcodeMain(
     chatService: ChatService,
+    h5ContainerController: H5ContainerController?,
     settingsStore: AppSettingsStore,
     historyRepository: ConversationHistoryRepository,
     imageSaver: ConversationImageSaver,
@@ -94,63 +99,73 @@ internal fun KcodeMain(
     }
 
     CompositionLocalProvider(LocalAppLanguage provides AppLanguage.fromCode(appSettings.language)) {
+        val hazeState = rememberHazeState()
         Box(
             Modifier
                 .fillMaxSize()
                 .background(Paper)
                 .safeDrawingPadding(),
         ) {
-            BoxWithResponsiveWidth { width ->
-                val mainContent: @Composable (Modifier, Boolean) -> Unit =
-                    { contentModifier, isCompact ->
-                        val active = conversationSession.conversations
-                            .firstOrNull { it.id == conversationSession.activeId }
-                        ChatPane(
-                            modifier = contentModifier,
-                            compact = isCompact,
-                            conversation = active,
-                            service = chatService,
-                            configuration = configuration,
-                            onConfigurationChange = ::updateConfiguration,
-                            onMenu = { sidebarOpen = true },
-                            onSettings = { settingsOpen = true },
-                            onNewConversation = ::newConversation,
-                            onSendToNew = conversationSession::ensureConversation,
-                            historyRepository = historyRepository,
-                            imageSaver = imageSaver,
-                            toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                            toolPermissionMode = ToolPermissionMode.fromCode(appSettings.toolPermissionMode),
-                            onToolPermissionModeChange = {
-                                onToolPermissionModeChanged(it)
-                                updateSettings(appSettings.copy(toolPermissionMode = it.code))
-                            },
-                        )
-                    }
+            Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
+                BoxWithResponsiveWidth { width ->
+                    val mainContent: @Composable (Modifier, Boolean) -> Unit =
+                        { contentModifier, isCompact ->
+                            val active = conversationSession.conversations
+                                .firstOrNull { it.id == conversationSession.activeId }
+                            ChatPane(
+                                modifier = contentModifier,
+                                compact = isCompact,
+                                conversation = active,
+                                service = chatService,
+                                configuration = configuration,
+                                onConfigurationChange = ::updateConfiguration,
+                                onMenu = { sidebarOpen = true },
+                                onSettings = { settingsOpen = true },
+                                onNewConversation = ::newConversation,
+                                onSendToNew = conversationSession::ensureConversation,
+                                historyRepository = historyRepository,
+                                imageSaver = imageSaver,
+                                toolPermissionControlsAvailable = toolPermissionControlsAvailable,
+                                toolPermissionMode = ToolPermissionMode.fromCode(appSettings.toolPermissionMode),
+                                onToolPermissionModeChange = {
+                                    onToolPermissionModeChanged(it)
+                                    updateSettings(appSettings.copy(toolPermissionMode = it.code))
+                                },
+                            )
+                        }
 
-                SidebarScaffold(
-                    width = width,
-                    sidebarOpen = sidebarOpen,
-                    conversations = conversationSession.conversations,
-                    activeId = conversationSession.activeId,
-                    onSidebarOpenChange = { sidebarOpen = it },
-                    onNew = ::newConversation,
-                    onSelect = conversationSession::selectConversation,
-                    onPin = conversationSession::pinConversation,
-                    onDelete = conversationSession::deleteConversation,
-                    onSettings = { settingsOpen = true },
-                    content = mainContent,
-                )
+                    SidebarScaffold(
+                        width = width,
+                        sidebarOpen = sidebarOpen,
+                        conversations = conversationSession.conversations,
+                        activeId = conversationSession.activeId,
+                        onSidebarOpenChange = { sidebarOpen = it },
+                        onNew = ::newConversation,
+                        onSelect = conversationSession::selectConversation,
+                        onPin = conversationSession::pinConversation,
+                        onDelete = conversationSession::deleteConversation,
+                        onSettings = { settingsOpen = true },
+                        content = mainContent,
+                    )
+                }
+                if (settingsOpen) {
+                    SettingsPageOverlay(
+                        current = configuration,
+                        appSettings = appSettings,
+                        persistenceFailure = persistenceFailure,
+                        shellSettingsAvailable = shellSettingsAvailable,
+                        onSettingsChange = ::updateSettings,
+                        onConfigurationChange = ::updateConfiguration,
+                        onShellExecutionModeChanged = onShellExecutionModeChanged,
+                        onDismiss = { settingsOpen = false },
+                    )
+                }
             }
-            if (settingsOpen) {
-                SettingsPageOverlay(
-                    current = configuration,
-                    appSettings = appSettings,
-                    persistenceFailure = persistenceFailure,
-                    shellSettingsAvailable = shellSettingsAvailable,
-                    onSettingsChange = ::updateSettings,
-                    onConfigurationChange = ::updateConfiguration,
-                    onShellExecutionModeChanged = onShellExecutionModeChanged,
-                    onDismiss = { settingsOpen = false },
+            h5ContainerController?.let { controller ->
+                H5BackgroundContainersOverlay(
+                    controller = controller,
+                    hazeState = hazeState,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }

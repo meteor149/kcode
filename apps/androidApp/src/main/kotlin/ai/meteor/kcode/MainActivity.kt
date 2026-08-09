@@ -1,26 +1,27 @@
-package ai.meteor.kcode.android
+package ai.meteor.kcode
 
-import android.os.Bundle
 import android.app.AlertDialog
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import ai.meteor.kcode.KcodeApp
-import ai.meteor.kcode.shared.R
-import ai.meteor.kcode.createAndroidKoogChatService
-import ai.meteor.kcode.settings.createAndroidAppSettingsStore
-import ai.meteor.kcode.history.createAndroidConversationHistoryRepository
+import ai.meteor.kcode.activeAndroidH5ContainerActivity
+import ai.meteor.kcode.createAndroidKoogChatRuntime
 import ai.meteor.kcode.export.AndroidConversationImageSaver
+import ai.meteor.kcode.history.createAndroidConversationHistoryRepository
+import ai.meteor.kcode.settings.createAndroidAppSettingsStore
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
+import ai.meteor.kcode.shared.R
 import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
-import java.util.concurrent.atomic.AtomicReference
 import ai.meteor.kcode.tools.search.WebSearchConfiguration
 import ai.meteor.kcode.tools.search.WebSearchProvider
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,7 +31,7 @@ class MainActivity : ComponentActivity() {
         val imageSaver = AndroidConversationImageSaver(this)
         val shellExecutionMode = AtomicReference(ShellExecutionMode.App)
         val toolPermissionMode = AtomicReference(ToolPermissionMode.Ask)
-        val chatService = createAndroidKoogChatService(
+        val runtime = createAndroidKoogChatRuntime(
             activity = this,
             modeProvider = { shellExecutionMode.get() },
             permissionModeProvider = { toolPermissionMode.get() },
@@ -47,7 +48,8 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             KcodeApp(
-                chatService = chatService,
+                chatService = runtime.chatService,
+                h5ContainerController = runtime.h5ContainerController,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
                 imageSaver = imageSaver,
@@ -62,9 +64,10 @@ class MainActivity : ComponentActivity() {
     private suspend fun confirmToolCall(request: ToolApprovalRequest): Boolean =
         withContext(Dispatchers.Main.immediate) {
             if (isFinishing || isDestroyed) return@withContext false
+            val dialogActivity = activeAndroidH5ContainerActivity() ?: this@MainActivity
             suspendCancellableCoroutine { continuation ->
                 var dialog: AlertDialog? = null
-                dialog = AlertDialog.Builder(this@MainActivity)
+                dialog = AlertDialog.Builder(dialogActivity)
                     .setTitle(getString(R.string.tool_confirmation_title, request.name))
                     .setMessage(
                         getString(

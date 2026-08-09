@@ -11,14 +11,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.media.MediaRecorder
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Bundle
@@ -26,7 +21,10 @@ import android.os.CancellationSignal
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import android.provider.MediaStore
-import android.provider.Settings
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -34,7 +32,6 @@ import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.File
-import java.io.IOException
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -48,11 +45,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -69,9 +63,6 @@ internal class AndroidH5CapabilityBridge(
     private var permissionRequest: PendingPermission? = null
     private var activityRequest: PendingActivity? = null
     private var nextRequestCode = 41_000
-    private var recorder: MediaRecorder? = null
-    private var recordingFile: File? = null
-    private var torchCameraId: String? = null
 
     fun install() {
         check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
@@ -119,15 +110,76 @@ internal class AndroidH5CapabilityBridge(
         val pending = activityRequest ?: return false
         if (pending.requestCode != requestCode) return false
         activityRequest = null
-        pending.result.complete(if (resultCode == Activity.RESULT_OK) data ?: Intent() else null)
+        pending.result.complete(ActivityResult(resultCode, data))
+        return true
+    }
+
+    fun handleWebPermissionRequest(request: PermissionRequest) {
+        if (request.origin.toString().removeSuffix("/") != PREVIEW_ORIGIN) {
+            request.deny()
+            return
+        }
+        scope.launch {
+            val requested = request.resources.toSet()
+            val permissions = buildList {
+                if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in requested) add(Manifest.permission.CAMERA)
+                if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in requested) add(Manifest.permission.RECORD_AUDIO)
+            }
+            val supported = requested.filter {
+                it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
+            }
+            runCatching {
+                require(permissions.isNotEmpty() && supported.size == requested.size) { "Unsupported web permission" }
+                requirePermissions(*permissions.toTypedArray())
+                request.grant(supported.toTypedArray())
+            }.onFailure { request.deny() }
+        }
+    }
+
+    fun handleGeolocationPermission(origin: String, callback: GeolocationPermissions.Callback) {
+        if (origin.removeSuffix("/") != PREVIEW_ORIGIN) {
+            callback.invoke(origin, false, false)
+            return
+        }
+        scope.launch {
+            val granted = runCatching {
+                requirePermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            }.isSuccess
+            callback.invoke(origin, granted, false)
+        }
+    }
+
+    fun handleFileChooser(
+        callback: ValueCallback<Array<Uri>>,
+        params: WebChromeClient.FileChooserParams,
+    ): Boolean {
+        scope.launch {
+            val uris = runCatching {
+                val capturesImage = params.isCaptureEnabled && params.acceptTypes.all {
+                    it.isBlank() || it.startsWith("image/")
+                }
+                if (capturesImage) {
+                    requirePermissions(Manifest.permission.CAMERA)
+                    val file = newMediaFile("photo", "jpg")
+                    val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.h5.fileprovider", file)
+                    val result = launchRawForResult(Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                        putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                        addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                    if (result.resultCode == Activity.RESULT_OK) arrayOf(uri) else null
+                } else {
+                    val result = launchRawForResult(params.createIntent())
+                    WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+                }
+            }.getOrNull()
+            callback.onReceiveValue(uris)
+        }
         return true
     }
 
     fun close() {
         subscriptions.values.toList().forEach { runCatching(it) }
         subscriptions.clear()
-        stopRecordingSilently()
-        runCatching { setTorch(false) }
         permissionRequest?.result?.cancel()
         activityRequest?.result?.cancel()
         scope.cancel()
@@ -163,25 +215,14 @@ internal class AndroidH5CapabilityBridge(
     }
 
     private fun descriptors(): List<H5CapabilityDescriptor> = listOf(
-        descriptor("camera.capture", cameraAvailable(), sensitive = true),
-        descriptor("camera.pick", true, sensitive = true),
         descriptor("location.current", locationAvailable(), sensitive = true),
         descriptor("location.watch", locationAvailable(), subscription = true, sensitive = true),
-        sensorDescriptor("sensor.compass", Sensor.TYPE_ROTATION_VECTOR),
         sensorDescriptor("sensor.orientation", Sensor.TYPE_ROTATION_VECTOR),
         sensorDescriptor("sensor.accelerometer", Sensor.TYPE_ACCELEROMETER),
         sensorDescriptor("sensor.gyroscope", Sensor.TYPE_GYROSCOPE),
         sensorDescriptor("sensor.magneticField", Sensor.TYPE_MAGNETIC_FIELD),
-        sensorDescriptor("sensor.pressure", Sensor.TYPE_PRESSURE),
-        sensorDescriptor("sensor.light", Sensor.TYPE_LIGHT),
-        sensorDescriptor("sensor.proximity", Sensor.TYPE_PROXIMITY),
         descriptor("device.vibrate", activity.getSystemService(VibratorManager::class.java).defaultVibrator.hasVibrator(), sensitive = true),
-        descriptor("device.flashlight", flashlightAvailable(), sensitive = true),
         descriptor("device.battery", true),
-        descriptor("device.network", true),
-        descriptor("device.openSettings", true, sensitive = true),
-        descriptor("media.recordAudio", activity.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE), sensitive = true),
-        H5CapabilityDescriptor("media.scanQrCode", false, sensitive = true, platform = PLATFORM, reason = "QR decoding is not bundled"),
     )
 
     private fun descriptor(
@@ -202,15 +243,9 @@ internal class AndroidH5CapabilityBridge(
         requireAvailable(method, subscription = false)
         if (isSensitive(method)) requireSessionApproval(method)
         return when (method) {
-            "camera.capture" -> capturePhoto(params)
-            "camera.pick" -> pickPhoto()
             "location.current" -> currentLocation(params)
             "device.vibrate" -> vibrate(params)
-            "device.flashlight" -> flashlight(params)
             "device.battery" -> battery()
-            "device.network" -> network()
-            "device.openSettings" -> openSettings(params)
-            "media.recordAudio" -> recordAudio(params)
             else -> throw UnsupportedOperationException("$method is subscription-only or unsupported")
         }
     }
@@ -271,10 +306,10 @@ internal class AndroidH5CapabilityBridge(
         if (!result.await()) throw SecurityException("Required Android permission was denied")
     }
 
-    private suspend fun launchForResult(intent: Intent): Intent? {
+    private suspend fun launchRawForResult(intent: Intent): ActivityResult {
         check(activityRequest == null) { "Another native picker is active" }
         val requestCode = nextRequestCode++
-        val result = CompletableDeferred<Intent?>()
+        val result = CompletableDeferred<ActivityResult>()
         activityRequest = PendingActivity(requestCode, result)
         activity.startActivityForResult(intent, requestCode)
         return result.await()
@@ -329,13 +364,10 @@ internal class AndroidH5CapabilityBridge(
 
     private fun subscribeSensor(id: String, method: String, params: JsonObject): () -> Unit {
         val type = when (method) {
-            "sensor.compass", "sensor.orientation" -> Sensor.TYPE_ROTATION_VECTOR
+            "sensor.orientation" -> Sensor.TYPE_ROTATION_VECTOR
             "sensor.accelerometer" -> Sensor.TYPE_ACCELEROMETER
             "sensor.gyroscope" -> Sensor.TYPE_GYROSCOPE
             "sensor.magneticField" -> Sensor.TYPE_MAGNETIC_FIELD
-            "sensor.pressure" -> Sensor.TYPE_PRESSURE
-            "sensor.light" -> Sensor.TYPE_LIGHT
-            "sensor.proximity" -> Sensor.TYPE_PROXIMITY
             else -> throw UnsupportedOperationException("Unknown sensor: $method")
         }
         val sensor = requireNotNull(sensorManager.getDefaultSensor(type)) { "$method is unavailable" }
@@ -344,7 +376,7 @@ internal class AndroidH5CapabilityBridge(
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
             override fun onSensorChanged(event: SensorEvent) {
                 val result = if (type == Sensor.TYPE_ROTATION_VECTOR) rotationJson(method, event.values)
-                else vectorJson(method, event.values, event.timestamp)
+                else vectorJson(event.values, event.timestamp)
                 sendEvent(id, result)
             }
         }
@@ -361,57 +393,17 @@ internal class AndroidH5CapabilityBridge(
         val heading = (degrees(orientation[0]) + 360.0) % 360.0
         return buildJsonObject {
             put("timestamp", System.currentTimeMillis())
-            if (method == "sensor.compass") put("heading", heading)
-            else {
-                put("alpha", heading)
-                put("beta", degrees(orientation[1]))
-                put("gamma", degrees(orientation[2]))
-            }
+            put("alpha", heading)
+            put("beta", degrees(orientation[1]))
+            put("gamma", degrees(orientation[2]))
         }
     }
 
-    private fun vectorJson(method: String, values: FloatArray, timestamp: Long): JsonElement = buildJsonObject {
+    private fun vectorJson(values: FloatArray, timestamp: Long): JsonElement = buildJsonObject {
         put("timestamp", timestamp)
-        when (method) {
-            "sensor.pressure" -> put("pressure", values.firstOrNull()?.toDouble() ?: 0.0)
-            "sensor.light" -> put("lux", values.firstOrNull()?.toDouble() ?: 0.0)
-            "sensor.proximity" -> put("distance", values.firstOrNull()?.toDouble() ?: 0.0)
-            else -> {
-                put("x", values.getOrElse(0) { 0f }.toDouble())
-                put("y", values.getOrElse(1) { 0f }.toDouble())
-                put("z", values.getOrElse(2) { 0f }.toDouble())
-            }
-        }
-    }
-
-    private suspend fun capturePhoto(params: JsonObject): JsonElement {
-        requirePermissions(Manifest.permission.CAMERA)
-        val file = newMediaFile("photo", "jpg")
-        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.h5.fileprovider", file)
-        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            .putExtra(MediaStore.EXTRA_OUTPUT, uri)
-            .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        require(intent.resolveActivity(activity.packageManager) != null) { "No camera application is available" }
-        if (launchForResult(intent) == null || !file.isFile || file.length() == 0L) {
-            file.delete()
-            throw IllegalStateException("Photo capture was cancelled")
-        }
-        return mediaFileJson(file, "image/jpeg")
-    }
-
-    private suspend fun pickPhoto(): JsonElement {
-        val data = launchForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-        }) ?: throw IllegalStateException("Image selection was cancelled")
-        val uri = requireNotNull(data.data) { "The selected image has no URI" }
-        val type = activity.contentResolver.getType(uri) ?: "image/*"
-        val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(type) ?: "bin"
-        val file = newMediaFile("picked", extension)
-        activity.contentResolver.openInputStream(uri)?.use { input ->
-            file.outputStream().use { output -> input.copyToLimited(output, MAX_MEDIA_BYTES) }
-        } ?: throw IOException("Unable to read selected image")
-        return mediaFileJson(file, type)
+        put("x", values.getOrElse(0) { 0f }.toDouble())
+        put("y", values.getOrElse(1) { 0f }.toDouble())
+        put("z", values.getOrElse(2) { 0f }.toDouble())
     }
 
     private fun vibrate(params: JsonObject): JsonElement {
@@ -419,20 +411,6 @@ internal class AndroidH5CapabilityBridge(
         activity.getSystemService(VibratorManager::class.java).defaultVibrator
             .vibrate(VibrationEffect.createOneShot(duration.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
         return buildJsonObject { put("durationMs", duration) }
-    }
-
-    private fun flashlight(params: JsonObject): JsonElement {
-        val enabled = params["enabled"]?.jsonPrimitive?.booleanOrNull ?: true
-        setTorch(enabled)
-        return buildJsonObject { put("enabled", enabled) }
-    }
-
-    private fun setTorch(enabled: Boolean) {
-        val manager = activity.getSystemService(CameraManager::class.java)
-        val camera = torchCameraId ?: manager.cameraIdList.firstOrNull { id ->
-            manager.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-        }?.also { torchCameraId = it } ?: throw UnsupportedOperationException("No flashlight is available")
-        manager.setTorchMode(camera, enabled)
     }
 
     private fun battery(): JsonElement {
@@ -446,114 +424,13 @@ internal class AndroidH5CapabilityBridge(
         }
     }
 
-    private fun network(): JsonElement {
-        val manager = activity.getSystemService(ConnectivityManager::class.java)
-        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork)
-        return buildJsonObject {
-            put("connected", capabilities != null)
-            put("validated", capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true)
-            put("metered", manager.isActiveNetworkMetered)
-            put("transport", when {
-                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "wifi"
-                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "cellular"
-                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "ethernet"
-                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "vpn"
-                else -> "unknown"
-            })
-        }
-    }
-
-    private fun openSettings(params: JsonObject): JsonElement {
-        val target = params["target"]?.jsonPrimitive?.content ?: "app"
-        val intent = when (target) {
-            "location" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-            "wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
-            else -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}"))
-        }
-        activity.startActivity(intent)
-        return buildJsonObject { put("opened", target) }
-    }
-
-    private suspend fun recordAudio(params: JsonObject): JsonElement {
-        return when (params["action"]?.jsonPrimitive?.content ?: "start") {
-            "start" -> {
-                requirePermissions(Manifest.permission.RECORD_AUDIO)
-                check(recorder == null) { "Audio recording is already active" }
-                val file = newMediaFile("recording", "m4a")
-                val mediaRecorder = MediaRecorder(activity).apply {
-                    setAudioSource(MediaRecorder.AudioSource.MIC)
-                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    setAudioEncodingBitRate(128_000)
-                    setAudioSamplingRate(44_100)
-                    setOutputFile(file.absolutePath)
-                    prepare()
-                    start()
-                }
-                recorder = mediaRecorder
-                recordingFile = file
-                buildJsonObject { put("recording", true) }
-            }
-            "stop" -> {
-                val file = requireNotNull(recordingFile) { "No audio recording is active" }
-                val active = requireNotNull(recorder)
-                recorder = null
-                recordingFile = null
-                try { active.stop() } finally { active.release() }
-                mediaFileJson(file, "audio/mp4")
-            }
-            else -> error("media.recordAudio action must be start or stop")
-        }
-    }
-
-    private fun stopRecordingSilently() {
-        val active = recorder ?: return
-        recorder = null
-        runCatching { active.stop() }
-        active.release()
-        recordingFile = null
-    }
-
     private fun newMediaFile(prefix: String, extension: String): File {
         val directory = File(activity.filesDir, "agent_workspace/media").apply { mkdirs() }.canonicalFile
         return File(directory, "$prefix-${System.currentTimeMillis()}.$extension")
     }
 
-    private fun mediaFileJson(file: File, mimeType: String): JsonElement {
-        require(file.length() <= MAX_MEDIA_BYTES) { "Media file exceeds the ${MAX_MEDIA_BYTES / 1024 / 1024} MB limit" }
-        val relative = H5Workspace.relativePath(activity, file)
-        return buildJsonObject {
-            put("path", "/workspace/$relative")
-            put("url", H5Workspace.previewUrl(relative))
-            put("mimeType", mimeType)
-            put("size", file.length())
-        }
-    }
-
-    private fun java.io.InputStream.copyToLimited(output: java.io.OutputStream, limit: Long) {
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var total = 0L
-        while (true) {
-            val count = read(buffer)
-            if (count < 0) break
-            total += count
-            if (total > limit) throw IOException("Selected media exceeds the size limit")
-            output.write(buffer, 0, count)
-        }
-    }
-
-    private fun cameraAvailable(): Boolean =
-        activity.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-
     private fun locationAvailable(): Boolean =
         activity.packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION)
-
-    private fun flashlightAvailable(): Boolean = runCatching {
-        val manager = activity.getSystemService(CameraManager::class.java)
-        manager.cameraIdList.any {
-            manager.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-        }
-    }.getOrDefault(false)
 
     private fun sendEvent(subscriptionId: String, value: JsonElement) {
         send(bridgeEvent(subscriptionId, value))
@@ -566,12 +443,12 @@ internal class AndroidH5CapabilityBridge(
     }
 
     private data class PendingPermission(val requestCode: Int, val result: CompletableDeferred<Boolean>)
-    private data class PendingActivity(val requestCode: Int, val result: CompletableDeferred<Intent?>)
+    private data class ActivityResult(val resultCode: Int, val data: Intent?)
+    private data class PendingActivity(val requestCode: Int, val result: CompletableDeferred<ActivityResult>)
 
     private companion object {
-        const val BRIDGE_OBJECT = "kcodeNative"
+        const val BRIDGE_OBJECT = "__kcodeNativeBridge"
         const val PLATFORM = "android"
         const val PREVIEW_ORIGIN = "https://${H5Workspace.PREVIEW_DOMAIN}"
-        const val MAX_MEDIA_BYTES = 32L * 1024L * 1024L
     }
 }

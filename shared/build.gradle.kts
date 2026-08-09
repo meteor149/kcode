@@ -50,6 +50,8 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                api(project(":extensions:h5Container"))
+                implementation("dev.chrisbanes.haze:haze:1.6.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
                 implementation("ai.koog:agents-tools:1.1.1")
@@ -81,7 +83,6 @@ kotlin {
         val agentMain by creating {
             dependsOn(commonMain)
             dependencies {
-                implementation(project(":extensions:h5Container"))
                 implementation("ai.koog:koog-agents:1.1.1")
                 implementation("ai.koog:agents-ext:1.1.1-beta")
                 implementation("ai.koog:http-client-ktor:1.1.1")
@@ -186,7 +187,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            modules("jdk.httpserver")
+            modules("jdk.httpserver", "java.net.http")
             packageName = "kcode"
             packageVersion = "1.0.0"
             description = "A calm, cross-platform AI workspace powered by Koog."

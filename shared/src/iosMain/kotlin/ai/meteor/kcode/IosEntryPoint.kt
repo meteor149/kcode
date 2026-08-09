@@ -10,7 +10,7 @@ fun MainViewController(): UIViewController {
     val settingsStore = IosAppSettingsStore()
     val permissionState = IosToolPermissionState()
     var viewController: UIViewController? = null
-    val chatService = createIosKoogChatService(
+    val runtime = createIosKoogChatRuntime(
         settingsStore = settingsStore,
         workspaceRoot = createIosAgentWorkspaceRoot(),
         permissionState = permissionState,
@@ -18,7 +18,8 @@ fun MainViewController(): UIViewController {
     )
     return ComposeUIViewController {
         KcodeApp(
-            chatService = chatService,
+            chatService = runtime.chatService,
+            h5ContainerController = runtime.h5ContainerController,
             settingsStore = settingsStore,
             historyRepository = createIosConversationHistoryRepository(),
             toolPermissionControlsAvailable = true,

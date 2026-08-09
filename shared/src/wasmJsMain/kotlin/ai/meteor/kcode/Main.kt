@@ -9,10 +9,11 @@ import ai.meteor.kcode.history.createWebConversationHistoryRepository
 fun main() {
     val historyRepository = createWebConversationHistoryRepository()
     val permissionState = WebToolPermissionState()
-    val chatService = createWebKoogChatService(WebAppSettingsStore, permissionState)
+    val runtime = createWebKoogChatRuntime(WebAppSettingsStore, permissionState)
     ComposeViewport(viewportContainerId = "webApp") {
         KcodeApp(
-            chatService = chatService,
+            chatService = runtime.chatService,
+            h5ContainerController = runtime.h5ContainerController,
             settingsStore = WebAppSettingsStore,
             historyRepository = historyRepository,
             toolPermissionControlsAvailable = true,

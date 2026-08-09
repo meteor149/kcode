@@ -14,6 +14,7 @@ import ai.meteor.kcode.export.DesktopConversationImageSaver
 fun main() {
     val settingsStore = createDesktopAppSettingsStore()
     val historyRepository = createDesktopConversationHistoryRepository()
+    val runtime = createDesktopKoogChatRuntime(settingsStore)
     application {
         val state = rememberWindowState(
             size = DpSize(1180.dp, 780.dp),
@@ -25,7 +26,8 @@ fun main() {
             title = "kcode",
         ) {
             KcodeApp(
-                chatService = createDesktopKoogChatService(settingsStore),
+                chatService = runtime.chatService,
+                h5ContainerController = runtime.h5ContainerController,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
                 imageSaver = DesktopConversationImageSaver(),

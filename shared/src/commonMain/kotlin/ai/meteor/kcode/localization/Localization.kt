@@ -154,6 +154,12 @@ object UiText {
     val BrowserGatewayError = LocalizedText(Res.string.browser_gateway_error_en, Res.string.browser_gateway_error_zh)
     val IosGatewayStatus = LocalizedText(Res.string.ios_gateway_status_en, Res.string.ios_gateway_status_zh)
     val IosGatewayError = LocalizedText(Res.string.ios_gateway_error_en, Res.string.ios_gateway_error_zh)
+    val H5BackgroundContainers = LocalizedText(Res.string.h5_background_containers_en, Res.string.h5_background_containers_zh)
+    val H5BackgroundCount = LocalizedText(Res.string.h5_background_count_en, Res.string.h5_background_count_zh)
+    val H5ExpandBackground = LocalizedText(Res.string.h5_expand_background_en, Res.string.h5_expand_background_zh)
+    val H5CollapseBackground = LocalizedText(Res.string.h5_collapse_background_en, Res.string.h5_collapse_background_zh)
+    val H5RestoreContainer = LocalizedText(Res.string.h5_restore_container_en, Res.string.h5_restore_container_zh)
+    val H5CloseContainer = LocalizedText(Res.string.h5_close_container_en, Res.string.h5_close_container_zh)
 }
 
 @Composable
