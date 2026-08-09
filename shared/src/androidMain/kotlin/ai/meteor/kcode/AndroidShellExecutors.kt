@@ -26,7 +26,6 @@ import kotlin.coroutines.resumeWithException
 
 internal class AndroidShellExecutors(
     private val activity: Activity,
-    private val appWorkspace: Path,
     private val modeProvider: suspend () -> ShellExecutionMode,
 ) : ShellCommandExecutor {
     override suspend fun execute(
@@ -34,27 +33,31 @@ internal class AndroidShellExecutors(
         workingDirectory: String?,
         timeoutSeconds: Int,
     ): ShellCommandExecutor.ExecutionResult {
-        val request = normalizeShellCommandRequest(command, workingDirectory, timeoutSeconds)
+        val request = normalizeAndroidShellCommandRequest(command, workingDirectory, timeoutSeconds)
         val mode = modeProvider()
         return execute(mode, request)
     }
 
     private suspend fun execute(
         mode: ShellExecutionMode,
-        request: ShellCommandRequest,
+        request: AndroidShellCommandRequest,
     ): ShellCommandExecutor.ExecutionResult = when (mode) {
         ShellExecutionMode.App -> executeLocal(
             commandLine = listOf("/system/bin/sh", "-c", request.command),
-            workspace = resolveAppWorkingDirectory(request.relativeWorkingDirectory),
-            virtualWorkspace = virtualWorkspacePath(request.relativeWorkingDirectory),
+            workingDirectory = resolveAppWorkingDirectory(request.workingDirectory),
+            reportedWorkingDirectory = request.workingDirectory ?: activity.applicationContext.filesDir.absolutePath,
             timeoutSeconds = request.timeoutSeconds,
             requestedMode = mode,
             identityLine = "uid=${Process.myUid()}",
         )
         ShellExecutionMode.Root -> executeLocal(
-            commandLine = listOf("su", "-c", rootVerifiedCommand(request.command)),
-            workspace = resolveAppWorkingDirectory(request.relativeWorkingDirectory),
-            virtualWorkspace = virtualWorkspacePath(request.relativeWorkingDirectory),
+            commandLine = listOf(
+                "su",
+                "-c",
+                rootVerifiedCommand(request.command, request.workingDirectory ?: ROOT_DEFAULT_DIRECTORY),
+            ),
+            workingDirectory = activity.applicationContext.filesDir.toPath(),
+            reportedWorkingDirectory = request.workingDirectory ?: ROOT_DEFAULT_DIRECTORY,
             timeoutSeconds = request.timeoutSeconds,
             requestedMode = mode,
             identityLine = "requiredUid=0",
@@ -62,7 +65,7 @@ internal class AndroidShellExecutors(
         ShellExecutionMode.Adb -> executeWithShizuku(request)
     }
 
-    private suspend fun executeWithShizuku(request: ShellCommandRequest): ShellCommandExecutor.ExecutionResult {
+    private suspend fun executeWithShizuku(request: AndroidShellCommandRequest): ShellCommandExecutor.ExecutionResult {
         if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
             return failure("mode=adb\nerror=Shizuku is not running. Start Shizuku with adb, then try again.")
         }
@@ -78,7 +81,7 @@ internal class AndroidShellExecutors(
 
         val args = Shizuku.UserServiceArgs(
             ComponentName(activity.packageName, PrivilegedShellUserService::class.java.name),
-        ).daemon(false).processNameSuffix("adb_shell").version(2)
+        ).daemon(false).processNameSuffix("adb_shell").version(3)
 
         var connection: ServiceConnection? = null
         return try {
@@ -113,7 +116,7 @@ internal class AndroidShellExecutors(
                 val result = withContext(Dispatchers.IO) {
                     service.execute(
                         request.command,
-                        request.relativeWorkingDirectory,
+                        request.workingDirectory.orEmpty(),
                         request.timeoutSeconds,
                         MAX_OUTPUT_BYTES,
                     )
@@ -149,8 +152,8 @@ internal class AndroidShellExecutors(
 
     private suspend fun executeLocal(
         commandLine: List<String>,
-        workspace: Path,
-        virtualWorkspace: String,
+        workingDirectory: Path,
+        reportedWorkingDirectory: String,
         timeoutSeconds: Int,
         requestedMode: ShellExecutionMode,
         identityLine: String,
@@ -158,13 +161,13 @@ internal class AndroidShellExecutors(
         coroutineScope {
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(commandLine)
-                    .directory(workspace.toFile())
+                    .directory(workingDirectory.toFile())
                     .redirectErrorStream(true)
                     .apply {
                         environment().clear()
                         environment()["PATH"] = "/system/bin:/system/xbin:/vendor/bin"
-                        environment()["HOME"] = workspace.toString()
-                        environment()["TMPDIR"] = workspace.toString()
+                        environment()["HOME"] = workingDirectory.toString()
+                        environment()["TMPDIR"] = workingDirectory.toString()
                         environment()["LANG"] = "C.UTF-8"
                     }
                     .start()
@@ -199,7 +202,7 @@ internal class AndroidShellExecutors(
                     output = buildString {
                         append("mode=").append(requestedMode.code).append('\n')
                         append(identityLine).append('\n')
-                        append("cwd=").append(virtualWorkspace).append('\n')
+                        append("cwd=").append(reportedWorkingDirectory).append('\n')
                         append(text)
                         if (!completed) append("\nCommand timed out after $timeoutSeconds seconds")
                         if (truncated) append("\n[output truncated at $MAX_OUTPUT_BYTES bytes]")
@@ -223,13 +226,10 @@ internal class AndroidShellExecutors(
         )
     }
 
-    private fun resolveAppWorkingDirectory(relativePath: String): Path {
-        val root = appWorkspace.toRealPath()
-        val candidate = if (relativePath.isEmpty()) root else root.resolve(relativePath)
+    private fun resolveAppWorkingDirectory(requestedPath: String?): Path {
+        val candidate = requestedPath?.let(Path::of) ?: activity.applicationContext.filesDir.toPath()
         val directory = candidate.toRealPath()
-        require(directory.startsWith(root) && Files.isDirectory(directory)) {
-            "Working directory does not exist inside /workspace: ${virtualWorkspacePath(relativePath)}"
-        }
+        require(Files.isDirectory(directory)) { "Working directory does not exist: $directory" }
         return directory
     }
 
@@ -247,15 +247,58 @@ internal class AndroidShellExecutors(
     private fun failure(output: String): ShellCommandExecutor.ExecutionResult =
         ShellCommandExecutor.ExecutionResult(output, null)
 
-    private fun rootVerifiedCommand(command: String): String =
+    private fun rootVerifiedCommand(command: String, workingDirectory: String): String =
         "actual_uid=\$(id -u); " +
             "if [ \"\$actual_uid\" != \"0\" ]; then " +
             "echo \"kcode: su returned UID \$actual_uid, expected 0\" >&2; exit 126; fi; " +
+            "cd ${shellQuote(workingDirectory)} || exit 1; " +
             command
+
+    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
     private companion object {
         const val ADB_SHELL_UID = 2_000
         const val MAX_OUTPUT_BYTES = 65_536
+        const val ROOT_DEFAULT_DIRECTORY = "/"
         const val SHIZUKU_BIND_TIMEOUT_MILLIS = 10_000L
     }
 }
+
+internal data class AndroidShellCommandRequest(
+    val command: String,
+    val workingDirectory: String?,
+    val timeoutSeconds: Int,
+)
+
+internal fun normalizeAndroidShellCommandRequest(
+    command: String,
+    workingDirectory: String?,
+    timeoutSeconds: Int,
+): AndroidShellCommandRequest {
+    val normalizedCommand = command.trim()
+    require(normalizedCommand.isNotEmpty()) { "Command must not be empty" }
+    require(normalizedCommand.length <= MAX_ANDROID_SHELL_COMMAND_CHARS) { "Command is too long" }
+
+    return AndroidShellCommandRequest(
+        command = normalizedCommand,
+        workingDirectory = workingDirectory?.let(::normalizeAndroidAbsolutePath),
+        timeoutSeconds = timeoutSeconds.coerceIn(1, MAX_ANDROID_SHELL_TIMEOUT_SECONDS),
+    )
+}
+
+private fun normalizeAndroidAbsolutePath(path: String): String {
+    require(path.startsWith('/')) { "Working directory must be an absolute Android path" }
+    require('\\' !in path && '\u0000' !in path) { "Invalid Android working directory" }
+    val components = mutableListOf<String>()
+    path.split('/').forEach { component ->
+        when (component) {
+            "", "." -> Unit
+            ".." -> if (components.isNotEmpty()) components.removeAt(components.lastIndex)
+            else -> components += component
+        }
+    }
+    return if (components.isEmpty()) "/" else "/${components.joinToString("/")}"
+}
+
+private const val MAX_ANDROID_SHELL_COMMAND_CHARS = 8_192
+private const val MAX_ANDROID_SHELL_TIMEOUT_SECONDS = 20

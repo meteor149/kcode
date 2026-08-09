@@ -45,6 +45,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
                 tool(ListDirectoryTool(fileSystem))
                 tool(WriteFileTool(fileSystem))
                 tool(EditFileTool(fileSystem))
+                tool(ReadMediaFileTool(fileSystem))
                 tool(
                     ExecuteShellCommandTool(
                         executor = DesktopShellCommandExecutor(workspace),

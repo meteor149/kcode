@@ -5,6 +5,10 @@ import ai.koog.agents.core.agent.functionalStrategy
 import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.environment.ToolResultKind
 import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.prompt.llm.LLMCapability
+import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.llm.LLMProvider
+import ai.koog.prompt.message.AttachmentSource
 import ai.koog.prompt.message.MessagePart
 import ai.koog.prompt.streaming.StreamFrame
 import ai.koog.prompt.streaming.toMessageResponse
@@ -17,6 +21,7 @@ import ai.meteor.kcode.tools.permission.authorizeToolCall
 
 internal class StreamingToolStrategy(
     private val tools: ToolRegistry,
+    private val model: LLModel,
     private val permissionModeProvider: suspend () -> ToolPermissionMode,
     private val approver: ToolCallApprover,
     private val onToolUse: suspend (ToolUseEvent) -> Unit,
@@ -35,7 +40,15 @@ internal class StreamingToolStrategy(
             } else {
                 val results = checkNotNull(pendingToolResults)
                 appendPrompt {
-                    user { results.forEach { toolResult(it.toMessagePart()) } }
+                    user {
+                        results.forEach { result ->
+                            val (toolResultPart, mediaAttachments) = portableMediaResult(result)
+                            toolResult(toolResultPart)
+                            mediaAttachments.forEach { media ->
+                                attachment(media.source, media.cacheControl)
+                            }
+                        }
+                    }
                 }
                 llm.writeSession { requestLLMStreaming() }
             }
@@ -143,6 +156,50 @@ internal class StreamingToolStrategy(
         resultKind = ToolResultKind.Failure(null),
         result = null,
     )
+
+    private fun portableMediaResult(
+        result: ReceivedToolResult,
+    ): Pair<MessagePart.Tool.Result, List<MessagePart.Attachment>> {
+        val toolResult = result.toMessagePart()
+        val media = toolResult.parts.filterIsInstance<MessagePart.Attachment>().filter {
+            it.source is AttachmentSource.Image || it.source is AttachmentSource.Video
+        }
+        if (media.isEmpty()) return toolResult to emptyList()
+
+        val (supported, unsupported) = media.partition { attachment ->
+            when (attachment.source) {
+                is AttachmentSource.Image -> model.supports(LLMCapability.Vision.Image)
+                is AttachmentSource.Video ->
+                    model.provider in setOf(LLMProvider.Google, LLMProvider.Alibaba) &&
+                        model.supports(LLMCapability.Vision.Video)
+                else -> false
+            }
+        }
+        val textParts = toolResult.parts.filterNot { it in media }.toMutableList()
+        unsupported.forEach { attachment ->
+            val kind = if (attachment.source is AttachmentSource.Video) "video" else "image"
+            textParts += MessagePart.Text(
+                "The $kind attachment was not sent because model '${model.id}' through provider " +
+                    "'${model.provider}' does not support this media input path.",
+            )
+        }
+        val providerAttachments = supported.map { attachment ->
+            val video = attachment.source as? AttachmentSource.Video
+            if (model.provider == LLMProvider.Alibaba && video != null) {
+                attachment.copy(
+                    source = AttachmentSource.Image(
+                        content = video.content,
+                        format = video.format,
+                        mimeType = video.mimeType,
+                        fileName = video.fileName,
+                    ),
+                )
+            } else {
+                attachment
+            }
+        }
+        return toolResult.copy(parts = textParts) to providerAttachments
+    }
 }
 
 private fun String.limitToolText(maxLength: Int): String =

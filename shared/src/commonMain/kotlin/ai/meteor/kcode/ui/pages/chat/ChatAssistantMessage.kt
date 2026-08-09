@@ -213,6 +213,7 @@ private fun toolUseDisplayName(name: String): String = when (name.lowercase()) {
     "android_shell", "shell", "bash" -> "Shell"
     "read_file" -> "Read"
     "write_file" -> "Write"
+    "read_media_file" -> "Read media"
     "edit_file" -> "Edit"
     "list_directory" -> "List"
     else -> name.split('_', '-').joinToString(" ") { word ->

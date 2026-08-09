@@ -17,9 +17,13 @@ import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.model.ModelProvider
 import ai.meteor.kcode.model.modelsFor
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class AgentModelRuntimeTest {
     @Test
@@ -82,6 +86,28 @@ class AgentModelRuntimeTest {
             }
             assertEquals(region.baseUrl, capturedBaseUrl)
         }
+    }
+
+    @Test
+    fun qwen38MaxSupportsImageInput() {
+        val model = resolveAlibabaModel("qwen3.8-max")
+
+        assertEquals("qwen3.8-max", model.id)
+        assertTrue(model.supports(LLMCapability.Vision.Image))
+        assertTrue(model.supports(LLMCapability.Vision.Video))
+    }
+
+    @Test
+    fun dashscopeSerializesBase64VideoAsVideoUrlContent() {
+        val payload = rewriteDashscopeVideoContent(
+            """{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:video/mp4;base64,AAAA"}}]}]}""",
+        )
+        val content = Json.parseToJsonElement(payload)
+            .jsonObject["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray.single().jsonObject
+
+        assertEquals("video_url", content["type"]!!.jsonPrimitive.content)
+        assertEquals("data:video/mp4;base64,AAAA", content["video_url"]!!.jsonObject["url"]!!.jsonPrimitive.content)
+        assertTrue("image_url" !in content)
     }
 }
 

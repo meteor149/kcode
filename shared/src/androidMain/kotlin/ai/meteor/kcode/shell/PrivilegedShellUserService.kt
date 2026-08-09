@@ -20,13 +20,12 @@ class PrivilegedShellUserService() : IPrivilegedShellService.Stub() {
 
     override fun execute(
         command: String,
-        relativeWorkingDirectory: String,
+        workingDirectory: String,
         timeoutSeconds: Int,
         maxOutputBytes: Int,
     ): String {
         val actualUid = uid()
-        val workspace = File("/data/local/tmp/kcode-$actualUid").apply { mkdirs() }.canonicalFile
-        val workDir = resolveWorkingDirectory(workspace, relativeWorkingDirectory)
+        val workDir = resolveWorkingDirectory(workingDirectory)
         val process = ProcessBuilder("/system/bin/sh", "-c", command)
             .directory(workDir)
             .redirectErrorStream(true)
@@ -66,7 +65,7 @@ class PrivilegedShellUserService() : IPrivilegedShellService.Stub() {
             reader.join(500)
             buildString {
                 append("uid=").append(actualUid).append('\n')
-                append("cwd=").append(virtualWorkspacePath(relativeWorkingDirectory)).append('\n')
+                append("cwd=").append(workDir.absolutePath).append('\n')
                 append("exitCode=").append(if (completed) process.exitValue() else "timeout").append('\n')
                 synchronized(retained) { append(retained.toByteArray().decodeToString()) }
                 if (truncated) append("\n[output truncated at $maxOutputBytes bytes]")
@@ -86,16 +85,16 @@ class PrivilegedShellUserService() : IPrivilegedShellService.Stub() {
         System.exit(0)
     }
 
-    private fun resolveWorkingDirectory(workspace: File, relativePath: String): File {
-        require(relativePath.split('/').all { it.isNotEmpty() && it != "." && it != ".." } || relativePath.isEmpty()) {
-            "Invalid workspace path"
-        }
-        val directory = if (relativePath.isEmpty()) workspace else File(workspace, relativePath).canonicalFile
-        require(directory.toPath().startsWith(workspace.toPath())) { "Working directory escapes /workspace" }
-        require(directory.isDirectory) { "Working directory does not exist: ${virtualWorkspacePath(relativePath)}" }
+    private fun resolveWorkingDirectory(path: String): File {
+        val requestedPath = path.ifEmpty { DEFAULT_WORKING_DIRECTORY }
+        val requestedDirectory = File(requestedPath)
+        require(requestedDirectory.isAbsolute) { "Working directory must be absolute: $requestedPath" }
+        val directory = requestedDirectory.canonicalFile
+        require(directory.isDirectory) { "Working directory does not exist: ${directory.absolutePath}" }
         return directory
     }
 
-    private fun virtualWorkspacePath(relativePath: String): String =
-        if (relativePath.isEmpty()) "/workspace" else "/workspace/$relativePath"
+    private companion object {
+        const val DEFAULT_WORKING_DIRECTORY = "/data/local/tmp"
+    }
 }

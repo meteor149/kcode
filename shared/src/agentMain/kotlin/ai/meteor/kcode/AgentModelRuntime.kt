@@ -88,11 +88,7 @@ internal fun createAgentModelRuntime(
         ) to MistralAIModels.requireModel(configuration.modelId)
 
         ModelProvider.Alibaba -> {
-            val model = if (configuration.modelId == "qwen3.8-max") {
-                providerModel(LLMProvider.Alibaba, configuration.modelId)
-            } else {
-                DashscopeModels.requireModel(configuration.modelId)
-            }
+            val model = resolveAlibabaModel(configuration.modelId)
             KcodeDashscopeLLMClient(
                 apiKey = configuration.apiKey,
                 settings = DashscopeClientSettings(
@@ -139,6 +135,17 @@ private fun providerModel(provider: LLMProvider, modelId: String): LLModel = LLM
     id = modelId,
     capabilities = providerModelCapabilities,
 )
+
+internal fun resolveAlibabaModel(modelId: String): LLModel = if (modelId == "qwen3.8-max") {
+    providerModel(LLMProvider.Alibaba, modelId).copy(
+        capabilities = providerModelCapabilities + listOf(
+            LLMCapability.Vision.Image,
+            LLMCapability.Vision.Video,
+        ),
+    )
+} else {
+    DashscopeModels.requireModel(modelId)
+}
 
 private fun ai.koog.prompt.executor.clients.LLModelDefinitions.requireModel(modelId: String): LLModel =
     requireNotNull(models.firstOrNull { it.id == modelId }) {

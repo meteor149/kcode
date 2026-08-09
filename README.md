@@ -28,7 +28,7 @@ kcode is an open-source, cross-platform AI chat and agent application built with
 - **One UI everywhere** — shared adaptive Compose UI for Android, iOS, desktop, and Web.
 - **Agent-native conversations** — real-time streaming, Markdown rendering, tool-call progress, stop/regenerate, message selection, and rendered long-image export on supported platforms.
 - **Bring your own model** — OpenAI, Azure OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Amazon Bedrock, Mistral AI, Alibaba DashScope, Ollama, and Zhipu GLM.
-- **Useful built-in tools** — bounded `/workspace` file operations, Google/Exa/Bright Data web search, and Web containers for local apps or remote sites.
+- **Useful built-in tools** — file operations, Google/Exa/Bright Data web search, and Web containers for local apps or remote sites.
 - **Mobile capability bridge** — local Web apps can request camera, location, compass, motion sensors, vibration, battery, network, and other platform-reported capabilities.
 - **Explicit permission gate** — globally choose `Deny`, `Ask`, or `Bypass` for tool calls. Operating-system permissions still apply.
 - **Local-first persistence** — versioned settings and Room/SQLite conversation history with platform-native storage boundaries.
@@ -102,9 +102,9 @@ Credential handling differs by platform:
 
 ## Security model
 
-- Agent file tools are confined to a virtual `/workspace`; traversal and symbolic-link escapes are rejected and size limits are enforced.
+- Android agent file tools accept real absolute paths and remain subject to Android/Linux filesystem permissions. Other platforms confine agent file tools to their platform workspace.
 - Tool calls pass through the global permission gate. `Bypass` skips the kcode confirmation only—it does not bypass Android/iOS/browser permissions.
-- Android shell execution has explicit identity modes and bounded time/output. Shizuku and root are opt-in external privilege sources.
+- Android shell execution accepts real absolute working directories, has explicit identity modes, and bounds time/output. Shizuku and root are opt-in external privilege sources.
 - Web apps run in an isolated container, query capability availability at runtime, and request approval for sensitive access.
 - Never commit API keys, `local.properties`, device captures, or generated databases.
 

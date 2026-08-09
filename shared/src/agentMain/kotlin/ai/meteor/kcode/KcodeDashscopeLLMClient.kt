@@ -25,7 +25,13 @@ import ai.koog.prompt.streaming.buildStreamFrameFlow
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Koog 1.1.1-beta's DashScope client emits empty text deltas while a Qwen tool call is being
@@ -77,7 +83,8 @@ internal class KcodeDashscopeLLMClient(
             parallelToolCalls = dashscopeParams.parallelToolCalls,
             enableThinking = dashscopeParams.enableThinking,
         )
-        return json.encodeToString(KcodeDashscopeChatCompletionRequestSerializer, request)
+        val payload = json.encodeToString(KcodeDashscopeChatCompletionRequestSerializer, request)
+        return rewriteDashscopeVideoContent(payload)
     }
 
     override fun processProviderChatResponse(response: DashscopeChatCompletionResponse): LLMChoice {
@@ -174,3 +181,35 @@ private object KcodeDashscopeChatCompletionRequestSerializer :
     AdditionalPropertiesFlatteningSerializer<KcodeDashscopeChatCompletionRequest>(
         KcodeDashscopeChatCompletionRequest.serializer(),
     )
+
+/**
+ * Koog 1.1.1 has no OpenAI-compatible video content part. Alibaba accepts the same Base64 data URL
+ * using its `video_url` extension, so video attachments are carried through Koog's image content
+ * part and corrected at the final provider serialization boundary.
+ */
+internal fun rewriteDashscopeVideoContent(payload: String): String {
+    val element = Json.parseToJsonElement(payload).rewriteVideoContent()
+    return Json.encodeToString(JsonElement.serializer(), element)
+}
+
+private fun JsonElement.rewriteVideoContent(): JsonElement = when (this) {
+    is JsonArray -> JsonArray(map(JsonElement::rewriteVideoContent))
+    is JsonObject -> {
+        val imageUrl = this["image_url"] as? JsonObject
+        val url = imageUrl?.get("url")?.jsonPrimitive?.contentOrNull
+        if (this["type"]?.jsonPrimitive?.contentOrNull == "image_url" && url?.startsWith("data:video/") == true) {
+            JsonObject(
+                mapValues { (key, value) ->
+                    when (key) {
+                        "type" -> JsonPrimitive("video_url")
+                        "image_url" -> value.rewriteVideoContent()
+                        else -> value.rewriteVideoContent()
+                    }
+                }.mapKeys { (key, _) -> if (key == "image_url") "video_url" else key },
+            )
+        } else {
+            JsonObject(mapValues { (_, value) -> value.rewriteVideoContent() })
+        }
+    }
+    else -> this
+}

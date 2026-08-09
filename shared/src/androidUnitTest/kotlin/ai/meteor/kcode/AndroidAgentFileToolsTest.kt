@@ -7,6 +7,9 @@ import ai.koog.agents.ext.tool.file.WriteFileTool
 import ai.koog.agents.ext.tool.shell.BraveModeConfirmationHandler
 import ai.koog.agents.ext.tool.shell.ExecuteShellCommandTool
 import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
+import ai.koog.prompt.message.AttachmentContent
+import ai.koog.prompt.message.AttachmentSource
+import ai.koog.prompt.message.MessagePart
 import ai.koog.rag.base.files.model.FileSystemEntry
 import ai.koog.serialization.kotlinx.KotlinxSerializer
 import ai.koog.serialization.kotlinx.toKoogJSONObject
@@ -28,7 +31,7 @@ class AndroidAgentFileToolsTest {
             ExecuteShellCommandTool.Args(
                 command = "ping -c 1 baidu.com",
                 timeoutSeconds = 4,
-                workingDirectory = "/workspace",
+                workingDirectory = "/sdcard/Download",
             ),
         )
 
@@ -37,64 +40,111 @@ class AndroidAgentFileToolsTest {
     }
 
     @Test
-    fun koogToolsReadWriteEditAndListInsideVirtualWorkspace() = runBlocking {
-        val physicalRoot = Files.createTempDirectory("kcode-agent-workspace")
-        val fileSystem = AndroidAgentWorkspaceFileSystem(physicalRoot)
+    fun koogToolsReadWriteEditAndListAtRealAbsolutePaths() = runBlocking {
+        val physicalRoot = Files.createTempDirectory("kcode-agent-files")
+        val fileSystem = AndroidAgentFileSystem
+        val notesDirectory = physicalRoot.resolve("notes")
+        val notesFile = notesDirectory.resolve("today.md")
 
         WriteFileTool(fileSystem).execute(
-            WriteFileTool.Args("/workspace/notes/today.md", "first line\nsecond line")
+            WriteFileTool.Args(notesFile.toString(), "first line\nsecond line")
         )
-        val read = ReadFileTool(fileSystem).execute(ReadFileTool.Args("/workspace/notes/today.md"))
+        val read = ReadFileTool(fileSystem).execute(ReadFileTool.Args(notesFile.toString()))
         val content = read.file.content as FileSystemEntry.File.Content.Text
         assertContains(content.text, "second line")
 
         EditFileTool(fileSystem).execute(
-            EditFileTool.Args("/workspace/notes/today.md", "second line", "updated line")
+            EditFileTool.Args(notesFile.toString(), "second line", "updated line")
         )
         assertEquals(
             "first line\nupdated line",
-            Files.readAllBytes(physicalRoot.resolve("notes/today.md")).decodeToString(),
+            Files.readAllBytes(notesFile).decodeToString(),
         )
 
-        val listing = ListDirectoryTool(fileSystem).execute(ListDirectoryTool.Args("/workspace", depth = 3))
+        val listing = ListDirectoryTool(fileSystem).execute(ListDirectoryTool.Args(physicalRoot.toString(), depth = 3))
         assertContains(listing.root.toString(), "today.md")
     }
 
     @Test
-    fun rejectsPathsOutsideWorkspaceAndOversizedWrites() = runBlocking {
-        val fileSystem = AndroidAgentWorkspaceFileSystem(Files.createTempDirectory("kcode-agent-workspace"))
+    fun mediaToolReturnsPngAsNativeImageAttachment() = runBlocking {
+        val physicalRoot = Files.createTempDirectory("kcode-agent-files")
+        val fileSystem = AndroidAgentFileSystem
+        val imageFile = physicalRoot.resolve("images/sample.png")
+        val bytes = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+            0x00, 0xff.toByte(), 0x80.toByte(), 0x01,
+        )
+        fileSystem.writeBytes(fileSystem.fromAbsolutePathString(imageFile.toString()), bytes)
+        val read = ReadMediaFileTool(fileSystem).execute(
+            ReadMediaFileTool.Args(imageFile.toString()),
+        )
+        val attachment = ReadMediaFileTool(fileSystem)
+            .encodeResultToParts(read, KotlinxSerializer())
+            .filterIsInstance<MessagePart.Attachment>()
+            .single()
+        val source = attachment.source as AttachmentSource.Image
+        val attachedBytes = (source.content as AttachmentContent.Binary.Bytes).data
 
-        assertFailsWith<IllegalArgumentException> {
-            fileSystem.fromAbsolutePathString("/workspace/../outside.txt")
-        }
-        assertFailsWith<IllegalArgumentException> {
-            fileSystem.fromAbsolutePathString("/sdcard/Download/private.txt")
-        }
-        assertFailsWith<IllegalArgumentException> {
-            fileSystem.writeBytes(
-                fileSystem.fromAbsolutePathString("/workspace/too-large.txt"),
-                ByteArray(1_048_577),
-            )
-        }
-        assertTrue(!fileSystem.exists(fileSystem.fromAbsolutePathString("/workspace/too-large.txt")))
+        assertTrue(bytes.contentEquals(Files.readAllBytes(imageFile)))
+        assertEquals(bytes.size.toLong(), read.size)
+        assertEquals(ReadMediaFileTool.MediaType.Image, read.mediaType)
+        assertEquals("image/png", source.mimeType)
+        assertTrue(bytes.contentEquals(attachedBytes))
     }
 
     @Test
-    fun shellArgumentsAreNormalizedToTheVirtualWorkspace() {
-        val request = normalizeShellCommandRequest(
+    fun mediaToolReturnsMp4AsNativeVideoAttachment() = runBlocking {
+        val fileSystem = AndroidAgentFileSystem
+        val videoFile = Files.createTempDirectory("kcode-agent-files").resolve("sample.mp4")
+        val bytes = byteArrayOf(
+            0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+            0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x00, 0x00,
+        )
+        fileSystem.writeBytes(fileSystem.fromAbsolutePathString(videoFile.toString()), bytes)
+        val tool = ReadMediaFileTool(fileSystem)
+
+        val result = tool.execute(ReadMediaFileTool.Args(videoFile.toString()))
+        val attachment = tool.encodeResultToParts(result, KotlinxSerializer())
+            .filterIsInstance<MessagePart.Attachment>()
+            .single()
+
+        assertEquals(ReadMediaFileTool.MediaType.Video, result.mediaType)
+        assertEquals("video/mp4", (attachment.source as AttachmentSource.Video).mimeType)
+    }
+
+    @Test
+    fun acceptsAnyRealAbsolutePathAllowedByTheOperatingSystem() = runBlocking {
+        val fileSystem = AndroidAgentFileSystem
+        val firstRoot = Files.createTempDirectory("kcode-agent-files-first")
+        val secondRoot = Files.createTempDirectory("kcode-agent-files-second")
+        val firstFile = firstRoot.resolve("first.txt")
+        val secondFile = secondRoot.resolve("nested/second.txt")
+
+        fileSystem.writeBytes(fileSystem.fromAbsolutePathString(firstFile.toString()), "first".encodeToByteArray())
+        fileSystem.writeBytes(fileSystem.fromAbsolutePathString(secondFile.toString()), "second".encodeToByteArray())
+
+        assertEquals("first", Files.readAllBytes(firstFile).decodeToString())
+        assertEquals("second", Files.readAllBytes(secondFile).decodeToString())
+        assertFailsWith<IllegalArgumentException> { fileSystem.fromAbsolutePathString("relative/file.txt") }
+        Unit
+    }
+
+    @Test
+    fun androidShellAcceptsAndNormalizesAbsoluteWorkingDirectories() {
+        val request = normalizeAndroidShellCommandRequest(
             command = "  echo delegated  ",
-            workingDirectory = "/workspace/project/src",
+            workingDirectory = "/sdcard/Download/../Documents",
             timeoutSeconds = 99,
         )
 
         assertEquals("echo delegated", request.command)
-        assertEquals("project/src", request.relativeWorkingDirectory)
+        assertEquals("/sdcard/Documents", request.workingDirectory)
         assertEquals(20, request.timeoutSeconds)
         assertFailsWith<IllegalArgumentException> {
-            normalizeShellCommandRequest("pwd", "/sdcard", 10)
+            normalizeAndroidShellCommandRequest("pwd", "relative/path", 10)
         }
         assertFailsWith<IllegalArgumentException> {
-            normalizeShellCommandRequest("pwd", "/workspace/../outside", 10)
+            normalizeAndroidShellCommandRequest("pwd", "C:\\Windows", 10)
         }
     }
 
@@ -114,9 +164,9 @@ class AndroidAgentFileToolsTest {
             confirmationHandler = BraveModeConfirmationHandler(),
         )
 
-        val result = tool.execute(ExecuteShellCommandTool.Args("echo delegated", 10, "/workspace"))
+        val result = tool.execute(ExecuteShellCommandTool.Args("echo delegated", 10, "/sdcard/Download"))
 
-        assertEquals("echo delegated in /workspace", result.output)
+        assertEquals("echo delegated in /sdcard/Download", result.output)
         assertEquals(7, result.exitCode)
     }
 
@@ -137,7 +187,7 @@ class AndroidAgentFileToolsTest {
             confirmationHandler = BraveModeConfirmationHandler(),
         )
         val rawArgs = Json.parseToJsonElement(
-            """{"command":"echo raw","timeoutSeconds":10,"workingDirectory":"/workspace"}""",
+            """{"command":"echo raw","timeoutSeconds":10,"workingDirectory":"/sdcard/Download"}""",
         ).jsonObject.toKoogJSONObject()
 
         val args = tool.decodeArgs(rawArgs, KotlinxSerializer())
