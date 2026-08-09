@@ -2,7 +2,7 @@
 
 This document is the sizing contract for shared Compose UI on Android, iOS,
 desktop, and web. New components should consume the tokens in
-`app.kcode.ui.KcodeDesignSystem` instead of introducing one-off values.
+`ai.meteor.kcode.ui.KcodeDesignSystem` instead of introducing one-off values.
 
 ## Principles
 

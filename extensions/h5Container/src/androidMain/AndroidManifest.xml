@@ -12,13 +12,13 @@
 
     <application>
         <activity
-            android:name="app.kcode.h5.H5ContainerActivity"
+            android:name="ai.meteor.kcode.h5.H5ContainerActivity"
             android:exported="false"
             android:launchMode="singleTop"
             android:screenOrientation="unspecified"
             android:theme="@style/Theme.Kcode.H5Container" />
         <provider
-            android:name="app.kcode.h5.H5FileProvider"
+            android:name="ai.meteor.kcode.h5.H5FileProvider"
             android:authorities="${applicationId}.h5.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">

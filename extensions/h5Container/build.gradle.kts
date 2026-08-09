@@ -48,7 +48,7 @@ kotlin {
 }
 
 android {
-    namespace = "app.kcode.h5"
+    namespace = "ai.meteor.kcode.h5"
     compileSdk = 35
 
     defaultConfig {

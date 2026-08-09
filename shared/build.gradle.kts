@@ -148,7 +148,7 @@ room3 {
 }
 
 android {
-    namespace = "app.kcode.shared"
+    namespace = "ai.meteor.kcode.shared"
     compileSdk = 35
 
     defaultConfig {
@@ -167,7 +167,7 @@ android {
 
 compose.desktop {
     application {
-        mainClass = "app.kcode.MainKt"
+        mainClass = "ai.meteor.kcode.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)

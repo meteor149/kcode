@@ -1,6 +1,6 @@
 name: iosApp
 options:
-  bundleIdPrefix: app.kcode
+  bundleIdPrefix: ai.meteor.kcode
   deploymentTarget:
     iOS: "14.0"
 settings:
@@ -16,7 +16,7 @@ targets:
       - path: iosApp
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.kcode.ios
+        PRODUCT_BUNDLE_IDENTIFIER: ai.meteor.kcode.ios
         PRODUCT_NAME: kcode
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES

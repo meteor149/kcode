@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "app.kcode.android"
+    namespace = "ai.meteor.kcode.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.kcode.android"
+        applicationId = "ai.meteor.kcode.android"
         minSdk = 35
         targetSdk = 35
         versionCode = 1
