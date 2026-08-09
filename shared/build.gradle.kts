@@ -57,14 +57,14 @@ kotlin {
         binaries.sharedLib {
             baseName = "kn"
             export("org.jetbrains.compose.export:export:1.9.2-0.4.0")
-            linkerOpts("-lz")
+            linkerOpts("-lz", "-lrcp_c")
         }
     }
     ohosX64 {
         binaries.sharedLib {
             baseName = "kn"
             export("org.jetbrains.compose.export:export:1.9.2-0.4.0")
-            linkerOpts("-lz")
+            linkerOpts("-lz", "-lrcp_c")
         }
     }
     listOf(

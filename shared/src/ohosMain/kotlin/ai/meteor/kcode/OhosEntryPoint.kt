@@ -1,10 +1,5 @@
 package ai.meteor.kcode
 
-import ai.meteor.kcode.chat.ChatAvailability
-import ai.meteor.kcode.chat.ChatService
-import ai.meteor.kcode.chat.ChatServiceUnavailable
-import ai.meteor.kcode.model.ChatMessage
-import ai.meteor.kcode.model.ModelConfiguration
 import androidx.compose.ui.window.ComposeArkUIViewController
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.initMainHandler
@@ -17,16 +12,10 @@ import kotlin.experimental.ExperimentalNativeApi
 fun MainArkUIViewController(env: napi_env): napi_value {
     initMainHandler(env)
     return ComposeArkUIViewController(env) {
-        KcodeApp(chatService = OhosBootstrapChatService)
+        KcodeApp(
+            chatService = OhosChatService,
+            settingsStore = OhosAppSettingsStore,
+            historyRepository = OhosConversationHistoryRepository,
+        )
     }
-}
-
-private object OhosBootstrapChatService : ChatService {
-    override val availability = ChatAvailability.BrowserGateway
-
-    override suspend fun reply(
-        configuration: ModelConfiguration,
-        history: List<ChatMessage>,
-        prompt: String,
-    ): String = throw ChatServiceUnavailable(availability)
 }

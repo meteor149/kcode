@@ -43,6 +43,7 @@
     <string name="protection_ios_zh">设置统一使用加密 MMKV 存储；密钥由 iOS Keychain 保护。</string>
     <string name="protection_desktop_zh">设置保存在当前用户的应用数据目录；桌面系统密钥环适配将在后续接入。</string>
     <string name="protection_web_zh">设置保存在浏览器本地存储；请优先使用服务端模型网关。</string>
+    <string name="protection_harmony_zh">保存在 HarmonyOS 应用私有沙箱中。</string>
     <string name="protection_transient_zh">当前平台使用临时设置。</string>
     <string name="provider_zh">供应商</string>
     <string name="api_key_zh">API Key</string>

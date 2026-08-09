@@ -44,6 +44,7 @@ enum class SettingsProtection {
     DesktopAppData,
     BrowserLocalStorage,
     IosKeychain,
+    HarmonySandbox,
     Transient,
 }
 

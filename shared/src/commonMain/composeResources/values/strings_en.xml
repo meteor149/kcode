@@ -43,6 +43,7 @@
     <string name="protection_ios_en">Settings use encrypted MMKV storage; its key is protected by iOS Keychain.</string>
     <string name="protection_desktop_en">Settings are stored in your app data folder; desktop keychain support is planned.</string>
     <string name="protection_web_en">Settings use browser storage. Prefer a server-side model gateway.</string>
+    <string name="protection_harmony_en">Stored in the private HarmonyOS app sandbox.</string>
     <string name="protection_transient_en">This platform currently uses temporary settings.</string>
     <string name="provider_en">Provider</string>
     <string name="api_key_en">API Key</string>

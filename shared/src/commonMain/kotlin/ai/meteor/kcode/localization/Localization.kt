@@ -257,6 +257,7 @@ fun protectionDescription(protection: SettingsProtection): String = text(
         SettingsProtection.IosKeychain -> LocalizedText(Res.string.protection_ios_en, Res.string.protection_ios_zh)
         SettingsProtection.DesktopAppData -> LocalizedText(Res.string.protection_desktop_en, Res.string.protection_desktop_zh)
         SettingsProtection.BrowserLocalStorage -> LocalizedText(Res.string.protection_web_en, Res.string.protection_web_zh)
+        SettingsProtection.HarmonySandbox -> LocalizedText(Res.string.protection_harmony_en, Res.string.protection_harmony_zh)
         SettingsProtection.Transient -> LocalizedText(Res.string.protection_transient_en, Res.string.protection_transient_zh)
     },
 )
