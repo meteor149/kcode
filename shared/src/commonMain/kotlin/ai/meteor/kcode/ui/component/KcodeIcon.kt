@@ -19,7 +19,7 @@ import kcode.shared.generated.resources.icon_delete
 import kcode.shared.generated.resources.icon_device
 import kcode.shared.generated.resources.icon_exa
 import kcode.shared.generated.resources.icon_google
-import kcode.shared.generated.resources.icon_h5_container
+import kcode.shared.generated.resources.icon_web_container
 import kcode.shared.generated.resources.icon_info
 import kcode.shared.generated.resources.icon_language
 import kcode.shared.generated.resources.icon_menu
@@ -55,7 +55,7 @@ enum class KcodeIconAsset(internal val resource: DrawableResource) {
     Device(Res.drawable.icon_device),
     Exa(Res.drawable.icon_exa),
     Google(Res.drawable.icon_google),
-    H5Container(Res.drawable.icon_h5_container),
+    WebContainer(Res.drawable.icon_web_container),
     Info(Res.drawable.icon_info),
     Language(Res.drawable.icon_language),
     Menu(Res.drawable.icon_menu),

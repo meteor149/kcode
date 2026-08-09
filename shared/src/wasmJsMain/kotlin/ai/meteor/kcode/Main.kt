@@ -13,7 +13,7 @@ fun main() {
     ComposeViewport(viewportContainerId = "webApp") {
         KcodeApp(
             chatService = runtime.chatService,
-            h5ContainerController = runtime.h5ContainerController,
+            webContainerController = runtime.webContainerController,
             settingsStore = WebAppSettingsStore,
             historyRepository = historyRepository,
             toolPermissionControlsAvailable = true,

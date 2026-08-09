@@ -24,11 +24,11 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: iosApp/Info.plist
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Allow H5 apps to access your location when you approve it."
-        INFOPLIST_KEY_NSCameraUsageDescription: "Allow H5 apps to use the camera when you approve it."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Allow H5 apps to record audio when you approve it."
-        INFOPLIST_KEY_NSMotionUsageDescription: "Allow H5 apps to read motion sensors when you approve it."
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Allow H5 apps to select photos when you approve it."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Allow Web apps to access your location when you approve it."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Allow Web apps to use the camera when you approve it."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Allow Web apps to record audio when you approve it."
+        INFOPLIST_KEY_NSMotionUsageDescription: "Allow Web apps to read motion sensors when you approve it."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Allow Web apps to select photos when you approve it."
     preBuildScripts:
       - name: Build shared Compose framework
         script: |

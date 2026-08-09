@@ -20,4 +20,4 @@ rootProject.name = "kcode"
 include(":shared")
 include(":apps:androidApp")
 include(":apps:web:sqliteWasmWorker")
-include(":extensions:h5Container")
+include(":extensions:webContainer")

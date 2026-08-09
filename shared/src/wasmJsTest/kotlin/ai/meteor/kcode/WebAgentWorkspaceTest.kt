@@ -9,8 +9,8 @@ import kotlinx.browser.document
 import org.w3c.dom.HTMLButtonElement
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.delay
-import ai.meteor.kcode.h5.H5PreviewRequest
-import ai.meteor.kcode.h5.H5ContainerState
+import ai.meteor.kcode.webcontainer.WebPreviewRequest
+import ai.meteor.kcode.webcontainer.WebContainerState
 import ai.meteor.kcode.settings.WebAppSettingsStore
 
 class WebAgentWorkspaceTest {
@@ -38,31 +38,31 @@ class WebAgentWorkspaceTest {
     }
 
     @Test
-    fun managesAndCapturesSandboxedH5Preview() = runTest {
+    fun managesAndCapturesSandboxedWebPreview() = runTest {
         val workspace = WebAgentWorkspace()
-        val path = "/workspace/h5-${kotlin.random.Random.nextInt()}/index.html"
+        val path = "/workspace/web-${kotlin.random.Random.nextInt()}/index.html"
         val key = "kcode.workspace.file.${path.removePrefix("/workspace/")}"
-        val controller = WebH5ContainerLauncher(workspace)
+        val controller = BrowserWebContainerLauncher(workspace)
         try {
             workspace.writeText(
                 path,
                 "<!doctype html><html><body><p id='value'>before</p><button onclick=\"console.log('web-clicked')\">Run</button><script>document.querySelector('#value').textContent='after'</script></body></html>",
             )
-            val preview = controller.launch(H5PreviewRequest(path, "Web preview"))
+            val preview = controller.launch(WebPreviewRequest(path, "Web container"))
             delay(100)
 
             assertEquals(preview.containerId, controller.list().single().id)
-            val backgroundButton = document.getElementById("kcode-h5-preview")
+            val backgroundButton = document.getElementById("kcode-web-preview")
                 ?.querySelectorAll("button")
                 ?.item(0) as HTMLButtonElement
             backgroundButton.click()
             assertEquals(
-                H5ContainerState.Background,
+                WebContainerState.Background,
                 controller.list().single().state,
             )
             assertEquals(
-                H5ContainerState.Foreground,
-                controller.setState(preview.containerId, H5ContainerState.Foreground).state,
+                WebContainerState.Foreground,
+                controller.setState(preview.containerId, WebContainerState.Foreground).state,
             )
             val screenshot = controller.screenshot(preview.containerId)
             assertTrue(screenshot.pngBytes.size > 100)
@@ -71,9 +71,9 @@ class WebAgentWorkspaceTest {
             val inspection = controller.inspect(preview.containerId)
             val button = inspection.elements.single { it.name == "Run" }
             controller.interact(
-                ai.meteor.kcode.h5.H5InteractionRequest(
+                ai.meteor.kcode.webcontainer.WebInteractionRequest(
                     preview.containerId,
-                    ai.meteor.kcode.h5.H5InteractionAction.Click,
+                    ai.meteor.kcode.webcontainer.WebInteractionAction.Click,
                     handle = button.handle,
                 ),
             )

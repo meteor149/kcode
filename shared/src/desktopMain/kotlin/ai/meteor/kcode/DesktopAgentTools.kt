@@ -12,7 +12,7 @@ import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
 import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import ai.koog.rag.base.files.JVMFileSystemProvider
-import ai.meteor.kcode.h5.DesktopH5ContainerLauncher
+import ai.meteor.kcode.webcontainer.DesktopWebContainerLauncher
 import ai.meteor.kcode.tools.search.WebSearchTool
 import ai.meteor.kcode.tools.search.WebSearchConfiguration
 import ai.meteor.kcode.tools.search.WebSearchProvider
@@ -37,7 +37,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
         Path.of(System.getProperty("user.home"), ".kcode", "workspace"),
     ).toRealPath()
     val fileSystem = DesktopAgentWorkspaceFileSystem(workspace)
-    val h5Controller = DesktopH5ContainerLauncher(workspace)
+    val webContainerController = DesktopWebContainerLauncher(workspace)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
             additionalTools = ToolRegistry {
@@ -51,14 +51,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
                         confirmationHandler = BraveModeConfirmationHandler(),
                     ),
                 )
-                tool(H5PreviewTool(h5Controller))
-                tool(H5ListContainersTool(h5Controller))
-                tool(H5SetContainerStateTool(h5Controller))
-                tool(H5ScreenshotTool(h5Controller))
-                tool(H5InspectContainerTool(h5Controller))
-                tool(H5InteractContainerTool(h5Controller))
-                tool(H5ConsoleTool(h5Controller))
-                tool(H5CloseContainerTool(h5Controller))
+                webContainerTools(webContainerController)
                 tool(WebSearchTool(configurationProvider = {
                     settingsStore.load().let {
                         WebSearchConfiguration(
@@ -74,7 +67,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
             },
             toolCallApprover = ToolCallApprover { request -> confirmDesktopToolCall(request) },
         ),
-        h5ContainerController = h5Controller,
+        webContainerController = webContainerController,
     )
 }
 

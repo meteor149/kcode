@@ -21,15 +21,15 @@
 
 ## What is kcode?
 
-kcode is an open-source, cross-platform AI chat and agent application built with [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) and [Koog](https://docs.koog.ai/). It combines a focused chat experience with streaming Markdown, persistent history, visible tool execution, local workspaces, web search, and sandboxed H5 app previews—without maintaining a separate UI for every platform.
+kcode is an open-source, cross-platform AI chat and agent application built with [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) and [Koog](https://docs.koog.ai/). It combines a focused chat experience with streaming Markdown, persistent history, visible tool execution, local workspaces, web search, and sandboxed Web containers—without maintaining a separate UI for every platform.
 
 ## Highlights
 
 - **One UI everywhere** — shared adaptive Compose UI for Android, iOS, desktop, and Web.
 - **Agent-native conversations** — real-time streaming, Markdown rendering, tool-call progress, stop/regenerate, message selection, and rendered long-image export on supported platforms.
 - **Bring your own model** — OpenAI, Azure OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Amazon Bedrock, Mistral AI, Alibaba DashScope, Ollama, and Zhipu GLM.
-- **Useful built-in tools** — bounded `/workspace` file operations, Google/Exa/Bright Data web search, and local H5 preview.
-- **Mobile capability bridge** — local H5 apps can request camera, location, compass, motion sensors, vibration, battery, network, and other platform-reported capabilities.
+- **Useful built-in tools** — bounded `/workspace` file operations, Google/Exa/Bright Data web search, and Web containers for local apps or remote sites.
+- **Mobile capability bridge** — local Web apps can request camera, location, compass, motion sensors, vibration, battery, network, and other platform-reported capabilities.
 - **Explicit permission gate** — globally choose `Deny`, `Ask`, or `Bypass` for tool calls. Operating-system permissions still apply.
 - **Local-first persistence** — versioned settings and Room/SQLite conversation history with platform-native storage boundaries.
 
@@ -40,7 +40,7 @@ kcode is an open-source, cross-platform AI chat and agent application built with
 | Shared Compose UI and Koog agent | ✅ | ✅ | ✅ | ✅ |
 | Streaming Markdown and persistent history | ✅ | ✅ | ✅ | ✅ |
 | Sandboxed file workspace and web search | ✅ | ✅ | ✅ | ✅ |
-| Local H5 app preview | ✅ | ✅ | ✅ | ✅ |
+| Web container | ✅ | ✅ | ✅ | ✅ |
 | Rendered conversation image export | ✅ | — | ✅ | — |
 | Mobile hardware bridge | ✅ | ✅ | — | Browser APIs |
 | Shell tool | App UID / Shizuku / root | — | — | — |
@@ -105,7 +105,7 @@ Credential handling differs by platform:
 - Agent file tools are confined to a virtual `/workspace`; traversal and symbolic-link escapes are rejected and size limits are enforced.
 - Tool calls pass through the global permission gate. `Bypass` skips the kcode confirmation only—it does not bypass Android/iOS/browser permissions.
 - Android shell execution has explicit identity modes and bounded time/output. Shizuku and root are opt-in external privilege sources.
-- H5 apps run in an isolated container, query capability availability at runtime, and request approval for sensitive access.
+- Web apps run in an isolated container, query capability availability at runtime, and request approval for sensitive access.
 - Never commit API keys, `local.properties`, device captures, or generated databases.
 
 Please report security-sensitive issues privately to the maintainers instead of publishing exploit details in a public issue.
@@ -124,7 +124,7 @@ shared/             Unified Compose Multiplatform shared module
   src/*Main/        Android, iOS, desktop, and Web implementations
   schemas/          Room migration schemas
 extensions/
-  h5Container/      Isolated local H5 runtimes and capability bridges
+  webContainer/      Isolated Web container runtimes and capability bridges
 docs/               Design and engineering documentation
 ```
 

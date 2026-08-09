@@ -3,7 +3,7 @@
 package ai.meteor.kcode
 
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.meteor.kcode.h5.IosH5ContainerLauncher
+import ai.meteor.kcode.webcontainer.IosWebContainerLauncher
 import ai.meteor.kcode.tools.search.WebSearchConfiguration
 import ai.meteor.kcode.tools.search.WebSearchProvider
 import ai.meteor.kcode.tools.search.WebSearchTool
@@ -66,7 +66,7 @@ internal fun createIosKoogChatRuntime(
     presentingViewController: () -> UIViewController?,
 ): KcodeAgentRuntime {
     val workspace = IosAgentWorkspace(workspaceRoot)
-    val h5Controller = IosH5ContainerLauncher(workspaceRoot, presentingViewController)
+    val webContainerController = IosWebContainerLauncher(workspaceRoot, presentingViewController)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
             additionalTools = ToolRegistry {
@@ -74,14 +74,7 @@ internal fun createIosKoogChatRuntime(
                 tool(AgentListDirectoryTool(workspace))
                 tool(AgentWriteFileTool(workspace))
                 tool(AgentEditFileTool(workspace))
-                tool(H5PreviewTool(h5Controller))
-                tool(H5ListContainersTool(h5Controller))
-                tool(H5SetContainerStateTool(h5Controller))
-                tool(H5ScreenshotTool(h5Controller))
-                tool(H5InspectContainerTool(h5Controller))
-                tool(H5InteractContainerTool(h5Controller))
-                tool(H5ConsoleTool(h5Controller))
-                tool(H5CloseContainerTool(h5Controller))
+                webContainerTools(webContainerController)
                 tool(WebSearchTool(configurationProvider = {
                     settingsStore.load().let {
                         WebSearchConfiguration(
@@ -97,7 +90,7 @@ internal fun createIosKoogChatRuntime(
                 confirmIosToolCall(presentingViewController, request)
             },
         ),
-        h5ContainerController = h5Controller,
+        webContainerController = webContainerController,
     )
 }
 

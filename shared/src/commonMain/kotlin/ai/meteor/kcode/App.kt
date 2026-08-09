@@ -7,7 +7,7 @@ import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.UnsupportedConversationImageSaver
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.history.TransientConversationHistoryRepository
-import ai.meteor.kcode.h5.H5ContainerController
+import ai.meteor.kcode.webcontainer.WebContainerController
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
@@ -20,7 +20,7 @@ import androidx.compose.runtime.Composable
 @Composable
 fun KcodeApp(
     chatService: ChatService,
-    h5ContainerController: H5ContainerController? = null,
+    webContainerController: WebContainerController? = null,
     settingsStore: AppSettingsStore = TransientAppSettingsStore,
     historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
     imageSaver: ConversationImageSaver = UnsupportedConversationImageSaver,
@@ -32,7 +32,7 @@ fun KcodeApp(
     KcodeTheme {
         KcodeMain(
             chatService,
-            h5ContainerController,
+            webContainerController,
             settingsStore,
             historyRepository,
             imageSaver,

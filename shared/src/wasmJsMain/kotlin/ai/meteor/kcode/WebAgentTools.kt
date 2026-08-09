@@ -3,22 +3,23 @@
 package ai.meteor.kcode
 
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.meteor.kcode.h5.H5ContainerController
-import ai.meteor.kcode.h5.H5ContainerInfo
-import ai.meteor.kcode.h5.H5ContainerScreenshot
-import ai.meteor.kcode.h5.H5ContainerState
-import ai.meteor.kcode.h5.H5ConsoleEntry
-import ai.meteor.kcode.h5.H5ConsoleSnapshot
-import ai.meteor.kcode.h5.H5DebugScript
-import ai.meteor.kcode.h5.H5InteractionAction
-import ai.meteor.kcode.h5.H5InteractionRequest
-import ai.meteor.kcode.h5.H5InteractionResult
-import ai.meteor.kcode.h5.H5PageInspection
-import ai.meteor.kcode.h5.decodeH5Inspection
-import ai.meteor.kcode.h5.decodeH5InteractionTarget
-import ai.meteor.kcode.h5.H5PreviewRequest
-import ai.meteor.kcode.h5.H5PreviewResult
-import ai.meteor.kcode.h5.H5VirtualPath
+import ai.meteor.kcode.webcontainer.WebContainerController
+import ai.meteor.kcode.webcontainer.WebContainerInfo
+import ai.meteor.kcode.webcontainer.WebContainerScreenshot
+import ai.meteor.kcode.webcontainer.WebContainerState
+import ai.meteor.kcode.webcontainer.WebConsoleEntry
+import ai.meteor.kcode.webcontainer.WebConsoleSnapshot
+import ai.meteor.kcode.webcontainer.WebDebugScript
+import ai.meteor.kcode.webcontainer.WebInteractionAction
+import ai.meteor.kcode.webcontainer.WebInteractionRequest
+import ai.meteor.kcode.webcontainer.WebInteractionResult
+import ai.meteor.kcode.webcontainer.WebPageInspection
+import ai.meteor.kcode.webcontainer.decodeWebInspection
+import ai.meteor.kcode.webcontainer.decodeWebInteractionTarget
+import ai.meteor.kcode.webcontainer.WebPreviewRequest
+import ai.meteor.kcode.webcontainer.WebPreviewResult
+import ai.meteor.kcode.webcontainer.WebPreviewSource
+import ai.meteor.kcode.webcontainer.WebVirtualPath
 import ai.meteor.kcode.tools.search.WebSearchConfiguration
 import ai.meteor.kcode.tools.search.WebSearchProvider
 import ai.meteor.kcode.tools.search.WebSearchTool
@@ -67,7 +68,7 @@ internal fun createWebKoogChatRuntime(
     permissionState: WebToolPermissionState,
 ): KcodeAgentRuntime {
     val workspace = WebAgentWorkspace()
-    val h5Controller = WebH5ContainerLauncher(workspace)
+    val webContainerController = BrowserWebContainerLauncher(workspace)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
             additionalTools = ToolRegistry {
@@ -75,14 +76,7 @@ internal fun createWebKoogChatRuntime(
                 tool(AgentListDirectoryTool(workspace))
                 tool(AgentWriteFileTool(workspace))
                 tool(AgentEditFileTool(workspace))
-                tool(H5PreviewTool(h5Controller))
-                tool(H5ListContainersTool(h5Controller))
-                tool(H5SetContainerStateTool(h5Controller))
-                tool(H5ScreenshotTool(h5Controller))
-                tool(H5InspectContainerTool(h5Controller))
-                tool(H5InteractContainerTool(h5Controller))
-                tool(H5ConsoleTool(h5Controller))
-                tool(H5CloseContainerTool(h5Controller))
+                webContainerTools(webContainerController)
                 tool(WebSearchTool(configurationProvider = {
                     settingsStore.load().let {
                         WebSearchConfiguration(
@@ -104,7 +98,7 @@ internal fun createWebKoogChatRuntime(
                 )
             },
         ),
-        h5ContainerController = h5Controller,
+        webContainerController = webContainerController,
     )
 }
 
@@ -167,89 +161,122 @@ internal class WebAgentWorkspace : AgentWorkspace {
     }
 }
 
-internal class WebH5ContainerLauncher(
+internal class BrowserWebContainerLauncher(
     private val workspace: WebAgentWorkspace,
-) : H5ContainerController {
+) : WebContainerController {
     private data class Session(
-        var info: H5ContainerInfo,
+        var info: WebContainerInfo,
         val overlay: HTMLDivElement,
         val frame: HTMLIFrameElement,
-        val screenshotToken: String,
+        val screenshotToken: String?,
     )
 
     private var active: Session? = null
 
-    override suspend fun launch(request: H5PreviewRequest): H5PreviewResult {
-        H5VirtualPath.relativeEntry(request.entryPath)
-        val source = workspace.readTextOrNull(request.entryPath)
-            ?: error("H5 entry does not exist: ${request.entryPath}")
+    override suspend fun launch(request: WebPreviewRequest): WebPreviewResult {
         val containerId = "web-${Random.nextLong().toString(16)}"
-        val screenshotToken = "capture-${Random.nextLong().toString(16)}"
-        val html = installScreenshotResponder(inlineLocalAssets(source, request.entryPath), screenshotToken)
+        val source = request.source
+        val localHtml: String?
+        val remoteUrl: String?
+        val entrySize: Long
+        val screenshotToken: String?
+        when (source) {
+            is WebPreviewSource.WorkspaceFile -> {
+                val html = workspace.readTextOrNull(source.location)
+                    ?: error("Web entry does not exist: ${source.location}")
+                screenshotToken = "capture-${Random.nextLong().toString(16)}"
+                localHtml = installScreenshotResponder(inlineLocalAssets(html, source.location), screenshotToken)
+                remoteUrl = null
+                entrySize = html.encodeToByteArray().size.toLong()
+            }
+            is WebPreviewSource.RemoteWebsite -> {
+                screenshotToken = null
+                localHtml = null
+                remoteUrl = source.location
+                entrySize = 0L
+            }
+        }
         val preview = showPreview(
             title = request.title,
-            html = html,
+            html = localHtml,
+            url = remoteUrl,
             onBackground = {
                 active?.takeIf { it.info.id == containerId }?.let { session ->
                     session.overlay.style.visibility = "hidden"
                     session.overlay.style.setProperty("pointer-events", "none")
-                    session.info = session.info.copy(state = H5ContainerState.Background)
+                    session.info = session.info.copy(state = WebContainerState.Background)
                 }
             },
             onClose = { active = null },
         )
         active = Session(
-            H5ContainerInfo(
+            WebContainerInfo(
                 containerId,
                 request.entryPath,
                 request.title,
                 "web-sandboxed-iframe",
-                H5ContainerState.Foreground,
+                WebContainerState.Foreground,
             ),
             preview.first,
             preview.second,
             screenshotToken,
         )
-        return H5PreviewResult(
+        return WebPreviewResult(
             containerId = containerId,
             entryPath = request.entryPath,
-            entrySize = source.encodeToByteArray().size.toLong(),
+            entrySize = entrySize,
             presentation = "web-sandboxed-iframe",
         )
     }
 
-    override suspend fun list(): List<H5ContainerInfo> = active?.let { listOf(it.info) }.orEmpty()
+    override suspend fun list(): List<WebContainerInfo> = active?.let { listOf(it.info) }.orEmpty()
 
-    override suspend fun screenshot(containerId: String): H5ContainerScreenshot {
+    override suspend fun screenshot(containerId: String): WebContainerScreenshot {
         val session = active?.takeIf { it.info.id == containerId }
-            ?: error("H5 container is not running: $containerId")
+            ?: error("Web container is not running: $containerId")
+        require(session.screenshotToken != null) {
+            "Remote websites cannot be captured by the browser build because cross-origin iframe access is restricted"
+        }
         val width = session.frame.clientWidth.coerceAtLeast(1)
         val height = session.frame.clientHeight.coerceAtLeast(1)
         val serializedDocument = requestSerializedDocument(session)
         val bytes = renderDocumentToPng(serializedDocument, width, height)
-        return H5ContainerScreenshot(containerId, bytes, width, height)
+        return WebContainerScreenshot(containerId, bytes, width, height)
     }
 
-    override suspend fun inspect(containerId: String): H5PageInspection {
+    override suspend fun inspect(containerId: String): WebPageInspection {
         val session = requireSession(containerId)
-        return decodeH5Inspection(containerId, requestDebugScript(session, H5DebugScript.inspect))
+        require(session.screenshotToken != null) {
+            "Remote websites cannot be inspected by the browser build because cross-origin iframe access is restricted"
+        }
+        return decodeWebInspection(containerId, requestDebugScript(session, WebDebugScript.inspect))
     }
 
-    override suspend fun interact(request: H5InteractionRequest): H5InteractionResult {
+    override suspend fun interact(request: WebInteractionRequest): WebInteractionResult {
         val session = requireSession(request.containerId)
-        val target = decodeH5InteractionTarget(requestDebugScript(session, H5DebugScript.interact(request)))
-        return H5InteractionResult(request.containerId, request.action, target)
+        if (request.action == WebInteractionAction.Reload && session.screenshotToken == null) {
+            session.frame.src = session.frame.src
+            return WebInteractionResult(request.containerId, request.action, "page")
+        }
+        require(session.screenshotToken != null) {
+            "Remote websites cannot be controlled by the browser build because cross-origin iframe access is restricted"
+        }
+        val target = decodeWebInteractionTarget(requestDebugScript(session, WebDebugScript.interact(request)))
+        return WebInteractionResult(request.containerId, request.action, target)
     }
 
-    override suspend fun console(containerId: String, cursor: Long, limit: Int): H5ConsoleSnapshot {
+    override suspend fun console(containerId: String, cursor: Long, limit: Int): WebConsoleSnapshot {
         val session = requireSession(containerId)
+        require(session.screenshotToken != null) {
+            "Remote website console output is unavailable in the browser build because cross-origin iframe access is restricted"
+        }
         val encoded = requestDebugScript(
             session,
             "JSON.stringify((window.__kcodeDebugConsole||[]).filter(function(e){return e.sequence>${cursor.coerceAtLeast(0)}}).slice(0,${limit.coerceIn(1, 200)}))",
         )
         val entries = Json.parseToJsonElement(encoded).jsonArray.map { item ->
             val entry = item.jsonObject
-            H5ConsoleEntry(
+            WebConsoleEntry(
                 sequence = entry.getValue("sequence").jsonPrimitive.long,
                 level = entry.getValue("level").jsonPrimitive.content,
                 message = entry.getValue("message").jsonPrimitive.content,
@@ -257,27 +284,27 @@ internal class WebH5ContainerLauncher(
                 line = entry["line"]?.jsonPrimitive?.intOrNull,
             )
         }
-        return H5ConsoleSnapshot(containerId, entries, entries.lastOrNull()?.sequence ?: cursor)
+        return WebConsoleSnapshot(containerId, entries, entries.lastOrNull()?.sequence ?: cursor)
     }
 
-    override suspend fun setState(containerId: String, state: H5ContainerState): H5ContainerInfo {
+    override suspend fun setState(containerId: String, state: WebContainerState): WebContainerInfo {
         val session = active?.takeIf { it.info.id == containerId }
-            ?: error("H5 container is not running: $containerId")
-        session.overlay.style.visibility = if (state == H5ContainerState.Foreground) "visible" else "hidden"
-        session.overlay.style.setProperty("pointer-events", if (state == H5ContainerState.Foreground) "auto" else "none")
+            ?: error("Web container is not running: $containerId")
+        session.overlay.style.visibility = if (state == WebContainerState.Foreground) "visible" else "hidden"
+        session.overlay.style.setProperty("pointer-events", if (state == WebContainerState.Foreground) "auto" else "none")
         session.info = session.info.copy(state = state)
         return session.info
     }
 
     override suspend fun close(containerId: String) {
         val session = active?.takeIf { it.info.id == containerId }
-            ?: error("H5 container is not running: $containerId")
+            ?: error("Web container is not running: $containerId")
         session.overlay.remove()
         active = null
     }
 
     private fun requireSession(containerId: String): Session = active?.takeIf { it.info.id == containerId }
-        ?: error("H5 container is not running: $containerId")
+        ?: error("Web container is not running: $containerId")
 
     private fun inlineLocalAssets(html: String, entryPath: String): String {
         val baseDirectory = entryPath.substringBeforeLast('/', "/workspace")
@@ -339,7 +366,8 @@ internal class WebH5ContainerLauncher(
 
     private fun showPreview(
         title: String,
-        html: String,
+        html: String?,
+        url: String?,
         onBackground: () -> Unit,
         onClose: () -> Unit,
     ): Pair<HTMLDivElement, HTMLIFrameElement> {
@@ -357,7 +385,7 @@ internal class WebH5ContainerLauncher(
         overlay.style.flexDirection = "column"
 
         val bar = document.createElement("div") as HTMLDivElement
-        bar.textContent = title.take(80).ifBlank { "H5 Preview" }
+        bar.textContent = title.take(80).ifBlank { "Web Container" }
         bar.style.height = "52px"
         bar.style.display = "flex"
         bar.style.alignItems = "center"
@@ -391,12 +419,16 @@ internal class WebH5ContainerLauncher(
         bar.appendChild(actions)
 
         val frame = document.createElement("iframe") as HTMLIFrameElement
-        frame.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-downloads")
+        frame.setAttribute(
+            "sandbox",
+            if (url == null) "allow-scripts allow-forms allow-modals allow-downloads" else
+                "allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-popups",
+        )
         frame.setAttribute("allow", "camera; microphone; geolocation; accelerometer; gyroscope; magnetometer")
         frame.style.border = "0"
         frame.style.width = "100%"
         frame.style.flex = "1"
-        frame.srcdoc = html
+        if (url == null) frame.srcdoc = requireNotNull(html) else frame.src = url
         overlay.appendChild(bar)
         overlay.appendChild(frame)
         requireNotNull(document.body).appendChild(overlay)
@@ -465,7 +497,7 @@ internal class WebH5ContainerLauncher(
         retryHandle = window.setInterval(send, 25)
         timeoutHandle = window.setTimeout({
             cleanup()
-            if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Timed out waiting for H5 debug response"))
+            if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Timed out waiting for Web debug response"))
             null
         }, 2_000)
         continuation.invokeOnCancellation { cleanup() }
@@ -505,7 +537,7 @@ internal class WebH5ContainerLauncher(
         timeoutHandle = window.setTimeout({
             cleanup()
             if (continuation.isActive) continuation.resumeWithException(
-                IllegalStateException("Timed out waiting for the H5 container to become ready"),
+                IllegalStateException("Timed out waiting for the Web container to become ready"),
             )
             null
         }, 1_500)
@@ -533,7 +565,7 @@ internal class WebH5ContainerLauncher(
                 null
             }
             image.onerror = { _, _, _, _, _ ->
-                if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Could not render H5 screenshot"))
+                if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Could not render Web screenshot"))
                 null
             }
             image.src = "data:image/svg+xml;base64,${Base64.Default.encode(svg.encodeToByteArray())}"
@@ -542,7 +574,7 @@ internal class WebH5ContainerLauncher(
     private fun jsString(value: String): String = "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
     private companion object {
-        const val PREVIEW_ID = "kcode-h5-preview"
+        const val PREVIEW_ID = "kcode-web-preview"
         val SCRIPT_PATTERN = Regex(
             """<script([^>]*?)\s+src\s*=\s*["']([^"']+)["']([^>]*)>\s*</script>""",
             RegexOption.IGNORE_CASE,

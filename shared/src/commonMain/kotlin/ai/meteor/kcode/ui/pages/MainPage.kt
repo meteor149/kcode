@@ -8,7 +8,7 @@ import ai.meteor.kcode.chat.ChatService
 
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.h5.H5ContainerController
+import ai.meteor.kcode.webcontainer.WebContainerController
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
@@ -37,7 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import ai.meteor.kcode.ui.component.BoxWithResponsiveWidth
-import ai.meteor.kcode.ui.component.H5BackgroundContainersOverlay
+import ai.meteor.kcode.ui.component.WebBackgroundContainersOverlay
 import ai.meteor.kcode.ui.pages.chat.ChatPane
 import ai.meteor.kcode.ui.state.rememberConversationSessionState
 import ai.meteor.kcode.ui.pages.setting.PersistenceFailure
@@ -52,7 +52,7 @@ import dev.chrisbanes.haze.rememberHazeState
 @Composable
 internal fun KcodeMain(
     chatService: ChatService,
-    h5ContainerController: H5ContainerController?,
+    webContainerController: WebContainerController?,
     settingsStore: AppSettingsStore,
     historyRepository: ConversationHistoryRepository,
     imageSaver: ConversationImageSaver,
@@ -169,8 +169,8 @@ internal fun KcodeMain(
                     )
                 }
             }
-            h5ContainerController?.let { controller ->
-                H5BackgroundContainersOverlay(
+            webContainerController?.let { controller ->
+                WebBackgroundContainersOverlay(
                     controller = controller,
                     hazeState = hazeState,
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),

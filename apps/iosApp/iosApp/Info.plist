@@ -23,14 +23,19 @@
     <key>UILaunchScreen</key>
     <dict/>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Allow H5 apps to access your location when you approve it.</string>
+    <string>Allow Web apps to access your location when you approve it.</string>
     <key>NSCameraUsageDescription</key>
-    <string>Allow H5 apps to use the camera when you approve it.</string>
+    <string>Allow Web apps to use the camera when you approve it.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow H5 apps to record audio when you approve it.</string>
+    <string>Allow Web apps to record audio when you approve it.</string>
     <key>NSMotionUsageDescription</key>
-    <string>Allow H5 apps to read motion sensors when you approve it.</string>
+    <string>Allow Web apps to read motion sensors when you approve it.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Allow H5 apps to select photos when you approve it.</string>
+    <string>Allow Web apps to select photos when you approve it.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoadsInWebContent</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

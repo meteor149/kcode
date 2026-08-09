@@ -160,10 +160,10 @@
     <string name="google_no_key_notice_en">No API key is needed. Google may require consent or CAPTCHA; fallback results can be news-only, and browser builds may be blocked by CORS.</string>
     <string name="api_key_required_en">API Key required</string>
     <string name="no_api_key_required_en">No API Key</string>
-    <string name="h5_background_containers_en">Background H5 apps</string>
-    <string name="h5_background_count_en">%1$d running</string>
-    <string name="h5_expand_background_en">Show background H5 apps</string>
-    <string name="h5_collapse_background_en">Collapse background H5 apps</string>
-    <string name="h5_restore_container_en">Bring %1$s to foreground</string>
-    <string name="h5_close_container_en">Close %1$s</string>
+    <string name="web_background_containers_en">Background Web containers</string>
+    <string name="web_background_count_en">%1$d running</string>
+    <string name="web_expand_background_en">Show background Web containers</string>
+    <string name="web_collapse_background_en">Collapse background Web containers</string>
+    <string name="web_restore_container_en">Bring %1$s to foreground</string>
+    <string name="web_close_container_en">Close %1$s</string>
 </resources>

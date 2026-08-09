@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-This Kotlin Multiplatform project uses Compose and Koog. `shared/src/commonMain` contains cross-platform UI, domain code, and persistence contracts; shared agent code lives in `agentMain`. Keep platform implementations in the narrowest source set. Application hosts are under `apps`, the browser SQLite worker is at `apps/web/sqliteWasmWorker`, and the H5 runtime is under `extensions/h5Container`.
+This Kotlin Multiplatform project uses Compose and Koog. `shared/src/commonMain` contains cross-platform UI, domain code, and persistence contracts; shared agent code lives in `agentMain`. Keep platform implementations in the narrowest source set. Application hosts are under `apps`, the browser SQLite worker is at `apps/web/sqliteWasmWorker`, and the Web runtime is under `extensions/webContainer`.
 
 ## Build and Test Commands
 

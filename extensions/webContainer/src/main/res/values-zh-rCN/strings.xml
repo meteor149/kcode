@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_preview_default_title">Web 容器</string>
+    <string name="web_preview_live">运行中</string>
+    <string name="web_preview_close">关闭容器</string>
+    <string name="web_preview_reload">刷新容器</string>
+    <string name="web_preview_background">将容器移到后台</string>
+    <string name="web_preview_background_unavailable">无法返回 kcode。</string>
+    <string name="web_preview_invalid">Web 入口文件不可用。</string>
+    <string name="web_capability_allow_title">允许使用设备能力？</string>
+    <string name="web_capability_allow_message">这个本地 Web 应用希望使用 %1$s。是否在本次预览期间允许？</string>
+    <string name="web_capability_allow">允许</string>
+    <string name="web_capability_deny">拒绝</string>
+</resources>

@@ -27,7 +27,7 @@ fun main() {
         ) {
             KcodeApp(
                 chatService = runtime.chatService,
-                h5ContainerController = runtime.h5ContainerController,
+                webContainerController = runtime.webContainerController,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
                 imageSaver = DesktopConversationImageSaver(),

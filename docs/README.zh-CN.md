@@ -21,15 +21,15 @@
 
 ## kcode 是什么？
 
-kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) 与 [Koog](https://docs.koog.ai/) 构建的开源跨平台 AI 对话与 Agent 应用。它以同一套 UI 覆盖 Android、iOS、桌面与 Web，并将流式 Markdown、对话持久化、可见的工具调用、本地工作区、联网搜索和沙箱 H5 应用预览整合在一个专注、克制的交互体验中。
+kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) 与 [Koog](https://docs.koog.ai/) 构建的开源跨平台 AI 对话与 Agent 应用。它以同一套 UI 覆盖 Android、iOS、桌面与 Web，并将流式 Markdown、对话持久化、可见的工具调用、本地工作区、联网搜索和沙箱 Web 容器整合在一个专注、克制的交互体验中。
 
 ## 核心特性
 
 - **一套 UI，覆盖全端**——Android、iOS、桌面和 Web 共用自适应 Compose UI。
 - **面向 Agent 的对话体验**——实时流式输出、Markdown 渲染、工具调用过程、停止与重新生成、消息多选，以及在已支持平台导出带渲染效果的长图。
 - **自带模型，自由切换**——支持 OpenAI、Azure OpenAI、Anthropic、Google Gemini、DeepSeek、OpenRouter、Amazon Bedrock、Mistral AI、阿里云 DashScope、Ollama 和智谱 GLM。
-- **实用的内置工具**——受限 `/workspace` 文件读写、Google/Exa/Bright Data 联网搜索和本地 H5 预览。
-- **移动硬件能力桥**——本地 H5 应用可按平台申请摄像头、定位、指南针、运动传感器、振动、电池和网络等能力。
+- **实用的内置工具**——受限 `/workspace` 文件读写、Google/Exa/Bright Data 联网搜索，以及可运行本地应用或远程网站的 Web 容器。
+- **移动硬件能力桥**——本地 Web 应用可按平台申请摄像头、定位、指南针、运动传感器、振动、电池和网络等能力。
 - **统一权限审批门**——所有工具调用可统一设置为 `Deny`、`Ask` 或 `Bypass`；系统权限仍然有效。
 - **本地优先持久化**——设置采用版本化存储，对话历史通过 Room/SQLite 跨端保存。
 
@@ -40,7 +40,7 @@ kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-
 | 共享 Compose UI 与 Koog Agent | ✅ | ✅ | ✅ | ✅ |
 | 流式 Markdown 与历史持久化 | ✅ | ✅ | ✅ | ✅ |
 | 沙箱文件工作区与联网搜索 | ✅ | ✅ | ✅ | ✅ |
-| 本地 H5 应用预览 | ✅ | ✅ | ✅ | ✅ |
+| Web 容器 | ✅ | ✅ | ✅ | ✅ |
 | 渲染后会话长图导出 | ✅ | — | ✅ | — |
 | 移动硬件能力桥 | ✅ | ✅ | — | 浏览器 API |
 | Shell 工具 | 应用 UID / Shizuku / root | — | — | — |
@@ -105,7 +105,7 @@ Xcode Target 会自动构建并嵌入共享的 `KcodeShared` Framework，最低�
 - Agent 文件工具只能访问虚拟 `/workspace`，会拒绝路径穿越和符号链接逃逸，并限制文件与工作区大小。
 - 所有工具调用都会经过统一权限审批门。`Bypass` 仅跳过 kcode 的确认，不会绕过 Android、iOS 或浏览器系统权限。
 - Android Shell 明确区分应用 UID、Shizuku 与 root 身份，并限制执行时间和输出大小；高权限来源必须由用户主动配置。
-- H5 应用运行在隔离容器中，通过统一 API 查询能力是否可用，并在访问敏感能力前请求授权。
+- Web 应用运行在隔离容器中，通过统一 API 查询能力是否可用，并在访问敏感能力前请求授权。
 - 请勿提交 API Key、`local.properties`、设备截图、调试日志或生成的数据库。
 
 发现安全问题时，请优先私下联系维护者，不要在公开 Issue 中披露可利用细节。
@@ -124,7 +124,7 @@ shared/             统一的 Compose Multiplatform 共享模块
   src/*Main/        Android、iOS、桌面和 Web 平台实现
   schemas/          Room 迁移 Schema
 extensions/
-  h5Container/      隔离 H5 运行时与硬件能力桥
+  webContainer/      隔离 Web 容器运行时与硬件能力桥
 docs/               设计与工程文档
 ```
 

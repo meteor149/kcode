@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_preview_default_title">Web Container</string>
+    <string name="web_preview_live">Live</string>
+    <string name="web_preview_close">Close container</string>
+    <string name="web_preview_reload">Reload container</string>
+    <string name="web_preview_background">Move container to background</string>
+    <string name="web_preview_background_unavailable">Could not return to kcode.</string>
+    <string name="web_preview_invalid">The Web entry file is unavailable.</string>
+    <string name="web_capability_allow_title">Allow device capability?</string>
+    <string name="web_capability_allow_message">This local Web app wants to use %1$s. Allow it for this preview session?</string>
+    <string name="web_capability_allow">Allow</string>
+    <string name="web_capability_deny">Deny</string>
+</resources>

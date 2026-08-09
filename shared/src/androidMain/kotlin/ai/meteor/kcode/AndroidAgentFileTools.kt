@@ -11,7 +11,7 @@ import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import android.app.Activity
 import android.content.Context
-import ai.meteor.kcode.h5.AndroidH5ContainerLauncher
+import ai.meteor.kcode.webcontainer.AndroidWebContainerLauncher
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
@@ -59,20 +59,13 @@ fun createAndroidKoogChatRuntime(
         appWorkspace = fileSystem.workspaceRoot,
         modeProvider = modeProvider,
     )
-    val h5Controller = AndroidH5ContainerLauncher(activity.applicationContext)
+    val webContainerController = AndroidWebContainerLauncher(activity.applicationContext)
     val fileTools = ToolRegistry {
         tool(ReadFileTool(fileSystem))
         tool(ListDirectoryTool(fileSystem))
         tool(WriteFileTool(fileSystem))
         tool(EditFileTool(fileSystem))
-        tool(H5PreviewTool(h5Controller))
-        tool(H5ListContainersTool(h5Controller))
-        tool(H5SetContainerStateTool(h5Controller))
-        tool(H5ScreenshotTool(h5Controller))
-        tool(H5InspectContainerTool(h5Controller))
-        tool(H5InteractContainerTool(h5Controller))
-        tool(H5ConsoleTool(h5Controller))
-        tool(H5CloseContainerTool(h5Controller))
+        webContainerTools(webContainerController)
         tool(WebSearchTool(webSearchConfigurationProvider))
         tool(ExecuteShellCommandTool(shellExecutor, BraveModeConfirmationHandler()))
     }
@@ -82,12 +75,12 @@ fun createAndroidKoogChatRuntime(
             toolPermissionModeProvider = permissionModeProvider,
             toolCallApprover = toolCallApprover,
         ),
-        h5ContainerController = h5Controller,
+        webContainerController = webContainerController,
     )
 }
 
-/** Keeps permission prompts visible while an agent-controlled H5 preview is in front. */
-fun activeAndroidH5ContainerActivity(): Activity? = AndroidH5ContainerLauncher.activeContainerActivity()
+/** Keeps permission prompts visible while an agent-controlled Web container is in front. */
+fun activeAndroidWebContainerActivity(): Activity? = AndroidWebContainerLauncher.activeContainerActivity()
 
 /**
  * Maps the virtual absolute path `/workspace/...` onto app-private storage.

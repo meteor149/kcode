@@ -51,7 +51,7 @@ kotlin {
                 implementation(compose.ui)
                 implementation("org.jetbrains.compose.ui:ui-backhandler:1.8.2")
                 implementation(compose.components.resources)
-                api(project(":extensions:h5Container"))
+                api(project(":extensions:webContainer"))
                 implementation("dev.chrisbanes.haze:haze:1.6.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")

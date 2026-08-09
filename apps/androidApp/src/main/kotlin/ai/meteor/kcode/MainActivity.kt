@@ -8,7 +8,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import ai.meteor.kcode.KcodeApp
-import ai.meteor.kcode.activeAndroidH5ContainerActivity
+import ai.meteor.kcode.activeAndroidWebContainerActivity
 import ai.meteor.kcode.createAndroidKoogChatRuntime
 import ai.meteor.kcode.export.AndroidConversationImageSaver
 import ai.meteor.kcode.history.createAndroidConversationHistoryRepository
@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             KcodeApp(
                 chatService = runtime.chatService,
-                h5ContainerController = runtime.h5ContainerController,
+                webContainerController = runtime.webContainerController,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
                 imageSaver = imageSaver,
@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
     private suspend fun confirmToolCall(request: ToolApprovalRequest): Boolean =
         withContext(Dispatchers.Main.immediate) {
             if (isFinishing || isDestroyed) return@withContext false
-            val dialogActivity = activeAndroidH5ContainerActivity() ?: this@MainActivity
+            val dialogActivity = activeAndroidWebContainerActivity() ?: this@MainActivity
             suspendCancellableCoroutine { continuation ->
                 var dialog: AlertDialog? = null
                 dialog = AlertDialog.Builder(dialogActivity)

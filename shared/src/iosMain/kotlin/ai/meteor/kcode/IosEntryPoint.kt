@@ -19,7 +19,7 @@ fun MainViewController(): UIViewController {
     return ComposeUIViewController {
         KcodeApp(
             chatService = runtime.chatService,
-            h5ContainerController = runtime.h5ContainerController,
+            webContainerController = runtime.webContainerController,
             settingsStore = settingsStore,
             historyRepository = createIosConversationHistoryRepository(),
             toolPermissionControlsAvailable = true,
