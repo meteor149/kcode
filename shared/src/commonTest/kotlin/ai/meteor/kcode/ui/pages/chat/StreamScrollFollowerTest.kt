@@ -7,12 +7,13 @@ import kotlin.test.assertTrue
 
 class StreamScrollFollowerTest {
     @Test
-    fun contentGrowthAwayFromBottomKeepsCurrentFollowMode() {
+    fun contentGrowthDoesNotEnableFollowing() {
         val follower = StreamScrollFollower()
+        follower.stopFollowing()
 
-        follower.onScrollStateChanged(isScrollInProgress = false, isAtBottom = false)
+        follower.onScrollStateChanged(isScrollInProgress = false, isAtBottom = true)
 
-        assertTrue(follower.followLatest)
+        assertFalse(follower.followLatest)
     }
 
     @Test
@@ -25,6 +26,7 @@ class StreamScrollFollowerTest {
         follower.onScrollStateChanged(isScrollInProgress = false, isAtBottom = false)
         assertFalse(follower.followLatest)
 
+        follower.onScrollStateChanged(isScrollInProgress = true, isAtBottom = false)
         follower.onScrollStateChanged(isScrollInProgress = false, isAtBottom = true)
         assertTrue(follower.followLatest)
     }

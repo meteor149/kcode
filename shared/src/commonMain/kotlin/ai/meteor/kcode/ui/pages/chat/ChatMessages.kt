@@ -36,11 +36,14 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,6 +72,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -100,30 +105,70 @@ internal fun ConversationMessageList(
     onToggleSelection: (ChatMessage) -> Unit,
     onShare: (ChatMessage) -> Unit,
     onRegenerate: (ChatMessage) -> Unit,
+    anchoredUserMessageId: Long?,
+    messageAnchorTop: Dp,
 ) {
-    LazyColumn(
-        state = listState,
-        modifier = modifier.pointerInput(Unit) { detectTapGestures { onBackgroundTap() } },
-        contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(itemSpacing),
-    ) {
-        items(conversation.messages, key = { it.id }) { message ->
-            MessageItem(
-                message = message,
-                compact = compact,
-                canRegenerate = !selectionMode && configurationAvailable && !conversation.isGenerating,
-                canShare = !selectionMode && !conversation.isGenerating,
-                selectionMode = selectionMode,
-                selected = message.id in selectedMessageIds,
-                regenerateDescription = regenerateDescription,
-                shareDescription = shareDescription,
-                onToggleSelection = { onToggleSelection(message) },
-                onShare = { onShare(message) },
-                onRegenerate = { onRegenerate(message) },
-            )
+    BoxWithConstraints(modifier) {
+        val density = LocalDensity.current
+        val anchoredUserIndex = conversation.messages.indexOfFirst { it.id == anchoredUserMessageId }
+        val anchoredAssistantId = anchoredUserIndex.takeIf { it >= 0 }
+            ?.let { conversation.messages.getOrNull(it + 1)?.id }
+        var userHeightPx by remember(anchoredUserMessageId) { mutableStateOf(0) }
+        var assistantHeightPx by remember(anchoredUserMessageId) { mutableStateOf(0) }
+        var thinkingHeightPx by remember(anchoredUserMessageId) { mutableStateOf(0) }
+        val showTurnTailSpace = anchoredUserIndex >= 0
+        val reserveThinkingSpace = conversation.isAwaitingFirstToken || thinkingHeightPx > 0
+        val measuredTurnHeight = with(density) {
+            (userHeightPx + assistantHeightPx + thinkingHeightPx).toDp()
         }
-        if (conversation.isGenerating && conversation.isAwaitingFirstToken) {
-            item(key = "thinking") { ThinkingRow(compact = compact) }
+        val turnItemCount = 2 + if (reserveThinkingSpace) 1 else 0
+        val tailSpace = (
+            maxHeight - messageAnchorTop - contentPadding.calculateBottomPadding() -
+                measuredTurnHeight - itemSpacing * turnItemCount
+        ).coerceAtLeast(0.dp)
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                detectTapGestures { onBackgroundTap() }
+            },
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(itemSpacing),
+        ) {
+            items(conversation.messages, key = { it.id }) { message ->
+                val measurementModifier = when (message.id) {
+                    anchoredUserMessageId -> Modifier.onSizeChanged { userHeightPx = it.height }
+                    anchoredAssistantId -> Modifier.onSizeChanged { assistantHeightPx = it.height }
+                    else -> Modifier
+                }
+                Box(measurementModifier) {
+                    MessageItem(
+                        message = message,
+                        compact = compact,
+                        canRegenerate = !selectionMode && configurationAvailable && !conversation.isGenerating,
+                        canShare = !selectionMode && !conversation.isGenerating,
+                        selectionMode = selectionMode,
+                        selected = message.id in selectedMessageIds,
+                        regenerateDescription = regenerateDescription,
+                        shareDescription = shareDescription,
+                        onToggleSelection = { onToggleSelection(message) },
+                        onShare = { onShare(message) },
+                        onRegenerate = { onRegenerate(message) },
+                    )
+                }
+            }
+            if (conversation.isGenerating && conversation.isAwaitingFirstToken) {
+                item(key = "thinking") {
+                    Box(Modifier.onSizeChanged { thinkingHeightPx = it.height }) {
+                        ThinkingRow(compact = compact)
+                    }
+                }
+            }
+            if (showTurnTailSpace) {
+                item(key = "turn-tail-space") {
+                    Spacer(Modifier.height(tailSpace))
+                }
+            }
         }
     }
 }

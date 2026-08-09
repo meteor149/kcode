@@ -36,16 +36,13 @@ internal fun sendMessage(
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
-    shouldFollowLatest: Boolean,
-    onFollowLatestChange: (Boolean) -> Unit,
+    onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
     followBottom: (ConversationState) -> Unit,
 ) {
     val cleanPrompt = prompt.trim()
     if (cleanPrompt.isEmpty()) return
     val target = conversation ?: onSendToNew(cleanPrompt)
     if (target.isGenerating) return
-    onFollowLatestChange(shouldFollowLatest)
-
     val userMessage = ChatMessage(
         id = nextMessageId(target),
         role = MessageRole.User,
@@ -58,7 +55,7 @@ internal fun sendMessage(
             setupMessage = failureMessages.setupModel,
             historyRepository = historyRepository,
             scope = scope,
-            followBottom = followBottom,
+            onUserMessageAdded = onUserMessageAdded,
         )
         return
     }
@@ -67,7 +64,7 @@ internal fun sendMessage(
     target.messages += userMessage
     val assistantId = userMessage.id + 1L
     prepareStreamingResponse(target, assistantId)
-    followBottom(target)
+    onUserMessageAdded(target, userMessage)
     launchStreamingResponse(
         target = target,
         assistantId = assistantId,
@@ -140,7 +137,7 @@ private fun appendSetupRequiredMessages(
     setupMessage: String,
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
-    followBottom: (ConversationState) -> Unit,
+    onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
 ) {
     val assistantMessage = ChatMessage(
         id = userMessage.id + 1L,
@@ -149,7 +146,7 @@ private fun appendSetupRequiredMessages(
     )
     target.messages += userMessage
     target.messages += assistantMessage
-    followBottom(target)
+    onUserMessageAdded(target, userMessage)
     scope.launch {
         runCatching {
             historyRepository.appendMessage(

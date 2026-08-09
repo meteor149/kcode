@@ -57,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -110,6 +111,7 @@ internal fun ChatPane(
     val focusManager = LocalFocusManager.current
     val messageSelection = rememberMessageSelectionState(conversation?.id)
     var mobileComposerHeightPx by remember { mutableStateOf(0) }
+    var anchoredTurn by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     // Text fields and keyboard actions can retain an earlier callback instance. Keep the
     // callback stable while making every invocation observe the latest recomposed state.
     val currentConfiguration by rememberUpdatedState(configuration)
@@ -117,11 +119,16 @@ internal fun ChatPane(
     val regenerateDescription = text(UiText.RegenerateAnswer)
     val shareDescription = text(UiText.ShareImage)
     val conversationContentMotion = rememberConversationContentMotion(conversation?.id)
+    val messageAnchorTop = if (compact) 92.dp else 30.dp
+    fun isAtConversationBottom(): Boolean {
+        val target = currentConversation ?: return true
+        return listState.isAtConversationBottom(target.latestContentIndex())
+    }
 
     LaunchedEffect(listIsDragged) {
         if (listIsDragged) {
             streamScrollFollower.stopFollowing()
-        } else if (listState.isAtConversationBottom()) {
+        } else if (isAtConversationBottom()) {
             streamScrollFollower.followLatest = true
         }
     }
@@ -129,7 +136,7 @@ internal fun ChatPane(
     LaunchedEffect(listState) {
         snapshotFlow {
             listState.isScrollInProgress to
-                listState.isAtConversationBottom()
+                isAtConversationBottom()
         }.collect { (isScrollInProgress, isAtBottom) ->
             streamScrollFollower.onScrollStateChanged(
                 isScrollInProgress = isScrollInProgress,
@@ -159,9 +166,17 @@ internal fun ChatPane(
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
-            shouldFollowLatest = currentConversation == null ||
-                listState.isAtConversationBottom(),
-            onFollowLatestChange = { streamScrollFollower.followLatest = it },
+            onUserMessageAdded = { target, message ->
+                anchoredTurn = target.id to message.id
+                streamScrollFollower.stopFollowing()
+                streamScrollFollower.job = scope.launch {
+                    withFrameNanos { }
+                    withFrameNanos { }
+                    val thinkingRow = if (target.isAwaitingFirstToken) 1 else 0
+                    val tailSpaceIndex = target.messages.size + thinkingRow
+                    listState.scrollToConversationBottom(targetIndex = tailSpaceIndex)
+                }
+            },
             followBottom = ::followConversationBottom,
         )
     }
@@ -176,7 +191,7 @@ internal fun ChatPane(
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
-            shouldFollowLatest = listState.isAtConversationBottom(),
+            shouldFollowLatest = isAtConversationBottom(),
             onFollowLatestChange = { streamScrollFollower.followLatest = it },
             followBottom = ::followConversationBottom,
         )
@@ -205,18 +220,12 @@ internal fun ChatPane(
 
     LaunchedEffect(conversation?.id) {
         val count = conversation?.messages?.size ?: 0
-        if (count > 0) {
+        if (count > 0 && anchoredTurn?.first != conversation?.id) {
             streamScrollFollower.followLatest = true
-            val lastIndex = count - 1 + if (conversation?.isGenerating == true) 1 else 0
+            val lastIndex = conversation?.latestContentIndex() ?: -1
             listState.scrollToConversationBottom(targetIndex = lastIndex)
         }
     }
-
-    val prepareForKeyboard = rememberPrepareForKeyboard(
-        compact = compact,
-        listState = listState,
-        conversation = conversation,
-    )
 
     CompositionLocalProvider(LocalChatHazeState provides hazeState) {
     if (compact) {
@@ -282,9 +291,13 @@ internal fun ChatPane(
                         focusManager.clearFocus(force = true)
                         regenerate(message)
                     },
+                    anchoredUserMessageId = anchoredTurn
+                        ?.takeIf { it.first == conversation.id }
+                        ?.second,
+                    messageAnchorTop = messageAnchorTop,
                 )
                 AnimatedVisibility(
-                    visible = !listState.isAtConversationBottom(),
+                    visible = !isAtConversationBottom(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(
                         bottom = composerOverlayBottom - KcodeSize.floatingShadowGutter,
                     ),
@@ -317,7 +330,7 @@ internal fun ChatPane(
                     generating = conversation.isGenerating,
                     replying = true,
                     focusRequester = focusRequester,
-                    onFocus = prepareForKeyboard,
+                    onFocus = {},
                     onModelClick = onSettings,
                     onConfigurationChange = onConfigurationChange,
                     onSend = ::send,
@@ -438,6 +451,10 @@ internal fun ChatPane(
                         focusManager.clearFocus(force = true)
                         regenerate(message)
                     },
+                    anchoredUserMessageId = anchoredTurn
+                        ?.takeIf { it.first == conversation.id }
+                        ?.second,
+                    messageAnchorTop = messageAnchorTop,
                 )
                 Composer(                    modifier = Modifier.align(Alignment.CenterHorizontally)
                         .widthIn(max = 760.dp)
@@ -446,7 +463,7 @@ internal fun ChatPane(
                     hazeState = hazeState,
                     generating = conversation.isGenerating,
                     focusRequester = focusRequester,
-                    onFocus = prepareForKeyboard,
+                    onFocus = {},
                     onSend = ::send,
                     onStop = { conversation.runningJob?.cancel() },
                     toolPermissionControlsAvailable = toolPermissionControlsAvailable,
