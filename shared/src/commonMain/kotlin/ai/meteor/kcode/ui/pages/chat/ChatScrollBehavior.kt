@@ -24,6 +24,31 @@ import kotlinx.coroutines.launch
 internal class StreamScrollFollower {
     var job: Job? = null
     var followLatest: Boolean = true
+
+    fun stopFollowing() {
+        followLatest = false
+        job?.cancel()
+    }
+
+    fun onScrollStateChanged(isScrollInProgress: Boolean, isAtBottom: Boolean) {
+        if (isScrollInProgress && job?.isActive != true) {
+            stopFollowing()
+        } else if (!isScrollInProgress && isAtBottom) {
+            followLatest = true
+        }
+    }
+
+    fun shouldScrollProgrammatically(
+        reverseLayout: Boolean,
+        reason: ConversationFollowReason,
+    ): Boolean = followLatest && (
+        !reverseLayout || reason == ConversationFollowReason.MESSAGE_ADDED
+    )
+}
+
+internal enum class ConversationFollowReason {
+    MESSAGE_ADDED,
+    CONTENT_UPDATED,
 }
 
 internal fun LazyListState.isAtConversationBottom(reverseLayout: Boolean): Boolean =

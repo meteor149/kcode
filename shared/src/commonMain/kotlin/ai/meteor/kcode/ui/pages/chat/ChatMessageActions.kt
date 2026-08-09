@@ -36,7 +36,7 @@ internal fun sendMessage(
     failureMessages: ChatFailureMessages,
     shouldFollowLatest: Boolean,
     onFollowLatestChange: (Boolean) -> Unit,
-    followBottom: (ConversationState) -> Unit,
+    followBottom: (ConversationState, ConversationFollowReason) -> Unit,
 ) {
     val cleanPrompt = prompt.trim()
     if (cleanPrompt.isEmpty()) return
@@ -65,7 +65,7 @@ internal fun sendMessage(
     target.messages += userMessage
     val assistantId = userMessage.id + 1L
     prepareStreamingResponse(target, assistantId)
-    followBottom(target)
+    followBottom(target, ConversationFollowReason.MESSAGE_ADDED)
     launchStreamingResponse(
         target = target,
         assistantId = assistantId,
@@ -99,7 +99,7 @@ internal fun regenerateMessage(
     failureMessages: ChatFailureMessages,
     shouldFollowLatest: Boolean,
     onFollowLatestChange: (Boolean) -> Unit,
-    followBottom: (ConversationState) -> Unit,
+    followBottom: (ConversationState, ConversationFollowReason) -> Unit,
 ) {
     val activeConfiguration = configuration ?: return
     val target = conversation ?: return
@@ -115,7 +115,7 @@ internal fun regenerateMessage(
     target.messages.subList(answerIndex, target.messages.size).clear()
     val replacementId = nextMessageId(target)
     prepareStreamingResponse(target, replacementId)
-    followBottom(target)
+    followBottom(target, ConversationFollowReason.MESSAGE_ADDED)
     launchStreamingResponse(
         target = target,
         assistantId = replacementId,
@@ -137,7 +137,7 @@ private fun appendSetupRequiredMessages(
     setupMessage: String,
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
-    followBottom: (ConversationState) -> Unit,
+    followBottom: (ConversationState, ConversationFollowReason) -> Unit,
 ) {
     val assistantMessage = ChatMessage(
         id = userMessage.id + 1L,
@@ -146,7 +146,7 @@ private fun appendSetupRequiredMessages(
     )
     target.messages += userMessage
     target.messages += assistantMessage
-    followBottom(target)
+    followBottom(target, ConversationFollowReason.MESSAGE_ADDED)
     scope.launch {
         runCatching {
             historyRepository.appendMessage(
@@ -183,7 +183,7 @@ private fun launchStreamingResponse(
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
-    followBottom: (ConversationState) -> Unit,
+    followBottom: (ConversationState, ConversationFollowReason) -> Unit,
     beforeRequest: suspend () -> Unit,
 ) {
     target.runningJob = scope.launch {
@@ -196,13 +196,13 @@ private fun launchStreamingResponse(
                 onToolUse = { event ->
                     target.isAwaitingFirstToken = false
                     target.applyToolUseEvent(assistantId, event)
-                    followBottom(target)
+                    followBottom(target, ConversationFollowReason.CONTENT_UPDATED)
                 },
                 onDelta = { delta ->
                     if (delta.isNotEmpty()) {
                         target.isAwaitingFirstToken = false
                         target.updateMessage(assistantId) { it.copy(content = it.content + delta) }
-                        followBottom(target)
+                        followBottom(target, ConversationFollowReason.CONTENT_UPDATED)
                     }
                 },
             )
@@ -237,7 +237,7 @@ private fun launchStreamingResponse(
                 isError = true,
             )
             target.messages += errorMessage
-            followBottom(target)
+            followBottom(target, ConversationFollowReason.MESSAGE_ADDED)
             runCatching {
                 historyRepository.appendMessage(
                     conversationId = target.id,

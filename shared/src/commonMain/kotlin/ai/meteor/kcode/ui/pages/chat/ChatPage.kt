@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +67,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 @Composable
 internal fun ChatPane(
     modifier: Modifier,
@@ -112,17 +114,30 @@ internal fun ChatPane(
 
     LaunchedEffect(listIsDragged) {
         if (listIsDragged) {
-            // A real finger/mouse drag is an explicit request to inspect an earlier point.
-            streamScrollFollower.followLatest = false
-            streamScrollFollower.job?.cancel()
+            streamScrollFollower.stopFollowing()
         } else if (listState.isAtConversationBottom(reverseLayout = compact)) {
-            // Dragging back to the end opts in to following subsequent tokens again.
             streamScrollFollower.followLatest = true
         }
     }
 
-    fun followConversationBottom(target: ConversationState) {
-        if (!streamScrollFollower.followLatest || target.messages.isEmpty()) return
+    LaunchedEffect(listState, compact) {
+        snapshotFlow {
+            listState.isScrollInProgress to
+                listState.isAtConversationBottom(reverseLayout = compact)
+        }.collect { (isScrollInProgress, isAtBottom) ->
+            streamScrollFollower.onScrollStateChanged(
+                isScrollInProgress = isScrollInProgress,
+                isAtBottom = isAtBottom,
+            )
+        }
+    }
+
+    fun followConversationBottom(target: ConversationState, reason: ConversationFollowReason) {
+        val shouldScroll = streamScrollFollower.shouldScrollProgrammatically(
+            reverseLayout = compact,
+            reason = reason,
+        )
+        if (target.messages.isEmpty() || !shouldScroll) return
         streamScrollFollower.job?.cancel()
         streamScrollFollower.job = scope.launch {
             val trailingRow = if (target.isGenerating && target.isAwaitingFirstToken) 1 else 0
