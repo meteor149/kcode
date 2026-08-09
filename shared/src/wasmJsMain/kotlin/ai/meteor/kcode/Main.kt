@@ -4,7 +4,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import ai.meteor.kcode.settings.WebAppSettingsStore
 import ai.meteor.kcode.history.createWebConversationHistoryRepository
-import ai.meteor.kcode.artifact.createWebArtifactRepository
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -15,7 +14,7 @@ fun main() {
         KcodeApp(
             chatService = runtime.chatService,
             webContainerController = runtime.webContainerController,
-            artifactRepository = createWebArtifactRepository(),
+            artifactRepository = runtime.artifactRepository,
             settingsStore = WebAppSettingsStore,
             historyRepository = historyRepository,
             toolPermissionControlsAvailable = true,

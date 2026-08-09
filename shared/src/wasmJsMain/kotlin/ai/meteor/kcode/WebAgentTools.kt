@@ -29,6 +29,7 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.io.normalizeWorkspacePath
 import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
 import ai.meteor.kcode.skill.skillTools
+import ai.meteor.kcode.artifact.createWebArtifactRepository
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
 import kotlinx.browser.document
@@ -71,6 +72,7 @@ internal fun createWebKoogChatRuntime(
 ): KcodeAgentRuntime {
     val workspace = WebAgentWorkspace()
     val skillRuntime = createWorkspaceSkillRuntime(workspace, "browser-app-data")
+    val artifactRepository = createWebArtifactRepository()
     val webContainerController = BrowserWebContainerLauncher(workspace)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
@@ -90,6 +92,7 @@ internal fun createWebKoogChatRuntime(
                     }
                 }))
                 skillTools(skillRuntime)
+                artifactTools(artifactRepository)
             },
             toolPermissionModeProvider = { permissionState.mode },
             toolCallApprover = ToolCallApprover { request ->
@@ -104,6 +107,7 @@ internal fun createWebKoogChatRuntime(
             skillRuntime = skillRuntime,
         ),
         webContainerController = webContainerController,
+        artifactRepository = artifactRepository,
     )
 }
 

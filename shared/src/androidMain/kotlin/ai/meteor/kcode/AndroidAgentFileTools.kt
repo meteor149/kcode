@@ -18,6 +18,7 @@ import ai.meteor.kcode.tools.search.WebSearchTool
 import ai.meteor.kcode.tools.search.WebSearchConfiguration
 import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
 import ai.meteor.kcode.skill.skillTools
+import ai.meteor.kcode.artifact.createAndroidArtifactRepository
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
@@ -51,14 +52,15 @@ fun createAndroidKoogChatRuntime(
     webSearchConfigurationProvider: suspend () -> WebSearchConfiguration,
     toolCallApprover: ToolCallApprover,
 ): KcodeAgentRuntime {
-    val fileSystem = AndroidAgentFileSystem
+    val workspaceRoot = Files.createDirectories(activity.filesDir.toPath().resolve("agent_workspace")).toRealPath()
+    val fileSystem = AndroidAgentFileSystem(workspaceRoot)
     val shellExecutor = AndroidShellExecutors(
         activity = activity,
         modeProvider = modeProvider,
     )
-    val skillWorkspaceRoot = Files.createDirectories(activity.filesDir.toPath().resolve("workspace")).toRealPath()
-    val skillWorkspace = AndroidPrivateAgentWorkspace(skillWorkspaceRoot)
+    val skillWorkspace = AndroidPrivateAgentWorkspace(workspaceRoot)
     val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "android-app-data")
+    val artifactRepository = createAndroidArtifactRepository(activity.applicationContext)
     val webContainerController = AndroidWebContainerLauncher(activity.applicationContext)
     val fileTools = ToolRegistry {
         tool(ReadFileTool(fileSystem))
@@ -70,6 +72,7 @@ fun createAndroidKoogChatRuntime(
         tool(WebSearchTool(webSearchConfigurationProvider))
         tool(ExecuteShellCommandTool(shellExecutor, BraveModeConfirmationHandler()))
         skillTools(skillRuntime)
+        artifactTools(artifactRepository)
     }
     return KcodeAgentRuntime(
         chatService = KoogChatService(
@@ -79,6 +82,7 @@ fun createAndroidKoogChatRuntime(
             skillRuntime = skillRuntime,
         ),
         webContainerController = webContainerController,
+        artifactRepository = artifactRepository,
     )
 }
 
@@ -156,11 +160,32 @@ internal class AndroidPrivateAgentWorkspace(
 fun activeAndroidWebContainerActivity(): Activity? = AndroidWebContainerLauncher.activeContainerActivity()
 
 /** Uses real absolute filesystem paths without an application-level containment boundary. */
-internal object AndroidAgentFileSystem : FileSystemProvider.ReadWrite<Path> {
-    override fun toAbsolutePathString(path: Path): String = checked(path).toString()
+internal class AndroidAgentFileSystem(
+    workspaceRoot: Path? = null,
+) : FileSystemProvider.ReadWrite<Path> {
+    private val workspaceRoot = workspaceRoot?.toAbsolutePath()?.normalize()
+
+    override fun toAbsolutePathString(path: Path): String {
+        val target = checked(path)
+        val root = workspaceRoot
+        if (root != null && target.startsWith(root)) {
+            val relative = root.relativize(target).toString().replace('\\', '/')
+            return if (relative.isEmpty()) "/workspace" else "/workspace/$relative"
+        }
+        return target.toString()
+    }
 
     override fun fromAbsolutePathString(path: String): Path {
         require('\u0000' !in path) { "Invalid file path" }
+        workspaceRoot?.let { root ->
+            if (path == "/workspace" || path.startsWith("/workspace/")) {
+                val relative = path.removePrefix("/workspace").trimStart('/')
+                require('\\' !in relative && relative.split('/').none { it == "." || it == ".." }) {
+                    "Invalid /workspace path"
+                }
+                return checked(relative.split('/').filter(String::isNotEmpty).fold(root, Path::resolve))
+            }
+        }
         return checked(Path.of(path))
     }
 
@@ -312,5 +337,7 @@ internal object AndroidAgentFileSystem : FileSystemProvider.ReadWrite<Path> {
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
-    private const val TEXT_PROBE_BYTES = 8_000
+    private companion object {
+        const val TEXT_PROBE_BYTES = 8_000
+    }
 }

@@ -14,6 +14,7 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.io.normalizeWorkspacePath
 import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
 import ai.meteor.kcode.skill.skillTools
+import ai.meteor.kcode.artifact.createIosArtifactRepository
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -69,6 +70,7 @@ internal fun createIosKoogChatRuntime(
 ): KcodeAgentRuntime {
     val workspace = IosAgentWorkspace(workspaceRoot)
     val skillRuntime = createWorkspaceSkillRuntime(workspace, "ios-app-data")
+    val artifactRepository = createIosArtifactRepository(workspaceRoot)
     val webContainerController = IosWebContainerLauncher(workspaceRoot, presentingViewController)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
@@ -88,6 +90,7 @@ internal fun createIosKoogChatRuntime(
                     }
                 }))
                 skillTools(skillRuntime)
+                artifactTools(artifactRepository)
             },
             toolPermissionModeProvider = { permissionState.mode },
             toolCallApprover = ToolCallApprover { request ->
@@ -96,6 +99,7 @@ internal fun createIosKoogChatRuntime(
             skillRuntime = skillRuntime,
         ),
         webContainerController = webContainerController,
+        artifactRepository = artifactRepository,
     )
 }
 

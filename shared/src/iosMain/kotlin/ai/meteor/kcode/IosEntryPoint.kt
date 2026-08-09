@@ -7,7 +7,6 @@ import ai.meteor.kcode.history.createIosConversationHistoryRepository
 import platform.UIKit.UIViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIBackgroundTaskInvalid
-import ai.meteor.kcode.artifact.createIosArtifactRepository
 
 /** UIKit/SwiftUI host entry point. The complete screen tree comes from commonMain. */
 fun MainViewController(): UIViewController {
@@ -45,7 +44,7 @@ fun MainViewController(): UIViewController {
             chatService = runtime.chatService,
             generationRunner = generationRunner,
             webContainerController = runtime.webContainerController,
-            artifactRepository = createIosArtifactRepository(workspaceRoot),
+            artifactRepository = runtime.artifactRepository,
             settingsStore = settingsStore,
             historyRepository = createIosConversationHistoryRepository(),
             toolPermissionControlsAvailable = true,

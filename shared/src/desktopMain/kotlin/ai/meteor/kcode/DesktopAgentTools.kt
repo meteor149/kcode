@@ -22,6 +22,7 @@ import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
 import ai.meteor.kcode.skill.skillTools
+import ai.meteor.kcode.artifact.createDesktopArtifactRepository
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.io.Sink
@@ -41,6 +42,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
     val fileSystem = DesktopAgentWorkspaceFileSystem(workspace)
     val skillWorkspace = DesktopAgentWorkspace(workspace)
     val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "desktop-app-data")
+    val artifactRepository = createDesktopArtifactRepository()
     val webContainerController = DesktopWebContainerLauncher(workspace)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
@@ -67,6 +69,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
                     }
                 }))
                 skillTools(skillRuntime)
+                artifactTools(artifactRepository)
             },
             toolPermissionModeProvider = {
                 ToolPermissionMode.fromCode(settingsStore.load().toolPermissionMode)
@@ -75,6 +78,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
             skillRuntime = skillRuntime,
         ),
         webContainerController = webContainerController,
+        artifactRepository = artifactRepository,
     )
 }
 

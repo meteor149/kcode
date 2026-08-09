@@ -227,7 +227,15 @@ internal class AndroidShellExecutors(
     }
 
     private fun resolveAppWorkingDirectory(requestedPath: String?): Path {
-        val candidate = requestedPath?.let(Path::of) ?: activity.applicationContext.filesDir.toPath()
+        val candidate = when {
+            requestedPath == null -> activity.applicationContext.filesDir.toPath()
+            requestedPath == "/workspace" || requestedPath.startsWith("/workspace/") -> {
+                val root = activity.applicationContext.filesDir.toPath().resolve("agent_workspace")
+                val relative = requestedPath.removePrefix("/workspace").trimStart('/')
+                relative.split('/').filter(String::isNotEmpty).fold(root, Path::resolve)
+            }
+            else -> Path.of(requestedPath)
+        }
         val directory = candidate.toRealPath()
         require(Files.isDirectory(directory)) { "Working directory does not exist: $directory" }
         return directory

@@ -42,7 +42,7 @@ class AndroidAgentFileToolsTest {
     @Test
     fun koogToolsReadWriteEditAndListAtRealAbsolutePaths() = runBlocking {
         val physicalRoot = Files.createTempDirectory("kcode-agent-files")
-        val fileSystem = AndroidAgentFileSystem
+        val fileSystem = AndroidAgentFileSystem()
         val notesDirectory = physicalRoot.resolve("notes")
         val notesFile = notesDirectory.resolve("today.md")
 
@@ -68,7 +68,7 @@ class AndroidAgentFileToolsTest {
     @Test
     fun mediaToolReturnsPngAsNativeImageAttachment() = runBlocking {
         val physicalRoot = Files.createTempDirectory("kcode-agent-files")
-        val fileSystem = AndroidAgentFileSystem
+        val fileSystem = AndroidAgentFileSystem()
         val imageFile = physicalRoot.resolve("images/sample.png")
         val bytes = byteArrayOf(
             0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -94,7 +94,7 @@ class AndroidAgentFileToolsTest {
 
     @Test
     fun mediaToolReturnsMp4AsNativeVideoAttachment() = runBlocking {
-        val fileSystem = AndroidAgentFileSystem
+        val fileSystem = AndroidAgentFileSystem()
         val videoFile = Files.createTempDirectory("kcode-agent-files").resolve("sample.mp4")
         val bytes = byteArrayOf(
             0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
@@ -114,7 +114,7 @@ class AndroidAgentFileToolsTest {
 
     @Test
     fun acceptsAnyRealAbsolutePathAllowedByTheOperatingSystem() = runBlocking {
-        val fileSystem = AndroidAgentFileSystem
+        val fileSystem = AndroidAgentFileSystem()
         val firstRoot = Files.createTempDirectory("kcode-agent-files-first")
         val secondRoot = Files.createTempDirectory("kcode-agent-files-second")
         val firstFile = firstRoot.resolve("first.txt")
@@ -126,6 +126,22 @@ class AndroidAgentFileToolsTest {
         assertEquals("first", Files.readAllBytes(firstFile).decodeToString())
         assertEquals("second", Files.readAllBytes(secondFile).decodeToString())
         assertFailsWith<IllegalArgumentException> { fileSystem.fromAbsolutePathString("relative/file.txt") }
+        Unit
+    }
+
+    @Test
+    fun mapsVirtualWorkspaceToWebContainerWorkspace() = runBlocking {
+        val physicalRoot = Files.createTempDirectory("kcode-web-workspace")
+        val fileSystem = AndroidAgentFileSystem(physicalRoot)
+        val virtual = "/workspace/demo/index.html"
+
+        fileSystem.writeBytes(fileSystem.fromAbsolutePathString(virtual), "<html></html>".encodeToByteArray())
+
+        assertEquals("<html></html>", Files.readAllBytes(physicalRoot.resolve("demo/index.html")).decodeToString())
+        assertEquals(virtual, fileSystem.toAbsolutePathString(physicalRoot.resolve("demo/index.html")))
+        assertFailsWith<IllegalArgumentException> {
+            fileSystem.fromAbsolutePathString("/workspace/../escape.html")
+        }
         Unit
     }
 
