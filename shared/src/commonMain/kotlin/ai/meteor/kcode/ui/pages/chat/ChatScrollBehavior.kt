@@ -38,47 +38,27 @@ internal class StreamScrollFollower {
         }
     }
 
-    fun shouldScrollProgrammatically(
-        reverseLayout: Boolean,
-        reason: ConversationFollowReason,
-    ): Boolean = followLatest && (
-        !reverseLayout || reason == ConversationFollowReason.MESSAGE_ADDED
-    )
+    fun shouldScrollProgrammatically(): Boolean = followLatest
 }
 
-internal enum class ConversationFollowReason {
-    MESSAGE_ADDED,
-    CONTENT_UPDATED,
-}
+internal fun LazyListState.isAtConversationBottom(): Boolean = !canScrollForward
 
-internal fun LazyListState.isAtConversationBottom(reverseLayout: Boolean): Boolean =
-    if (reverseLayout) {
-        firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset <= 1
-    } else {
-        !canScrollForward
-    }
+internal suspend fun LazyListState.animateToConversationBottom(targetIndex: Int) =
+    animateToBottom(targetIndex)
 
-internal suspend fun LazyListState.animateToConversationBottom(reverseLayout: Boolean, targetIndex: Int) {
-    if (reverseLayout) {
-        animateScrollToItem(0)
-    } else {
-        animateToBottom(targetIndex)
-    }
-}
-
-internal suspend fun LazyListState.scrollToConversationBottom(reverseLayout: Boolean, targetIndex: Int) {
+internal suspend fun LazyListState.scrollToConversationBottom(targetIndex: Int) {
     if (targetIndex < 0) return
-    if (reverseLayout) {
-        scrollToItem(0)
-    } else {
+    var layout = layoutInfo
+    var target = layout.visibleItemsInfo.lastOrNull { it.index == targetIndex }
+    if (target == null) {
         scrollToItem(targetIndex)
-        val layout = layoutInfo
-        val target = layout.visibleItemsInfo.lastOrNull { it.index == targetIndex } ?: return
-        val remainingDistance = (
-            target.offset + target.size + layout.afterContentPadding - layout.viewportEndOffset
-        ).coerceAtLeast(0)
-        if (remainingDistance > 0) scrollBy(remainingDistance.toFloat() + 1f)
+        layout = layoutInfo
+        target = layout.visibleItemsInfo.lastOrNull { it.index == targetIndex } ?: return
     }
+    val remainingDistance = (
+        target.offset + target.size + layout.afterContentPadding - layout.viewportEndOffset
+    ).coerceAtLeast(0)
+    if (remainingDistance > 0) scrollBy(remainingDistance.toFloat() + 1f)
 }
 
 private suspend fun LazyListState.animateToBottom(targetIndex: Int) {
@@ -119,7 +99,7 @@ internal fun rememberPrepareForKeyboard(
 
     return remember(compact, listState, density, imeInsets) {
         {
-            val startedAtBottom = listState.isAtConversationBottom(reverseLayout = compact)
+            val startedAtBottom = listState.isAtConversationBottom()
             settleJob?.cancel()
             settleJob = if (compact && !startedAtBottom) {
                 scope.launch {
@@ -155,5 +135,5 @@ internal fun rememberPrepareForKeyboard(
 private suspend fun ConversationState.scrollToLatest(listState: LazyListState) {
     if (messages.isEmpty()) return
     val lastIndex = messages.lastIndex + if (isGenerating) 1 else 0
-    listState.animateToConversationBottom(reverseLayout = true, targetIndex = lastIndex)
+    listState.animateToConversationBottom(targetIndex = lastIndex)
 }

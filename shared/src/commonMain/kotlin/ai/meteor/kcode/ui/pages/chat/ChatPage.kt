@@ -119,15 +119,15 @@ internal fun ChatPane(
     LaunchedEffect(listIsDragged) {
         if (listIsDragged) {
             streamScrollFollower.stopFollowing()
-        } else if (listState.isAtConversationBottom(reverseLayout = compact)) {
+        } else if (listState.isAtConversationBottom()) {
             streamScrollFollower.followLatest = true
         }
     }
 
-    LaunchedEffect(listState, compact) {
+    LaunchedEffect(listState) {
         snapshotFlow {
             listState.isScrollInProgress to
-                listState.isAtConversationBottom(reverseLayout = compact)
+                listState.isAtConversationBottom()
         }.collect { (isScrollInProgress, isAtBottom) ->
             streamScrollFollower.onScrollStateChanged(
                 isScrollInProgress = isScrollInProgress,
@@ -136,19 +136,13 @@ internal fun ChatPane(
         }
     }
 
-    fun followConversationBottom(target: ConversationState, reason: ConversationFollowReason) {
-        val shouldScroll = streamScrollFollower.shouldScrollProgrammatically(
-            reverseLayout = compact,
-            reason = reason,
-        )
+    fun followConversationBottom(target: ConversationState) {
+        val shouldScroll = streamScrollFollower.shouldScrollProgrammatically()
         if (target.messages.isEmpty() || !shouldScroll) return
         streamScrollFollower.job?.cancel()
         streamScrollFollower.job = scope.launch {
             val trailingRow = if (target.isGenerating && target.isAwaitingFirstToken) 1 else 0
-            listState.scrollToConversationBottom(
-                reverseLayout = compact,
-                targetIndex = target.messages.lastIndex + trailingRow,
-            )
+            listState.scrollToConversationBottom(targetIndex = target.messages.lastIndex + trailingRow)
         }
     }
 
@@ -163,7 +157,7 @@ internal fun ChatPane(
             scope = scope,
             failureMessages = failureMessages,
             shouldFollowLatest = currentConversation == null ||
-                listState.isAtConversationBottom(reverseLayout = compact),
+                listState.isAtConversationBottom(),
             onFollowLatestChange = { streamScrollFollower.followLatest = it },
             followBottom = ::followConversationBottom,
         )
@@ -178,7 +172,7 @@ internal fun ChatPane(
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
-            shouldFollowLatest = listState.isAtConversationBottom(reverseLayout = compact),
+            shouldFollowLatest = listState.isAtConversationBottom(),
             onFollowLatestChange = { streamScrollFollower.followLatest = it },
             followBottom = ::followConversationBottom,
         )
@@ -210,7 +204,7 @@ internal fun ChatPane(
         if (count > 0) {
             streamScrollFollower.followLatest = true
             val lastIndex = count - 1 + if (conversation?.isGenerating == true) 1 else 0
-            listState.scrollToConversationBottom(reverseLayout = compact, targetIndex = lastIndex)
+            listState.scrollToConversationBottom(targetIndex = lastIndex)
         }
     }
 
@@ -285,7 +279,8 @@ internal fun ChatPane(
                         regenerate(message)
                     },
                 )
-                AnimatedVisibility(                    visible = !listState.isAtConversationBottom(reverseLayout = true),
+                AnimatedVisibility(
+                    visible = !listState.isAtConversationBottom(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(
                         bottom = composerOverlayBottom - KcodeSize.floatingShadowGutter,
                     ),
@@ -300,7 +295,7 @@ internal fun ChatPane(
                                 streamScrollFollower.followLatest = true
                                 scope.launch {
                                     val lastIndex = conversation.messages.lastIndex + if (conversation.isGenerating) 1 else 0
-                                    listState.animateToConversationBottom(reverseLayout = true, targetIndex = lastIndex)
+                                    listState.animateToConversationBottom(targetIndex = lastIndex)
                                 }
                             },
                             size = 46.dp,

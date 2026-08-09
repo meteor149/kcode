@@ -103,16 +103,11 @@ internal fun ConversationMessageList(
 ) {
     LazyColumn(
         state = listState,
-        reverseLayout = compact,
         modifier = modifier.pointerInput(Unit) { detectTapGestures { onBackgroundTap() } },
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(itemSpacing),
     ) {
-        if (compact && conversation.isGenerating && conversation.isAwaitingFirstToken) {
-            item(key = "thinking") { ThinkingRow(compact = true) }
-        }
-        val messages = if (compact) conversation.messages.asReversed() else conversation.messages
-        items(messages, key = { it.id }) { message ->
+        items(conversation.messages, key = { it.id }) { message ->
             MessageItem(
                 message = message,
                 compact = compact,
@@ -127,8 +122,8 @@ internal fun ConversationMessageList(
                 onRegenerate = { onRegenerate(message) },
             )
         }
-        if (!compact && conversation.isGenerating && conversation.isAwaitingFirstToken) {
-            item(key = "thinking") { ThinkingRow() }
+        if (conversation.isGenerating && conversation.isAwaitingFirstToken) {
+            item(key = "thinking") { ThinkingRow(compact = compact) }
         }
     }
 }

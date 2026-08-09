@@ -40,26 +40,13 @@ class StreamScrollFollowerTest {
     }
 
     @Test
-    fun reverseLayoutOnlyScrollsProgrammaticallyForNewMessages() {
+    fun programmaticScrollRequiresFollowingToBeEnabled() {
         val follower = StreamScrollFollower()
 
-        assertTrue(
-            follower.shouldScrollProgrammatically(
-                reverseLayout = true,
-                reason = ConversationFollowReason.MESSAGE_ADDED,
-            )
-        )
-        assertFalse(
-            follower.shouldScrollProgrammatically(
-                reverseLayout = true,
-                reason = ConversationFollowReason.CONTENT_UPDATED,
-            )
-        )
-        assertTrue(
-            follower.shouldScrollProgrammatically(
-                reverseLayout = false,
-                reason = ConversationFollowReason.CONTENT_UPDATED,
-            )
-        )
+        assertTrue(follower.shouldScrollProgrammatically())
+
+        follower.stopFollowing()
+
+        assertFalse(follower.shouldScrollProgrammatically())
     }
 }
