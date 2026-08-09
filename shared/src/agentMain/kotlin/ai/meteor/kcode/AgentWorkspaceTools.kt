@@ -9,6 +9,12 @@ interface AgentWorkspace {
     suspend fun readText(path: String): String
     suspend fun writeText(path: String, content: String)
     suspend fun list(path: String): List<AgentWorkspaceEntry>
+
+    suspend fun canonicalize(path: String): String = path
+
+    suspend fun readText(path: String, maxBytes: Int): String = readText(path).also { contents ->
+        require(contents.encodeToByteArray().size <= maxBytes) { "File exceeds $maxBytes bytes: $path" }
+    }
 }
 
 data class AgentWorkspaceEntry(

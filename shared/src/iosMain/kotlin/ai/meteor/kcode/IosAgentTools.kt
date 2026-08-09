@@ -12,6 +12,8 @@ import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.io.normalizeWorkspacePath
+import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
+import ai.meteor.kcode.skill.skillTools
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -66,6 +68,7 @@ internal fun createIosKoogChatRuntime(
     presentingViewController: () -> UIViewController?,
 ): KcodeAgentRuntime {
     val workspace = IosAgentWorkspace(workspaceRoot)
+    val skillRuntime = createWorkspaceSkillRuntime(workspace, "ios-app-data")
     val webContainerController = IosWebContainerLauncher(workspaceRoot, presentingViewController)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
@@ -84,17 +87,19 @@ internal fun createIosKoogChatRuntime(
                         )
                     }
                 }))
+                skillTools(skillRuntime)
             },
             toolPermissionModeProvider = { permissionState.mode },
             toolCallApprover = ToolCallApprover { request ->
                 confirmIosToolCall(presentingViewController, request)
             },
+            skillRuntime = skillRuntime,
         ),
         webContainerController = webContainerController,
     )
 }
 
-private class IosAgentWorkspace(
+internal class IosAgentWorkspace(
     rootPath: String,
 ) : AgentWorkspace {
     private val root = Path(rootPath)

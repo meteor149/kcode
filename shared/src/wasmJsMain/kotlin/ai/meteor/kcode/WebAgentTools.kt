@@ -27,6 +27,8 @@ import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.io.normalizeWorkspacePath
+import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
+import ai.meteor.kcode.skill.skillTools
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
 import kotlinx.browser.document
@@ -68,6 +70,7 @@ internal fun createWebKoogChatRuntime(
     permissionState: WebToolPermissionState,
 ): KcodeAgentRuntime {
     val workspace = WebAgentWorkspace()
+    val skillRuntime = createWorkspaceSkillRuntime(workspace, "browser-app-data")
     val webContainerController = BrowserWebContainerLauncher(workspace)
     return KcodeAgentRuntime(
         chatService = KoogChatService(
@@ -86,6 +89,7 @@ internal fun createWebKoogChatRuntime(
                         )
                     }
                 }))
+                skillTools(skillRuntime)
             },
             toolPermissionModeProvider = { permissionState.mode },
             toolCallApprover = ToolCallApprover { request ->
@@ -97,6 +101,7 @@ internal fun createWebKoogChatRuntime(
                     },
                 )
             },
+            skillRuntime = skillRuntime,
         ),
         webContainerController = webContainerController,
     )
