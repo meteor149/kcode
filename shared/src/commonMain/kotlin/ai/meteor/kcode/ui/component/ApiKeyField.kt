@@ -12,19 +12,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.BasicSecureTextField
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 internal fun ApiKeyField(
@@ -34,6 +40,23 @@ internal fun ApiKeyField(
     onToggleVisibility: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val fieldState = rememberTextFieldState(initialText = value)
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+
+    LaunchedEffect(value) {
+        if (fieldState.text.toString() != value) {
+            fieldState.setTextAndPlaceCursorAtEnd(value)
+        }
+    }
+    LaunchedEffect(fieldState) {
+        snapshotFlow { fieldState.text.toString() }
+            .distinctUntilChanged()
+            .collect { updatedValue ->
+                if (updatedValue != currentValue) currentOnValueChange(updatedValue)
+            }
+    }
+
     Surface(
         shape = RoundedCornerShape(KcodeRadius.control),
         color = Color.White,
@@ -43,17 +66,19 @@ internal fun ApiKeyField(
             Modifier.fillMaxWidth().height(KcodeSize.touchTarget).padding(horizontal = KcodeSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+            BasicSecureTextField(
+                state = fieldState,
                 modifier = Modifier.weight(1f),
-                singleLine = true,
-                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                textObfuscationMode = if (showKey) {
+                    TextObfuscationMode.Visible
+                } else {
+                    TextObfuscationMode.Hidden
+                },
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
                 cursorBrush = SolidColor(colors.primary),
-                decorationBox = { inner ->
+                decorator = { inner ->
                     Box {
-                        if (value.isEmpty()) {
+                        if (fieldState.text.isEmpty()) {
                             Text(
                                 text(UiText.EnterApiKey),
                                 color = colors.onSurfaceVariant.copy(alpha = .65f),
