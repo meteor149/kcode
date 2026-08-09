@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             KcodeApp(
                 chatService = runtime.chatService,
+                generationRunner = (application as KcodeApplication).generationRunner,
                 webContainerController = runtime.webContainerController,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,

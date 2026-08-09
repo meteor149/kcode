@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="generation_notification_channel">模型响应</string>
+    <string name="generation_notification_title">kcode 正在生成响应</string>
+    <string name="generation_notification_text">应用进入后台后，响应仍会继续生成。</string>
+</resources>

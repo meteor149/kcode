@@ -4,6 +4,7 @@ package ai.meteor.kcode.ui.pages.chat
 import ai.meteor.kcode.ui.state.ConversationState
 
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.ChatServiceUnavailable
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.meteor.kcode.history.ConversationHistoryRepository
@@ -31,6 +32,7 @@ internal fun sendMessage(
     conversation: ConversationState?,
     onSendToNew: (String) -> ConversationState,
     service: ChatService,
+    generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
@@ -73,8 +75,8 @@ internal fun sendMessage(
         history = history,
         prompt = cleanPrompt,
         service = service,
+        generationRunner = generationRunner,
         historyRepository = historyRepository,
-        scope = scope,
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = {
@@ -94,6 +96,7 @@ internal fun regenerateMessage(
     configuration: ModelConfiguration?,
     conversation: ConversationState?,
     service: ChatService,
+    generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
@@ -123,8 +126,8 @@ internal fun regenerateMessage(
         history = history,
         prompt = prompt,
         service = service,
+        generationRunner = generationRunner,
         historyRepository = historyRepository,
-        scope = scope,
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = { historyRepository.deleteMessagesFrom(target.id, answer.id) },
@@ -180,13 +183,13 @@ private fun launchStreamingResponse(
     history: List<ChatMessage>,
     prompt: String,
     service: ChatService,
+    generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
-    scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
     followBottom: (ConversationState) -> Unit,
     beforeRequest: suspend () -> Unit,
 ) {
-    target.runningJob = scope.launch {
+    target.runningJob = generationRunner.launch {
         runCatching { beforeRequest() }
         try {
             val answer = service.replyStreaming(

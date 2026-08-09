@@ -3,6 +3,7 @@
 package ai.meteor.kcode
 
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.UnsupportedConversationImageSaver
 import ai.meteor.kcode.history.ConversationHistoryRepository
@@ -16,10 +17,12 @@ import ai.meteor.kcode.ui.design.KcodeTheme
 import ai.meteor.kcode.ui.pages.KcodeMain
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 
 @Composable
 fun KcodeApp(
     chatService: ChatService,
+    generationRunner: ChatGenerationRunner? = null,
     webContainerController: WebContainerController? = null,
     settingsStore: AppSettingsStore = TransientAppSettingsStore,
     historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
@@ -29,9 +32,12 @@ fun KcodeApp(
     onShellExecutionModeChanged: (ShellExecutionMode) -> Unit = {},
     onToolPermissionModeChanged: (ToolPermissionMode) -> Unit = {},
 ) {
+    val fallbackGenerationRunner = remember { ChatGenerationRunner() }
+    val activeGenerationRunner = generationRunner ?: fallbackGenerationRunner
     KcodeTheme {
         KcodeMain(
             chatService,
+            activeGenerationRunner,
             webContainerController,
             settingsStore,
             historyRepository,

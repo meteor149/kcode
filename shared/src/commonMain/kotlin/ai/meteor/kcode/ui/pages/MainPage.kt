@@ -5,6 +5,7 @@ package ai.meteor.kcode.ui.pages
 import ai.meteor.kcode.ui.design.Paper
 
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.chat.ChatGenerationRunner
 
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
@@ -52,6 +53,7 @@ import dev.chrisbanes.haze.rememberHazeState
 @Composable
 internal fun KcodeMain(
     chatService: ChatService,
+    generationRunner: ChatGenerationRunner,
     webContainerController: WebContainerController?,
     settingsStore: AppSettingsStore,
     historyRepository: ConversationHistoryRepository,
@@ -125,6 +127,7 @@ internal fun KcodeMain(
                                 compact = isCompact,
                                 conversation = active,
                                 service = chatService,
+                                generationRunner = generationRunner,
                                 configuration = configuration,
                                 onConfigurationChange = ::updateConfiguration,
                                 onMenu = { sidebarOpen = true },

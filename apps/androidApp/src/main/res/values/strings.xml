@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="generation_notification_channel">Model responses</string>
+    <string name="generation_notification_title">kcode is generating a response</string>
+    <string name="generation_notification_text">The response will continue while the app is in the background.</string>
+</resources>

@@ -6,6 +6,7 @@ import ai.meteor.kcode.ui.design.Paper
 import ai.meteor.kcode.ui.design.Ink
 
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.ui.state.ConversationState
 import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.design.KcodeSpacing
@@ -77,6 +78,7 @@ internal fun ChatPane(
     compact: Boolean,
     conversation: ConversationState?,
     service: ChatService,
+    generationRunner: ChatGenerationRunner,
     configuration: ModelConfiguration?,
     onConfigurationChange: (ModelConfiguration) -> Unit,
     onMenu: () -> Unit,
@@ -153,6 +155,7 @@ internal fun ChatPane(
             conversation = currentConversation,
             onSendToNew = onSendToNew,
             service = service,
+            generationRunner = generationRunner,
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
@@ -169,6 +172,7 @@ internal fun ChatPane(
             configuration = currentConfiguration,
             conversation = currentConversation,
             service = service,
+            generationRunner = generationRunner,
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
