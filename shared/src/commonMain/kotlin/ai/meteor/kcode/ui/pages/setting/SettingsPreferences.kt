@@ -13,10 +13,11 @@ import ai.meteor.kcode.ui.design.KcodeSpacing
 
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.ui.component.pressClickable
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -40,12 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 @Composable
 internal fun ShellExecutionSettings(
     selected: ShellExecutionMode,
@@ -109,7 +105,9 @@ private fun ShellModeRow(
             Text(shellModeTitle(mode), color = Ink, style = MaterialTheme.typography.bodyLarge)
             Text(description, Modifier.padding(top = KcodeSpacing.hair), color = SoftInk, style = MaterialTheme.typography.bodySmall)
         }
-        Text(if (selected) "✓" else "", color = LeafInk, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        if (selected) {
+            KcodeIcon(KcodeIconAsset.Check, LeafInk, Modifier.size(20.dp))
+        }
     }
 }
 
@@ -124,18 +122,7 @@ private fun SettingsWarningNotice(message: String, modifier: Modifier = Modifier
             Modifier.fillMaxWidth().padding(horizontal = KcodeSpacing.md, vertical = KcodeSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Canvas(Modifier.size(18.dp)) {
-                val strokeWidth = 1.5.dp.toPx()
-                drawCircle(Error.copy(alpha = .85f), size.minDimension * .42f, style = Stroke(strokeWidth))
-                drawLine(
-                    Error.copy(alpha = .85f),
-                    Offset(size.width * .5f, size.height * .28f),
-                    Offset(size.width * .5f, size.height * .57f),
-                    strokeWidth,
-                    StrokeCap.Round,
-                )
-                drawCircle(Error.copy(alpha = .85f), size.minDimension * .045f, Offset(size.width * .5f, size.height * .72f))
-            }
+            KcodeIcon(KcodeIconAsset.Info, Error.copy(alpha = .85f), Modifier.size(18.dp))
             Text(
                 message,
                 Modifier.padding(start = KcodeSpacing.sm).weight(1f),
@@ -192,6 +179,8 @@ private fun SettingsChoiceRow(icon: SecondarySettingsIcon, label: String, select
     ) {
         SecondarySettingsIcon(icon, selected)
         Text(label, Modifier.padding(start = KcodeSpacing.md).weight(1f), color = Ink, style = MaterialTheme.typography.bodyLarge)
-        Text(if (selected) "✓" else "", color = LeafInk, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        if (selected) {
+            KcodeIcon(KcodeIconAsset.Check, LeafInk, Modifier.size(20.dp))
+        }
     }
 }

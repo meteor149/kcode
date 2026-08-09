@@ -16,6 +16,8 @@ import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.design.KcodeSpacing
 
 import ai.meteor.kcode.ui.component.PressScaleStyle
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.ui.component.pressScale
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
@@ -26,7 +28,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -67,12 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -305,31 +301,11 @@ private fun SidebarDestination(icon: SidebarIcon, label: String) {
 
 @Composable
 private fun SidebarLineIcon(icon: SidebarIcon) {
-    Canvas(Modifier.size(25.dp)) {
-        val stroke = size.minDimension * .075f
-        when (icon) {
-            SidebarIcon.Chats -> {
-                drawCircle(Ink, size.minDimension * .27f, Offset(size.width * .38f, size.height * .39f), style = Stroke(stroke))
-                drawCircle(Ink, size.minDimension * .25f, Offset(size.width * .62f, size.height * .59f), style = Stroke(stroke))
-                drawLine(Ink, Offset(size.width * .18f, size.height * .56f), Offset(size.width * .11f, size.height * .72f), stroke)
-                drawLine(Ink, Offset(size.width * .11f, size.height * .72f), Offset(size.width * .31f, size.height * .66f), stroke)
-                drawLine(Ink, Offset(size.width * .78f, size.height * .73f), Offset(size.width * .88f, size.height * .84f), stroke)
-            }
-            SidebarIcon.Artifacts -> {
-                drawCircle(Ink, size.width * .17f, Offset(size.width * .27f, size.height * .63f), style = Stroke(stroke))
-                drawCircle(Ink, size.width * .15f, Offset(size.width * .56f, size.height * .33f), style = Stroke(stroke))
-                drawRoundRect(
-                    Ink,
-                    Offset(size.width * .58f, size.height * .56f),
-                    Size(size.width * .29f, size.height * .3f),
-                    CornerRadius(size.width * .04f),
-                    style = Stroke(stroke),
-                )
-                drawLine(Ink, Offset(size.width * .39f, size.height * .52f), Offset(size.width * .48f, size.height * .4f), stroke)
-                drawLine(Ink, Offset(size.width * .55f, size.height * .48f), Offset(size.width * .68f, size.height * .57f), stroke)
-            }
-        }
-    }
+    KcodeIcon(
+        asset = if (icon == SidebarIcon.Chats) KcodeIconAsset.Chat else KcodeIconAsset.Artifacts,
+        tint = Ink,
+        modifier = Modifier.size(25.dp),
+    )
 }
 
 @Composable
@@ -354,7 +330,7 @@ private fun SidebarBottomActions(onNew: () -> Unit, onSettings: () -> Unit) {
             shadowElevation = 5.dp,
         ) {
             Box(contentAlignment = Alignment.Center) {
-                SettingsTuneIcon()
+                KcodeIcon(KcodeIconAsset.Settings, Ink, Modifier.size(24.dp))
             }
         }
         Surface(
@@ -371,7 +347,7 @@ private fun SidebarBottomActions(onNew: () -> Unit, onSettings: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Text("+", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Light)
+                KcodeIcon(KcodeIconAsset.Add, Color.White, Modifier.size(22.dp))
                 Text(
                     text(UiText.NewChat),
                     Modifier.padding(start = KcodeSpacing.xs),
@@ -381,48 +357,6 @@ private fun SidebarBottomActions(onNew: () -> Unit, onSettings: () -> Unit) {
                 )
             }
         }
-    }
-}
-
-/**
- * Runtime-safe rendering of the settings_tune.svg artwork. Compose Resources
- * keeps the SVG as the canonical asset, while drawing the same geometry here
- * avoids platform-specific SVG decoder failures when the drawer is composed.
- */
-@Composable
-private fun SettingsTuneIcon() {
-    Canvas(Modifier.size(24.dp)) {
-        val stroke = 1.8.dp.toPx()
-        val knobRadius = 2.dp.toPx()
-        val roundStroke = Stroke(width = stroke)
-
-        fun rail(startX: Float, endX: Float, y: Float) {
-            drawLine(
-                color = Ink,
-                start = Offset(startX.dp.toPx(), y.dp.toPx()),
-                end = Offset(endX.dp.toPx(), y.dp.toPx()),
-                strokeWidth = stroke,
-                cap = StrokeCap.Round,
-            )
-        }
-
-        fun knob(x: Float, y: Float) {
-            val center = Offset(x.dp.toPx(), y.dp.toPx())
-            drawCircle(color = Paper, radius = knobRadius, center = center)
-            drawCircle(color = Ink, radius = knobRadius, center = center, style = roundStroke)
-        }
-
-        rail(4f, 8.25f, 6.75f)
-        rail(12.25f, 20f, 6.75f)
-        knob(10.25f, 6.75f)
-
-        rail(4f, 14.25f, 12f)
-        rail(18.25f, 20f, 12f)
-        knob(16.25f, 12f)
-
-        rail(4f, 6.25f, 17.25f)
-        rail(10.25f, 20f, 17.25f)
-        knob(8.25f, 17.25f)
     }
 }
 
@@ -554,25 +488,11 @@ private fun SwipeConversationAction(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(Modifier.size(14.dp)) {
-            val stroke = size.minDimension * .12f
-            if (isPin) {
-                drawLine(contentColor, Offset(size.width * .28f, size.height * .28f), Offset(size.width * .72f, size.height * .72f), stroke, StrokeCap.Round)
-                drawLine(contentColor, Offset(size.width * .47f, size.height * .16f), Offset(size.width * .84f, size.height * .53f), stroke, StrokeCap.Round)
-                drawLine(contentColor, Offset(size.width * .2f, size.height * .6f), Offset(size.width * .55f, size.height * .25f), stroke, StrokeCap.Round)
-                drawLine(contentColor, Offset(size.width * .35f, size.height * .65f), Offset(size.width * .14f, size.height * .86f), stroke, StrokeCap.Round)
-            } else {
-                drawRoundRect(
-                    contentColor,
-                    topLeft = Offset(size.width * .24f, size.height * .3f),
-                    size = Size(size.width * .52f, size.height * .57f),
-                    cornerRadius = CornerRadius(size.width * .08f),
-                    style = Stroke(stroke),
-                )
-                drawLine(contentColor, Offset(size.width * .17f, size.height * .24f), Offset(size.width * .83f, size.height * .24f), stroke, StrokeCap.Round)
-                drawLine(contentColor, Offset(size.width * .39f, size.height * .13f), Offset(size.width * .61f, size.height * .13f), stroke, StrokeCap.Round)
-            }
-        }
+        KcodeIcon(
+            if (isPin) KcodeIconAsset.Pin else KcodeIconAsset.Delete,
+            contentColor,
+            Modifier.size(14.dp),
+        )
         Text(
             label,
             Modifier.padding(start = 4.dp),
@@ -585,11 +505,5 @@ private fun SwipeConversationAction(
 
 @Composable
 private fun PinnedConversationIcon(modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = size.minDimension * .11f
-        drawLine(LeafInk, Offset(size.width * .28f, size.height * .28f), Offset(size.width * .72f, size.height * .72f), stroke, StrokeCap.Round)
-        drawLine(LeafInk, Offset(size.width * .47f, size.height * .16f), Offset(size.width * .84f, size.height * .53f), stroke, StrokeCap.Round)
-        drawLine(LeafInk, Offset(size.width * .2f, size.height * .6f), Offset(size.width * .55f, size.height * .25f), stroke, StrokeCap.Round)
-        drawLine(LeafInk, Offset(size.width * .35f, size.height * .65f), Offset(size.width * .14f, size.height * .86f), stroke, StrokeCap.Round)
-    }
+    KcodeIcon(KcodeIconAsset.Pin, LeafInk, modifier)
 }

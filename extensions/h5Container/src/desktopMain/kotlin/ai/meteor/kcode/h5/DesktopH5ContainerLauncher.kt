@@ -115,9 +115,9 @@ private class DesktopPreviewSession private constructor(
             *{box-sizing:border-box}html,body{height:100%;margin:0;background:#fff;font-family:system-ui,sans-serif;color:#202622}
             body{display:grid;grid-template-rows:56px 1fr}.bar{display:flex;align-items:center;padding:0 18px;border-bottom:1px solid #e4e5e2;gap:14px}
             .name{font-size:14px;font-weight:650;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.path{font:11px ui-monospace,monospace;color:#727570}
-            .live{font-size:11px;color:#3e7653}.live:before{content:'●';color:#8fd6a8;margin-right:6px}button{border:0;background:transparent;font-size:20px;cursor:pointer;color:#202622;padding:8px}
+            .live{display:flex;align-items:center;gap:6px;font-size:11px;color:#3e7653}.live:before{content:'';width:8px;height:8px;border-radius:50%;background:#8fd6a8}button{display:grid;place-items:center;width:40px;height:40px;border:0;border-radius:50%;background:transparent;cursor:pointer;color:#202622;padding:8px}button:hover{background:#f2f3f1}button svg{width:22px;height:22px}
             iframe{width:100%;height:100%;border:0;background:#fff}</style></head><body>
-            <header class="bar"><div class="name">${escapeHtml(title)}</div><div class="path">/workspace/${escapeHtml(entryPath)}</div><div class="live">Live</div><button onclick="document.querySelector('iframe').contentWindow.location.reload()" aria-label="Reload">↻</button></header>
+            <header class="bar"><div class="name">${escapeHtml(title)}</div><div class="path">/workspace/${escapeHtml(entryPath)}</div><div class="live">Live</div><button onclick="document.querySelector('iframe').contentWindow.location.reload()" aria-label="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.25 8.25A8 8 0 1 0 19.55 15.2M19.25 4.85v3.4h-3.4"/></svg></button></header>
             <iframe src="${escapeHtml(entryUrl)}" allow="clipboard-read; clipboard-write" title="${escapeHtml(title)}"></iframe></body></html>
         """.trimIndent()
 

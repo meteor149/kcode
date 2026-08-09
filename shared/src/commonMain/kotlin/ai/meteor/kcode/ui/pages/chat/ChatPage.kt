@@ -10,6 +10,8 @@ import ai.meteor.kcode.ui.state.ConversationState
 import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.design.KcodeSpacing
 import ai.meteor.kcode.ui.component.FloatingCircleButton
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ModelConfiguration
@@ -62,9 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 @Composable
 internal fun ChatPane(
@@ -283,7 +283,7 @@ internal fun ChatPane(
                                 }
                             },
                             size = 46.dp,
-                        ) { Text("↓", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Light) }
+                        ) { KcodeIcon(KcodeIconAsset.ScrollDown, Ink, Modifier.size(22.dp)) }
                     }
                 }
                 MobileComposer(

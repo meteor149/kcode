@@ -15,6 +15,8 @@ import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.onLongPressAfterRelease
 import ai.meteor.kcode.ui.component.pressScale
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.localization.text
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -69,7 +71,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 /** Owns the transient multi-message selection state for one conversation. */
@@ -293,6 +294,6 @@ internal fun SelectionIndicator(selected: Boolean, modifier: Modifier = Modifier
             .border(1.5.dp, if (selected) LeafInk else SoftInk.copy(alpha = .7f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        if (selected) Text("✓", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        if (selected) KcodeIcon(KcodeIconAsset.Check, Color.White, Modifier.size(13.dp))
     }
 }

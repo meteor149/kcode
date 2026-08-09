@@ -15,6 +15,8 @@ import ai.meteor.kcode.model.modelOption
 import ai.meteor.kcode.model.modelsFor
 import ai.meteor.kcode.ui.component.BubblePlacement
 import ai.meteor.kcode.ui.component.PressScaleStyle
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.ui.component.pressClickable
 import ai.meteor.kcode.ui.component.pressScale
 import ai.meteor.kcode.localization.UiText
@@ -52,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 private enum class ModelPopupPage { Configuration, Models }
 
@@ -112,7 +113,7 @@ internal fun ModelConfigurationBubble(
                         .padding(horizontal = KcodeSpacing.sm, vertical = KcodeSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("‹", Modifier.width(KcodeSpacing.xl), color = Ink, fontSize = 28.sp, lineHeight = 28.sp)
+                    KcodeIcon(KcodeIconAsset.Back, Ink, Modifier.width(KcodeSpacing.xl).size(18.dp))
                     Column {
                         Text(text(UiText.ChooseModel), color = Ink, style = MaterialTheme.typography.titleMedium)
                         Text(providerName(configuration.provider), Modifier.padding(top = KcodeSpacing.hair), color = SoftInk, style = MaterialTheme.typography.bodySmall)
@@ -168,7 +169,7 @@ internal fun ModelBadge(
                 color = SoftInk,
                 style = MaterialTheme.typography.labelSmall,
             )
-            Text("⌄", Modifier.padding(start = KcodeSpacing.hair), color = SoftInk, style = MaterialTheme.typography.labelSmall)
+            KcodeIcon(KcodeIconAsset.ChevronDown, SoftInk, Modifier.padding(start = KcodeSpacing.hair).size(14.dp))
         }
         if (configuration != null) {
             ModelConfigurationBubble(

@@ -1,6 +1,7 @@
 package ai.meteor.kcode.h5
 
 import android.app.Activity
+import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -20,6 +21,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.net.Uri
 import android.widget.LinearLayout
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -70,7 +73,7 @@ class H5ContainerActivity : Activity() {
             setPadding(dp(8), 0, dp(8), 0)
             setBackgroundColor(Color.WHITE)
         }
-        toolbar.addView(toolbarButton("×", getString(R.string.h5_preview_close)) { finish() })
+        toolbar.addView(toolbarButton(R.drawable.icon_close, getString(R.string.h5_preview_close)) { finish() })
 
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -95,15 +98,23 @@ class H5ContainerActivity : Activity() {
         identity.addView(pathView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         toolbar.addView(identity, LinearLayout.LayoutParams(0, dp(48), 1f))
 
-        val live = TextView(this).apply {
-            text = "● ${getString(R.string.h5_preview_live)}"
+        val live = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setTextColor(Color.rgb(62, 118, 83))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             setPadding(dp(8), 0, dp(5), 0)
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.icon_live)
+                imageTintList = ColorStateList.valueOf(Color.rgb(62, 118, 83))
+            }, LinearLayout.LayoutParams(dp(8), dp(8)))
+            addView(TextView(context).apply {
+                text = getString(R.string.h5_preview_live)
+                setTextColor(Color.rgb(62, 118, 83))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setPadding(dp(5), 0, 0, 0)
+            })
         }
         toolbar.addView(live, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
-        toolbar.addView(toolbarButton("↻", getString(R.string.h5_preview_reload)) { webView.reload() })
+        toolbar.addView(toolbarButton(R.drawable.icon_reload, getString(R.string.h5_preview_reload)) { webView.reload() })
         root.addView(toolbar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
         root.addView(View(this).apply { setBackgroundColor(Color.rgb(228, 229, 226)) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
 
@@ -163,13 +174,13 @@ class H5ContainerActivity : Activity() {
         webView.loadUrl(H5Workspace.previewUrl(H5Workspace.relativePath(this, entry)))
     }
 
-    private fun toolbarButton(symbol: String, description: String, action: () -> Unit): TextView =
-        TextView(this).apply {
-            text = symbol
+    private fun toolbarButton(drawableRes: Int, description: String, action: () -> Unit): ImageButton =
+        ImageButton(this).apply {
+            setImageResource(drawableRes)
+            imageTintList = ColorStateList.valueOf(Color.rgb(32, 38, 34))
             contentDescription = description
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(32, 38, 34))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 25f)
+            scaleType = ImageView.ScaleType.CENTER
+            setPadding(dp(11), dp(11), dp(11), dp(11))
             isClickable = true
             isFocusable = true
             setOnClickListener { action() }

@@ -14,11 +14,12 @@ import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.tools.search.WebSearchProvider
 import ai.meteor.kcode.ui.component.pressClickable
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.providerName
 import ai.meteor.kcode.localization.text
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -42,11 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.meteor.kcode.ui.component.FloatingCircleButton
@@ -63,40 +59,11 @@ internal fun SettingsWindowHeader(
             modifier = Modifier.align(Alignment.CenterStart).padding(start = 20.dp),
             size = KcodeSize.touchTarget,
         ) {
-            Canvas(Modifier.size(19.dp)) {
-                val stroke = size.minDimension * .085f
-                if (isRoot) {
-                    drawLine(
-                        Ink,
-                        Offset(size.width * .2f, size.height * .2f),
-                        Offset(size.width * .8f, size.height * .8f),
-                        stroke,
-                        StrokeCap.Round
-                    )
-                    drawLine(
-                        Ink,
-                        Offset(size.width * .8f, size.height * .2f),
-                        Offset(size.width * .2f, size.height * .8f),
-                        stroke,
-                        StrokeCap.Round
-                    )
-                } else {
-                    drawLine(
-                        Ink,
-                        Offset(size.width * .68f, size.height * .15f),
-                        Offset(size.width * .3f, size.height * .5f),
-                        stroke,
-                        StrokeCap.Round
-                    )
-                    drawLine(
-                        Ink,
-                        Offset(size.width * .3f, size.height * .5f),
-                        Offset(size.width * .68f, size.height * .85f),
-                        stroke,
-                        StrokeCap.Round
-                    )
-                }
-            }
+            KcodeIcon(
+                if (isRoot) KcodeIconAsset.Close else KcodeIconAsset.Back,
+                Ink,
+                Modifier.size(19.dp),
+            )
         }
         Text(
             title,
@@ -183,23 +150,7 @@ private fun SettingsNavigationRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Canvas(Modifier.size(width = 10.dp, height = 18.dp)) {
-            val stroke = 1.8.dp.toPx()
-            drawLine(
-                SoftInk.copy(alpha = .42f),
-                Offset(size.width * .25f, size.height * .14f),
-                Offset(size.width * .76f, size.height * .5f),
-                stroke,
-                StrokeCap.Round,
-            )
-            drawLine(
-                SoftInk.copy(alpha = .42f),
-                Offset(size.width * .76f, size.height * .5f),
-                Offset(size.width * .25f, size.height * .86f),
-                stroke,
-                StrokeCap.Round,
-            )
-        }
+        KcodeIcon(KcodeIconAsset.ChevronRight, SoftInk.copy(alpha = .42f), Modifier.size(width = 10.dp, height = 18.dp))
     }
 }
 
@@ -207,55 +158,11 @@ private enum class SettingsGlyph { Language, Model, Search, Shell }
 
 @Composable
 private fun SettingsGlyphIcon(icon: SettingsGlyph) {
-    Canvas(Modifier.size(26.dp)) {
-        val color = SoftInk.copy(alpha = .82f)
-        val strokeWidth = 1.8.dp.toPx()
-        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-        when (icon) {
-            SettingsGlyph.Language -> {
-                drawCircle(color, radius = size.minDimension * .41f, style = stroke)
-                drawOval(
-                    color,
-                    topLeft = Offset(size.width * .32f, size.height * .09f),
-                    size = Size(size.width * .36f, size.height * .82f),
-                    style = stroke,
-                )
-                drawLine(color, Offset(size.width * .12f, size.height * .5f), Offset(size.width * .88f, size.height * .5f), strokeWidth, StrokeCap.Round)
-            }
-            SettingsGlyph.Model -> {
-                val radius = size.minDimension * .105f
-                val centers = listOf(
-                    Offset(size.width * .25f, size.height * .28f),
-                    Offset(size.width * .74f, size.height * .25f),
-                    Offset(size.width * .5f, size.height * .75f),
-                )
-                drawLine(color, centers[0], centers[1], strokeWidth, StrokeCap.Round)
-                drawLine(color, centers[1], centers[2], strokeWidth, StrokeCap.Round)
-                drawLine(color, centers[2], centers[0], strokeWidth, StrokeCap.Round)
-                centers.forEach { drawCircle(color, radius, it, style = stroke) }
-            }
-            SettingsGlyph.Search -> {
-                drawCircle(color, radius = size.minDimension * .3f, center = Offset(size.width * .43f, size.height * .42f), style = stroke)
-                drawLine(
-                    color,
-                    Offset(size.width * .65f, size.height * .65f),
-                    Offset(size.width * .88f, size.height * .88f),
-                    strokeWidth,
-                    StrokeCap.Round,
-                )
-            }
-            SettingsGlyph.Shell -> {
-                drawRoundRect(
-                    color,
-                    topLeft = Offset(size.width * .08f, size.height * .17f),
-                    size = Size(size.width * .84f, size.height * .66f),
-                    cornerRadius = CornerRadius(size.width * .1f),
-                    style = stroke,
-                )
-                drawLine(color, Offset(size.width * .25f, size.height * .38f), Offset(size.width * .4f, size.height * .5f), strokeWidth, StrokeCap.Round)
-                drawLine(color, Offset(size.width * .4f, size.height * .5f), Offset(size.width * .25f, size.height * .62f), strokeWidth, StrokeCap.Round)
-                drawLine(color, Offset(size.width * .53f, size.height * .63f), Offset(size.width * .72f, size.height * .63f), strokeWidth, StrokeCap.Round)
-            }
-        }
+    val asset = when (icon) {
+        SettingsGlyph.Language -> KcodeIconAsset.Language
+        SettingsGlyph.Model -> KcodeIconAsset.Model
+        SettingsGlyph.Search -> KcodeIconAsset.Search
+        SettingsGlyph.Shell -> KcodeIconAsset.Terminal
     }
+    KcodeIcon(asset, SoftInk.copy(alpha = .82f), Modifier.size(26.dp))
 }

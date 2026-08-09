@@ -284,8 +284,10 @@ internal fun MessageItem(
     }
     Box(
         Modifier.fillMaxWidth()
-            .clip(selectionShape)
-            .background(if (selected) Leaf.copy(alpha = .1f) else Color.Transparent),
+            .background(
+                color = if (selected) Leaf.copy(alpha = .1f) else Color.Transparent,
+                shape = selectionShape,
+            ),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),

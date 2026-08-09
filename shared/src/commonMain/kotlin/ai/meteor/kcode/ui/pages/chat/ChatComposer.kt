@@ -18,6 +18,8 @@ import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.model.modelOption
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.ui.component.BubblePlacement
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressClickable
 import ai.meteor.kcode.ui.component.pressScale
@@ -25,7 +27,6 @@ import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.modelName
 import ai.meteor.kcode.localization.text
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -70,7 +71,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -82,13 +82,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 @Composable
 private fun MobileModelSelector(
     configuration: ModelConfiguration?,
@@ -212,7 +210,7 @@ internal fun MobileComposer(
                     Modifier.size(actionSize).clip(CircleShape).background(Mist),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("＋", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Light)
+                    KcodeIcon(KcodeIconAsset.Add, Ink, Modifier.size(20.dp))
                 }
                 if (toolPermissionControlsAvailable) {
                     Spacer(Modifier.width(KcodeSpacing.hair))
@@ -249,9 +247,9 @@ internal fun MobileComposer(
                     ),
                 ) {
                     if (generating) {
-                        StopGlyph(size = if (extraCompact) 12.5.dp else 14.dp)
+                        KcodeIcon(KcodeIconAsset.Stop, Ink.copy(alpha = .94f), Modifier.size(if (extraCompact) 12.5.dp else 14.dp))
                     } else {
-                        Text("↑", fontSize = 18.sp)
+                        KcodeIcon(KcodeIconAsset.Send, Ink, Modifier.size(18.dp))
                     }
                 }
             }
@@ -321,7 +319,7 @@ internal fun Composer(
                     Modifier.size(KcodeSize.compactControl).clip(CircleShape).background(Mist),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("＋", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Light)
+                    KcodeIcon(KcodeIconAsset.Add, Ink, Modifier.size(20.dp))
                 }
                 if (toolPermissionControlsAvailable) {
                     Spacer(Modifier.width(KcodeSpacing.hair))
@@ -356,9 +354,9 @@ internal fun Composer(
                     ),
                 ) {
                     if (generating) {
-                        StopGlyph(size = 12.5.dp)
+                        KcodeIcon(KcodeIconAsset.Stop, Ink.copy(alpha = .94f), Modifier.size(12.5.dp))
                     } else {
-                        Text("↑", fontSize = 18.sp)
+                        KcodeIcon(KcodeIconAsset.Send, Ink, Modifier.size(18.dp))
                     }
                 }
             }
@@ -436,54 +434,6 @@ private fun ToolPermissionModeButton(
     }
 }
 
-/**
- * A platform-independent stop mark. Font square glyphs vary in size and baseline,
- * so this uses cubic Bézier corners for a consistent soft-square silhouette.
- */
-@Composable
-private fun StopGlyph(size: Dp) {
-    Canvas(Modifier.size(size)) {
-        val side = this.size.minDimension
-        val inset = side * .035f
-        val left = inset
-        val top = inset
-        val right = side - inset
-        val bottom = side - inset
-        val radius = (right - left) * .29f
-        val control = radius * .5522848f
-
-        val path = Path().apply {
-            moveTo(left + radius, top)
-            lineTo(right - radius, top)
-            cubicTo(
-                right - radius + control, top,
-                right, top + radius - control,
-                right, top + radius,
-            )
-            lineTo(right, bottom - radius)
-            cubicTo(
-                right, bottom - radius + control,
-                right - radius + control, bottom,
-                right - radius, bottom,
-            )
-            lineTo(left + radius, bottom)
-            cubicTo(
-                left + radius - control, bottom,
-                left, bottom - radius + control,
-                left, bottom - radius,
-            )
-            lineTo(left, top + radius)
-            cubicTo(
-                left, top + radius - control,
-                left + radius - control, top,
-                left + radius, top,
-            )
-            close()
-        }
-        drawPath(path, color = Ink.copy(alpha = .94f))
-    }
-}
-
 @Composable
 private fun ActionRow(label: String, shortcut: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
@@ -498,7 +448,7 @@ private fun ActionRow(label: String, shortcut: String, onClick: () -> Unit) {
             .padding(horizontal = KcodeSpacing.sm, vertical = KcodeSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("＋", color = LeafInk, fontSize = 19.sp)
+        KcodeIcon(KcodeIconAsset.Add, LeafInk, Modifier.size(19.dp))
         Text(label, Modifier.padding(start = KcodeSpacing.xs).weight(1f), color = Ink, style = MaterialTheme.typography.labelLarge)
         Text(shortcut, color = SoftInk.copy(alpha = .65f), style = MaterialTheme.typography.labelSmall)
     }

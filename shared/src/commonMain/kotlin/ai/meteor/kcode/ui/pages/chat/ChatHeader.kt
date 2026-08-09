@@ -9,6 +9,8 @@ import ai.meteor.kcode.ui.design.Hairline
 import ai.meteor.kcode.ui.design.KcodeSpacing
 import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.component.FloatingCircleButton
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 
 import ai.meteor.kcode.ui.component.BubblePlacement
 import ai.meteor.kcode.ui.component.PressScaleStyle
@@ -18,7 +20,6 @@ import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
 import ai.meteor.kcode.model.ModelConfiguration
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,16 +52,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun DesktopChatHeader(
@@ -91,7 +89,7 @@ internal fun DesktopChatHeader(
                 description = text(UiText.Cancel),
                 onClick = onCancelSelection,
                 size = 42.dp,
-            ) { Text("×", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Light) }
+            ) { KcodeIcon(KcodeIconAsset.Close, Ink, Modifier.size(20.dp)) }
             Text(
                 text(UiText.SelectedMessages, selectedCount),
                 Modifier.padding(start = 12.dp).weight(1f),
@@ -121,7 +119,7 @@ internal fun DesktopChatHeader(
             return@Row
         }
 
-        QuietButton("☰", text(UiText.OpenSidebar), onMenu)
+        QuietButton(KcodeIconAsset.Menu, text(UiText.OpenSidebar), onMenu)
         Text(
             title,
             Modifier.padding(start = 13.dp).weight(1f),
@@ -131,7 +129,7 @@ internal fun DesktopChatHeader(
             overflow = TextOverflow.Ellipsis,
         )
         Box {
-            QuietButton("⇧", text(UiText.ExportConversation)) {
+            QuietButton(KcodeIconAsset.Share, text(UiText.ExportConversation)) {
                 if (hasMessages) exportExpanded = true
             }
             ExportOptionsBubble(
@@ -223,7 +221,7 @@ internal fun CompactChatHeader(
                 description = text(UiText.Cancel),
                 onClick = onCancelSelection,
                 size = if (extraCompact) 48.dp else 52.dp,
-            ) { Text("×", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.Light) }
+            ) { KcodeIcon(KcodeIconAsset.Close, Ink, Modifier.size(22.dp)) }
             Box {
                 Surface(
                     modifier = Modifier.height(if (extraCompact) 48.dp else 52.dp),
@@ -270,17 +268,7 @@ internal fun CompactChatHeader(
             onClick = onMenu,
             size = if (extraCompact) 48.dp else 52.dp,
         ) {
-            Canvas(Modifier.size(22.dp)) {
-                val stroke = size.minDimension * .09f
-                listOf(.25f, .5f, .75f).forEach { y ->
-                    drawLine(
-                        color = Ink,
-                        start = Offset(size.width * .16f, size.height * y),
-                        end = Offset(size.width * .84f, size.height * y),
-                        strokeWidth = stroke,
-                    )
-                }
-            }
+            KcodeIcon(KcodeIconAsset.Menu, Ink, Modifier.size(22.dp))
         }
         Surface(
             modifier = Modifier.height(if (extraCompact) 50.dp else 54.dp),
@@ -300,7 +288,7 @@ internal fun CompactChatHeader(
                         .clip(CircleShape).background(Ink)
                         .semantics { contentDescription = newChatDescription; role = Role.Button },
                     contentAlignment = Alignment.Center,
-                ) { Text("+", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Light) }
+                ) { KcodeIcon(KcodeIconAsset.Add, Color.White, Modifier.size(24.dp)) }
                 Box {
                     Box(
                         Modifier.size(width = if (extraCompact) 44.dp else 48.dp, height = if (extraCompact) 40.dp else 44.dp)
@@ -331,19 +319,11 @@ internal fun CompactChatHeader(
 
 @Composable
 internal fun ExportMark() {
-    Canvas(Modifier.size(21.dp)) {
-        val stroke = size.minDimension * .09f
-        drawLine(Ink, Offset(size.width * .5f, size.height * .08f), Offset(size.width * .5f, size.height * .66f), stroke)
-        drawLine(Ink, Offset(size.width * .27f, size.height * .31f), Offset(size.width * .5f, size.height * .08f), stroke)
-        drawLine(Ink, Offset(size.width * .73f, size.height * .31f), Offset(size.width * .5f, size.height * .08f), stroke)
-        drawLine(Ink, Offset(size.width * .16f, size.height * .6f), Offset(size.width * .16f, size.height * .9f), stroke)
-        drawLine(Ink, Offset(size.width * .84f, size.height * .6f), Offset(size.width * .84f, size.height * .9f), stroke)
-        drawLine(Ink, Offset(size.width * .16f, size.height * .9f), Offset(size.width * .84f, size.height * .9f), stroke)
-    }
+    KcodeIcon(KcodeIconAsset.Share, Ink, Modifier.size(21.dp))
 }
 
 @Composable
-internal fun QuietButton(symbol: String, description: String, onClick: () -> Unit) {
+internal fun QuietButton(icon: KcodeIconAsset, description: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         Modifier.size(KcodeSize.compactControl)
@@ -356,5 +336,5 @@ internal fun QuietButton(symbol: String, description: String, onClick: () -> Uni
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .focusable(interactionSource = interaction),
         contentAlignment = Alignment.Center,
-    ) { Text(symbol, color = SoftInk, fontSize = 17.sp) }
+    ) { KcodeIcon(icon, SoftInk, Modifier.size(18.dp)) }
 }

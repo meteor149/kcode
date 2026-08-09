@@ -12,6 +12,8 @@ import ai.meteor.kcode.ui.design.KcodeSpacing
 import ai.meteor.kcode.ui.component.AnchoredBubblePopup
 import ai.meteor.kcode.ui.component.BubblePlacement
 import ai.meteor.kcode.ui.component.PressScaleStyle
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.ui.component.pressScale
 import ai.meteor.kcode.localization.text
 import androidx.compose.foundation.background
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,7 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 @Composable
 internal fun KcodeBubblePopup(
     expanded: Boolean,
@@ -104,7 +106,7 @@ internal fun PopupNavigationRow(
             }
         }
         if (onClick != null) {
-            Text("›", Modifier.padding(start = KcodeSpacing.sm), color = Ink, fontSize = 28.sp, lineHeight = 28.sp)
+            KcodeIcon(KcodeIconAsset.ChevronRight, Ink, Modifier.padding(start = KcodeSpacing.sm).size(18.dp))
         }
     }
 }
@@ -145,7 +147,7 @@ internal fun PopupChoiceRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(KcodeSpacing.xl), contentAlignment = Alignment.CenterStart) {
-            if (selected) Text("✓", color = Ink, fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium)
+            if (selected) KcodeIcon(KcodeIconAsset.Check, Ink, Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(title, color = titleColor, style = MaterialTheme.typography.bodyMedium)
@@ -158,6 +160,6 @@ internal fun PopupChoiceRow(
                 )
             }
         }
-        if (showChevron) Text("›", Modifier.padding(start = KcodeSpacing.xs), color = Ink, fontSize = 26.sp, lineHeight = 26.sp)
+        if (showChevron) KcodeIcon(KcodeIconAsset.ChevronRight, Ink, Modifier.padding(start = KcodeSpacing.xs).size(18.dp))
     }
 }

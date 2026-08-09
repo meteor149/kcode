@@ -20,6 +20,7 @@ Use four-space indentation, multiline trailing commas, explicit imports, `Pascal
 
 - `ui/design` owns spacing, sizing, typography, shapes, colors, and the single `KcodeTheme` entry. Prefer `MaterialTheme` semantic roles; never introduce page-local palettes or duplicate tokens.
 - `ui/component` contains reusable, page-agnostic UI. Prefer stateless APIs, slots, and event callbacks; components must not navigate or access repositories/services directly.
+- Store control icons as 24×24 VectorDrawable XML in `shared/src/commonMain/composeResources/drawable` and render them through `KcodeIcon` with semantic tint. Do not use text glyphs, page-local Canvas drawings, SVG resources, or low-resolution bitmaps for UI controls; raster files are limited to brand and platform launcher artwork with appropriate density variants.
 - `ui/pages` owns screen layout and orchestration. Keep page-specific components nearby, but move reusable UI to `component`, shared session state to `ui/state`, and non-UI behavior to its domain package.
 - Keep shared UI in `commonMain`, extract hard-coded text to localization resources, and isolate platform APIs behind narrow interfaces or `expect`/`actual` implementations.
 

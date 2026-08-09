@@ -16,6 +16,8 @@ import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ToolUseInfo
 import ai.meteor.kcode.model.ToolUseStatus
 import ai.meteor.kcode.ui.component.MarkdownText
+import ai.meteor.kcode.ui.component.KcodeIcon
+import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressClickable
 import ai.meteor.kcode.localization.UiText
@@ -28,7 +30,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,19 +57,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 @Composable
 internal fun AssistantMessageTimeline(
     message: ChatMessage,
@@ -150,8 +146,8 @@ private fun ToolUseRow(toolUse: ToolUseInfo, compact: Boolean) {
                     ToolUseStatus.Running -> Box(
                         Modifier.size(7.dp).alpha(runningAlpha).clip(CircleShape).background(Leaf),
                     )
-                    ToolUseStatus.Succeeded -> Text("✓", color = LeafInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    ToolUseStatus.Failed -> Text("!", color = Error, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    ToolUseStatus.Succeeded -> KcodeIcon(KcodeIconAsset.Check, LeafInk, Modifier.size(15.dp))
+                    ToolUseStatus.Failed -> KcodeIcon(KcodeIconAsset.Info, Error, Modifier.size(15.dp))
                 }
             }
             Column(Modifier.weight(1f).padding(start = KcodeSpacing.xs)) {
@@ -177,7 +173,11 @@ private fun ToolUseRow(toolUse: ToolUseInfo, compact: Boolean) {
                     )
                 }
             }
-            Text(if (expanded) "⌃" else "⌄", color = SoftInk, fontSize = 15.sp)
+            KcodeIcon(
+                KcodeIconAsset.ChevronDown,
+                SoftInk,
+                Modifier.size(15.dp).rotate(if (expanded) 180f else 0f),
+            )
         }
 
         AnimatedVisibility(visible = expanded, enter = fadeIn(tween(140)), exit = fadeOut(tween(100))) {
@@ -254,7 +254,7 @@ internal fun AssistantActions(
                     .clip(CircleShape)
                     .semantics { contentDescription = regenerateDescription; role = Role.Button },
                 contentAlignment = Alignment.Center,
-            ) { Text("↻", color = SoftInk, fontSize = 21.sp, fontWeight = FontWeight.Light) }
+            ) { KcodeIcon(KcodeIconAsset.Regenerate, SoftInk, Modifier.size(20.dp)) }
         }
         if (canShare) {
             Box(
@@ -263,25 +263,8 @@ internal fun AssistantActions(
                     .clip(CircleShape)
                     .semantics { contentDescription = shareDescription; role = Role.Button },
                 contentAlignment = Alignment.Center,
-            ) { MessageShareMark() }
+            ) { KcodeIcon(KcodeIconAsset.Share, SoftInk, Modifier.size(20.dp)) }
         }
-    }
-}
-
-@Composable
-private fun MessageShareMark() {
-    Canvas(Modifier.size(17.dp)) {
-        val stroke = size.minDimension * .1f
-        drawLine(SoftInk, Offset(size.width * .5f, size.height * .08f), Offset(size.width * .5f, size.height * .65f), stroke, StrokeCap.Round)
-        drawLine(SoftInk, Offset(size.width * .25f, size.height * .31f), Offset(size.width * .5f, size.height * .08f), stroke, StrokeCap.Round)
-        drawLine(SoftInk, Offset(size.width * .75f, size.height * .31f), Offset(size.width * .5f, size.height * .08f), stroke, StrokeCap.Round)
-        val path = Path().apply {
-            moveTo(size.width * .18f, size.height * .52f)
-            lineTo(size.width * .18f, size.height * .9f)
-            lineTo(size.width * .82f, size.height * .9f)
-            lineTo(size.width * .82f, size.height * .52f)
-        }
-        drawPath(path, SoftInk, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }
 
