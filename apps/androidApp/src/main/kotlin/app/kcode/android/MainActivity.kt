@@ -12,11 +12,11 @@ import app.kcode.history.createAndroidConversationHistoryRepository
 import app.kcode.export.AndroidConversationImageSaver
 import app.kcode.settings.ShellExecutionMode
 import app.kcode.settings.ToolPermissionMode
-import app.kcode.ToolApprovalRequest
-import app.kcode.ToolCallApprover
+import app.kcode.tools.permission.ToolApprovalRequest
+import app.kcode.tools.permission.ToolCallApprover
 import java.util.concurrent.atomic.AtomicReference
-import app.kcode.search.WebSearchConfiguration
-import app.kcode.search.WebSearchProvider
+import app.kcode.tools.search.WebSearchConfiguration
+import app.kcode.tools.search.WebSearchProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext

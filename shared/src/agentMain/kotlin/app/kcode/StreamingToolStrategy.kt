@@ -1,5 +1,6 @@
 package app.kcode
 
+import app.kcode.chat.ToolUseEvent
 import ai.koog.agents.core.agent.functionalStrategy
 import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.environment.ToolResultKind
@@ -10,7 +11,10 @@ import ai.koog.prompt.streaming.toMessageResponse
 import ai.koog.serialization.JSONObject
 import ai.koog.serialization.kotlinx.toKoogJSONObject
 import app.kcode.settings.ToolPermissionMode
-import kotlinx.coroutines.flow.collect
+import app.kcode.tools.permission.ToolApprovalRequest
+import app.kcode.tools.permission.ToolCallApprover
+import app.kcode.tools.permission.authorizeToolCall
+import app.kcode.tools.normalizeToolArguments
 
 internal class StreamingToolStrategy(
     private val tools: ToolRegistry,

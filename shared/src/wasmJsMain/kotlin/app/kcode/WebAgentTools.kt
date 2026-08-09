@@ -7,11 +7,13 @@ import app.kcode.h5.H5ContainerLauncher
 import app.kcode.h5.H5PreviewRequest
 import app.kcode.h5.H5PreviewResult
 import app.kcode.h5.H5VirtualPath
-import app.kcode.search.WebSearchConfiguration
-import app.kcode.search.WebSearchProvider
-import app.kcode.search.WebSearchTool
+import app.kcode.tools.search.WebSearchConfiguration
+import app.kcode.tools.search.WebSearchProvider
+import app.kcode.tools.search.WebSearchTool
 import app.kcode.settings.AppSettingsStore
 import app.kcode.settings.ToolPermissionMode
+import app.kcode.tools.permission.ToolCallApprover
+import app.kcode.tools.io.normalizeWorkspacePath
 import kotlin.io.encoding.Base64
 import kotlinx.browser.document
 import kotlinx.browser.localStorage

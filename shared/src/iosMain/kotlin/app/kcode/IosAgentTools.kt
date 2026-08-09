@@ -4,11 +4,14 @@ package app.kcode
 
 import ai.koog.agents.core.tools.ToolRegistry
 import app.kcode.h5.IosH5ContainerLauncher
-import app.kcode.search.WebSearchConfiguration
-import app.kcode.search.WebSearchProvider
-import app.kcode.search.WebSearchTool
+import app.kcode.tools.search.WebSearchConfiguration
+import app.kcode.tools.search.WebSearchProvider
+import app.kcode.tools.search.WebSearchTool
 import app.kcode.settings.AppSettingsStore
 import app.kcode.settings.ToolPermissionMode
+import app.kcode.tools.permission.ToolApprovalRequest
+import app.kcode.tools.permission.ToolCallApprover
+import app.kcode.tools.io.normalizeWorkspacePath
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine

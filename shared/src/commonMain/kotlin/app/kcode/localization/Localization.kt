@@ -5,7 +5,7 @@ import androidx.compose.runtime.compositionLocalOf
 import app.kcode.model.ModelOption
 import app.kcode.model.ModelProvider
 import app.kcode.settings.SettingsProtection
-import app.kcode.ChatAvailability
+import app.kcode.chat.ChatAvailability
 import kcode.shared.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource

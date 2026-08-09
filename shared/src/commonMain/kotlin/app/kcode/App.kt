@@ -2,6 +2,14 @@
 
 package app.kcode
 
+import app.kcode.chat.ChatService
+import app.kcode.chat.ChatServiceUnavailable
+import app.kcode.chat.ToolUseEvent
+import app.kcode.ui.design.KcodeRadius
+import app.kcode.ui.design.KcodeSize
+import app.kcode.ui.design.KcodeSpacing
+import app.kcode.ui.design.KcodeTypography
+
 import app.kcode.model.ChatMessage
 import app.kcode.model.MessageRole
 import app.kcode.model.ToolUseInfo
@@ -9,7 +17,6 @@ import app.kcode.model.ToolUseStatus
 import app.kcode.model.decodeStoredMessageContent
 import app.kcode.model.toStoredContent
 import app.kcode.model.ModelConfiguration
-import app.kcode.model.ModelOption
 import app.kcode.model.ModelProvider
 import app.kcode.model.conversationTitle
 import app.kcode.model.modelOption
@@ -31,17 +38,16 @@ import app.kcode.settings.StoredAppSettings
 import app.kcode.settings.ShellExecutionMode
 import app.kcode.settings.ToolPermissionMode
 import app.kcode.settings.TransientAppSettingsStore
-import app.kcode.search.WebSearchProvider
-import app.kcode.ui.AnchoredBubblePopup
-import app.kcode.ui.BottomSheetOverlay
-import app.kcode.ui.BubblePlacement
-import app.kcode.ui.KcodeRadius
-import app.kcode.ui.KcodeSize
-import app.kcode.ui.KcodeSpacing
-import app.kcode.ui.KcodeTypography
-import app.kcode.ui.PressScaleStyle
-import app.kcode.ui.pressClickable
-import app.kcode.ui.pressScale
+import app.kcode.tools.search.WebSearchProvider
+import app.kcode.ui.component.AnchoredBubblePopup
+import app.kcode.ui.component.BottomSheetOverlay
+import app.kcode.ui.component.BubblePlacement
+import app.kcode.ui.component.MarkdownText
+import app.kcode.ui.component.PressScaleStyle
+import app.kcode.ui.component.markdownToPlainText
+import app.kcode.ui.component.onLongPressAfterRelease
+import app.kcode.ui.component.pressClickable
+import app.kcode.ui.component.pressScale
 import app.kcode.localization.AppLanguage
 import app.kcode.localization.LocalAppLanguage
 import app.kcode.localization.UiText
@@ -63,8 +69,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background

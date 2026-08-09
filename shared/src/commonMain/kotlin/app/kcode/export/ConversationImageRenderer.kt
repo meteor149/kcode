@@ -2,13 +2,13 @@
 
 package app.kcode.export
 
-import app.kcode.MarkdownAccent
-import app.kcode.MarkdownBlock
-import app.kcode.MarkdownPanel
-import app.kcode.MarkdownRule
-import app.kcode.MarkdownSoftInk
-import app.kcode.inlineMarkdown
-import app.kcode.parseMarkdownBlocks
+import app.kcode.ui.component.MarkdownAccent
+import app.kcode.ui.component.MarkdownBlock
+import app.kcode.ui.component.MarkdownPanel
+import app.kcode.ui.component.MarkdownRule
+import app.kcode.ui.component.MarkdownSoftInk
+import app.kcode.ui.component.inlineMarkdown
+import app.kcode.ui.component.parseMarkdownBlocks
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size

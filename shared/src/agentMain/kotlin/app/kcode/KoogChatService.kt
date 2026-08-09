@@ -1,5 +1,8 @@
 package app.kcode
 
+import app.kcode.chat.ChatAvailability
+import app.kcode.chat.ChatService
+import app.kcode.chat.ToolUseEvent
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.http.client.KoogHttpClient
@@ -10,6 +13,7 @@ import app.kcode.model.ModelConfiguration
 import app.kcode.model.ModelProvider
 import app.kcode.model.buildContext
 import app.kcode.settings.ToolPermissionMode
+import app.kcode.tools.permission.ToolCallApprover
 
 class KoogChatService(
     private val httpClientFactory: KoogHttpClient.Factory = KtorKoogHttpClient.Factory(),

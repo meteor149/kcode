@@ -9,11 +9,13 @@ import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import ai.koog.rag.base.files.JVMFileSystemProvider
 import app.kcode.h5.DesktopH5ContainerLauncher
-import app.kcode.search.WebSearchTool
-import app.kcode.search.WebSearchConfiguration
-import app.kcode.search.WebSearchProvider
+import app.kcode.tools.search.WebSearchTool
+import app.kcode.tools.search.WebSearchConfiguration
+import app.kcode.tools.search.WebSearchProvider
 import app.kcode.settings.AppSettingsStore
 import app.kcode.settings.ToolPermissionMode
+import app.kcode.tools.permission.ToolApprovalRequest
+import app.kcode.tools.permission.ToolCallApprover
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.io.Sink
