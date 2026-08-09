@@ -6,10 +6,13 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Process
+import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.shell.IPrivilegedShellService
 import ai.meteor.kcode.shell.PrivilegedShellUserService
+import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -24,42 +27,58 @@ import kotlin.coroutines.resumeWithException
 internal class AndroidShellExecutors(
     private val activity: Activity,
     private val appWorkspace: Path,
-) {
-    suspend fun execute(mode: ShellExecutionMode, command: String, timeoutSeconds: Int): String = when (mode) {
+    private val modeProvider: suspend () -> ShellExecutionMode,
+) : ShellCommandExecutor {
+    override suspend fun execute(
+        command: String,
+        workingDirectory: String?,
+        timeoutSeconds: Int,
+    ): ShellCommandExecutor.ExecutionResult {
+        val request = normalizeShellCommandRequest(command, workingDirectory, timeoutSeconds)
+        val mode = modeProvider()
+        return execute(mode, request)
+    }
+
+    private suspend fun execute(
+        mode: ShellExecutionMode,
+        request: ShellCommandRequest,
+    ): ShellCommandExecutor.ExecutionResult = when (mode) {
         ShellExecutionMode.App -> executeLocal(
-            commandLine = listOf("/system/bin/sh", "-c", command),
-            workspace = appWorkspace,
-            timeoutSeconds = timeoutSeconds,
+            commandLine = listOf("/system/bin/sh", "-c", request.command),
+            workspace = resolveAppWorkingDirectory(request.relativeWorkingDirectory),
+            virtualWorkspace = virtualWorkspacePath(request.relativeWorkingDirectory),
+            timeoutSeconds = request.timeoutSeconds,
             requestedMode = mode,
             identityLine = "uid=${Process.myUid()}",
         )
         ShellExecutionMode.Root -> executeLocal(
-            commandLine = listOf("su", "-c", rootVerifiedCommand(command)),
-            workspace = appWorkspace,
-            timeoutSeconds = timeoutSeconds,
+            commandLine = listOf("su", "-c", rootVerifiedCommand(request.command)),
+            workspace = resolveAppWorkingDirectory(request.relativeWorkingDirectory),
+            virtualWorkspace = virtualWorkspacePath(request.relativeWorkingDirectory),
+            timeoutSeconds = request.timeoutSeconds,
             requestedMode = mode,
             identityLine = "requiredUid=0",
         )
-        ShellExecutionMode.Adb -> executeWithShizuku(command, timeoutSeconds)
+        ShellExecutionMode.Adb -> executeWithShizuku(request)
     }
 
-    private suspend fun executeWithShizuku(command: String, timeoutSeconds: Int): String {
+    private suspend fun executeWithShizuku(request: ShellCommandRequest): ShellCommandExecutor.ExecutionResult {
         if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
-            return "mode=adb\nerror=Shizuku is not running. Start Shizuku with adb, then try again."
+            return failure("mode=adb\nerror=Shizuku is not running. Start Shizuku with adb, then try again.")
         }
         val providerUid = runCatching { Shizuku.getUid() }.getOrElse {
-            return "mode=adb\nerror=Unable to query the Shizuku service UID: ${it.message}"
+            return failure("mode=adb\nerror=Unable to query the Shizuku service UID: ${it.message}")
         }
         if (providerUid != ADB_SHELL_UID) {
-            return "mode=adb\nerror=Shizuku is running as UID $providerUid, not adb shell UID 2000. Start Shizuku through adb."
+            return failure("mode=adb\nerror=Shizuku is running as UID $providerUid, not adb shell UID 2000. Start Shizuku through adb.")
         }
         if (!ensureShizukuPermission()) {
-            return "mode=adb\nerror=Shizuku permission was not granted."
+            return failure("mode=adb\nerror=Shizuku permission was not granted.")
         }
 
         val args = Shizuku.UserServiceArgs(
             ComponentName(activity.packageName, PrivilegedShellUserService::class.java.name),
-        ).daemon(false).processNameSuffix("adb_shell").version(1)
+        ).daemon(false).processNameSuffix("adb_shell").version(2)
 
         var connection: ServiceConnection? = null
         return try {
@@ -85,19 +104,26 @@ internal class AndroidShellExecutors(
                         runCatching { Shizuku.unbindUserService(args, candidate, true) }
                     }
                 }
-            } ?: return "mode=adb\nerror=Timed out while connecting to the Shizuku UserService."
+            } ?: return failure("mode=adb\nerror=Timed out while connecting to the Shizuku UserService.")
 
             val actualUid = withContext(Dispatchers.IO) { service.uid() }
             if (actualUid != ADB_SHELL_UID) {
-                "mode=adb\nerror=The UserService has UID $actualUid instead of adb shell UID 2000."
+                failure("mode=adb\nerror=The UserService has UID $actualUid instead of adb shell UID 2000.")
             } else {
                 val result = withContext(Dispatchers.IO) {
-                    service.execute(command, timeoutSeconds, MAX_OUTPUT_BYTES)
+                    service.execute(
+                        request.command,
+                        request.relativeWorkingDirectory,
+                        request.timeoutSeconds,
+                        MAX_OUTPUT_BYTES,
+                    )
                 }
-                "mode=adb\n$result"
+                parsePrivilegedResult("mode=adb\n$result")
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
-            "mode=adb\nerror=${error.message ?: error::class.simpleName}"
+            failure("mode=adb\nerror=${error.message ?: error::class.simpleName}")
         } finally {
             connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } }
         }
@@ -124,10 +150,11 @@ internal class AndroidShellExecutors(
     private suspend fun executeLocal(
         commandLine: List<String>,
         workspace: Path,
+        virtualWorkspace: String,
         timeoutSeconds: Int,
         requestedMode: ShellExecutionMode,
         identityLine: String,
-    ): String = try {
+    ): ShellCommandExecutor.ExecutionResult = try {
         coroutineScope {
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(commandLine)
@@ -168,21 +195,57 @@ internal class AndroidShellExecutors(
                     if (process.isAlive) process.destroyForcibly()
                 }
                 val (text, truncated) = output.await()
-                buildString {
-                    append("mode=").append(requestedMode.code).append('\n')
-                    append(identityLine).append('\n')
-                    append("cwd=").append(workspace).append('\n')
-                    append("exitCode=").append(if (completed) process.exitValue() else "timeout").append('\n')
-                    append(text)
-                    if (truncated) append("\n[output truncated at $MAX_OUTPUT_BYTES bytes]")
-                }
+                ShellCommandExecutor.ExecutionResult(
+                    output = buildString {
+                        append("mode=").append(requestedMode.code).append('\n')
+                        append(identityLine).append('\n')
+                        append("cwd=").append(virtualWorkspace).append('\n')
+                        append(text)
+                        if (!completed) append("\nCommand timed out after $timeoutSeconds seconds")
+                        if (truncated) append("\n[output truncated at $MAX_OUTPUT_BYTES bytes]")
+                    }.trimEnd(),
+                    exitCode = if (completed) process.exitValue() else null,
+                )
             } finally {
                 if (process.isAlive) process.destroyForcibly()
             }
         }
+    } catch (error: CancellationException) {
+        throw error
     } catch (error: Throwable) {
-        "mode=${requestedMode.code}\nerror=${if (requestedMode == ShellExecutionMode.Root) "Root shell unavailable or denied: " else "Shell unavailable: "}${error.message ?: error::class.simpleName}"
+        failure(
+            "mode=${requestedMode.code}\nerror=" +
+                if (requestedMode == ShellExecutionMode.Root) {
+                    "Root shell unavailable or denied: ${error.message ?: error::class.simpleName}"
+                } else {
+                    "Shell unavailable: ${error.message ?: error::class.simpleName}"
+                },
+        )
     }
+
+    private fun resolveAppWorkingDirectory(relativePath: String): Path {
+        val root = appWorkspace.toRealPath()
+        val candidate = if (relativePath.isEmpty()) root else root.resolve(relativePath)
+        val directory = candidate.toRealPath()
+        require(directory.startsWith(root) && Files.isDirectory(directory)) {
+            "Working directory does not exist inside /workspace: ${virtualWorkspacePath(relativePath)}"
+        }
+        return directory
+    }
+
+    private fun parsePrivilegedResult(output: String): ShellCommandExecutor.ExecutionResult {
+        val lines = output.lines().toMutableList()
+        val exitCodeIndex = lines.indexOfFirst { it.startsWith("exitCode=") }
+        val exitCode = if (exitCodeIndex >= 0) {
+            lines.removeAt(exitCodeIndex).substringAfter('=').toIntOrNull()
+        } else {
+            null
+        }
+        return ShellCommandExecutor.ExecutionResult(lines.joinToString("\n").trimEnd(), exitCode)
+    }
+
+    private fun failure(output: String): ShellCommandExecutor.ExecutionResult =
+        ShellCommandExecutor.ExecutionResult(output, null)
 
     private fun rootVerifiedCommand(command: String): String =
         "actual_uid=\$(id -u); " +

@@ -5,6 +5,10 @@ import ai.koog.agents.ext.tool.file.EditFileTool
 import ai.koog.agents.ext.tool.file.ListDirectoryTool
 import ai.koog.agents.ext.tool.file.ReadFileTool
 import ai.koog.agents.ext.tool.file.WriteFileTool
+import ai.koog.agents.ext.tool.shell.BraveModeConfirmationHandler
+import ai.koog.agents.ext.tool.shell.ExecuteShellCommandTool
+import ai.koog.agents.ext.tool.shell.JvmShellCommandExecutor
+import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
 import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import ai.koog.rag.base.files.JVMFileSystemProvider
@@ -36,6 +40,12 @@ fun createDesktopKoogChatService(settingsStore: AppSettingsStore): KoogChatServi
             tool(ListDirectoryTool(fileSystem))
             tool(WriteFileTool(fileSystem))
             tool(EditFileTool(fileSystem))
+            tool(
+                ExecuteShellCommandTool(
+                    executor = DesktopShellCommandExecutor(workspace),
+                    confirmationHandler = BraveModeConfirmationHandler(),
+                ),
+            )
             tool(H5PreviewTool(DesktopH5ContainerLauncher(workspace)))
             tool(WebSearchTool(configurationProvider = {
                 settingsStore.load().let {
@@ -52,6 +62,36 @@ fun createDesktopKoogChatService(settingsStore: AppSettingsStore): KoogChatServi
         },
         toolCallApprover = ToolCallApprover { request -> confirmDesktopToolCall(request) },
     )
+}
+
+internal class DesktopShellCommandExecutor(
+    workspace: Path,
+    private val delegate: ShellCommandExecutor = JvmShellCommandExecutor(),
+) : ShellCommandExecutor {
+    private val workspaceRoot = workspace.toRealPath()
+
+    override suspend fun execute(
+        command: String,
+        workingDirectory: String?,
+        timeoutSeconds: Int,
+    ): ShellCommandExecutor.ExecutionResult {
+        val request = normalizeShellCommandRequest(command, workingDirectory, timeoutSeconds)
+        val directory = resolveWorkingDirectory(request.relativeWorkingDirectory)
+        return delegate.execute(
+            command = request.command,
+            workingDirectory = directory.toString(),
+            timeoutSeconds = request.timeoutSeconds,
+        )
+    }
+
+    private fun resolveWorkingDirectory(relativePath: String): Path {
+        val candidate = if (relativePath.isEmpty()) workspaceRoot else workspaceRoot.resolve(relativePath)
+        val directory = candidate.toRealPath()
+        require(directory.startsWith(workspaceRoot) && Files.isDirectory(directory)) {
+            "Working directory does not exist inside /workspace: ${virtualWorkspacePath(relativePath)}"
+        }
+        return directory
+    }
 }
 
 private suspend fun confirmDesktopToolCall(request: ToolApprovalRequest): Boolean =

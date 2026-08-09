@@ -1,15 +1,14 @@
 package ai.meteor.kcode
 
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.core.tools.SimpleTool
-import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.ext.tool.file.EditFileTool
 import ai.koog.agents.ext.tool.file.ListDirectoryTool
 import ai.koog.agents.ext.tool.file.ReadFileTool
 import ai.koog.agents.ext.tool.file.WriteFileTool
+import ai.koog.agents.ext.tool.shell.BraveModeConfirmationHandler
+import ai.koog.agents.ext.tool.shell.ExecuteShellCommandTool
 import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
-import ai.koog.serialization.typeToken
 import android.app.Activity
 import android.content.Context
 import ai.meteor.kcode.h5.AndroidH5ContainerLauncher
@@ -31,7 +30,6 @@ import kotlinx.io.Sink
 import kotlinx.io.Source
 import kotlinx.io.buffered
 import kotlinx.io.files.SystemFileSystem
-import kotlinx.serialization.Serializable
 
 /** Creates an Android agent whose file tools are confined to the app-private /workspace directory. */
 fun createAndroidKoogChatService(
@@ -42,7 +40,11 @@ fun createAndroidKoogChatService(
     toolCallApprover: ToolCallApprover,
 ): KoogChatService {
     val fileSystem = AndroidAgentWorkspaceFileSystem(activity.applicationContext)
-    val shellExecutors = AndroidShellExecutors(activity, fileSystem.workspaceRoot)
+    val shellExecutor = AndroidShellExecutors(
+        activity = activity,
+        appWorkspace = fileSystem.workspaceRoot,
+        modeProvider = modeProvider,
+    )
     val fileTools = ToolRegistry {
         tool(ReadFileTool(fileSystem))
         tool(ListDirectoryTool(fileSystem))
@@ -50,52 +52,13 @@ fun createAndroidKoogChatService(
         tool(EditFileTool(fileSystem))
         tool(H5PreviewTool(AndroidH5ContainerLauncher(activity.applicationContext)))
         tool(WebSearchTool(webSearchConfigurationProvider))
-        tool(AndroidShellTool(
-            modeProvider = modeProvider,
-            executeCommand = shellExecutors::execute,
-        ))
+        tool(ExecuteShellCommandTool(shellExecutor, BraveModeConfirmationHandler()))
     }
     return KoogChatService(
         additionalTools = fileTools,
         toolPermissionModeProvider = permissionModeProvider,
         toolCallApprover = toolCallApprover,
     )
-}
-
-internal class AndroidShellTool(
-    private val modeProvider: suspend () -> ShellExecutionMode,
-    private val executeCommand: suspend (ShellExecutionMode, String, Int) -> String,
-) : SimpleTool<AndroidShellTool.Args>(
-    argsType = typeToken<Args>(),
-    name = "android_shell",
-    description = """
-        Executes a shell command on the Android device using the permission mode selected by the user in Settings:
-        app UID, adb shell UID 2000 through Shizuku, or root through su.
-        App UID and root use the file tools' app-private workspace. adb shell uses /data/local/tmp/kcode-2000 because UID 2000 cannot access app-private files.
-        Execution is governed by kcode's global tool permission gate. Never assume a higher mode is available and never retry using another mode.
-    """.trimIndent(),
-) {
-    @Serializable
-    data class Args(
-        @property:LLMDescription("Shell command to execute with /system/bin/sh -c")
-        val command: String,
-        @property:LLMDescription("Timeout in seconds, from 1 to 20; defaults to 10")
-        val timeoutSeconds: Int = 10,
-    )
-
-    override suspend fun execute(args: Args): String {
-        val command = args.command.trim()
-        require(command.isNotEmpty()) { "Command must not be empty" }
-        require(command.length <= MAX_COMMAND_CHARS) { "Command is too long" }
-        val mode = modeProvider()
-        val timeoutSeconds = args.timeoutSeconds.coerceIn(1, MAX_TIMEOUT_SECONDS)
-        return executeCommand(mode, command, timeoutSeconds)
-    }
-
-    private companion object {
-        const val MAX_COMMAND_CHARS = 8_192
-        const val MAX_TIMEOUT_SECONDS = 20
-    }
 }
 
 /**

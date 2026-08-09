@@ -14,7 +14,6 @@ import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.tools.permission.authorizeToolCall
-import ai.meteor.kcode.tools.normalizeToolArguments
 
 internal class StreamingToolStrategy(
     private val tools: ToolRegistry,
@@ -65,7 +64,6 @@ internal class StreamingToolStrategy(
             appendPrompt { message(response) }
             val calls = response.parts
                 .filterIsInstance<MessagePart.Tool.Call>()
-                .map(::normalizeArguments)
             if (calls.isEmpty()) {
                 return@functionalStrategy visibleText.toString().ifBlank {
                     response.parts.filterIsInstance<MessagePart.Text>().joinToString("") { it.text }
@@ -116,20 +114,6 @@ internal class StreamingToolStrategy(
         }
         @Suppress("UNREACHABLE_CODE")
         error("Unreachable tool loop exit")
-    }
-
-    private fun normalizeArguments(call: MessagePart.Tool.Call): MessagePart.Tool.Call {
-        val descriptor = tools.getToolOrNull(call.tool)?.descriptor ?: return call
-        val requiredNames = descriptor.requiredParameters.mapTo(mutableSetOf()) { it.name }
-        val parameterNames = descriptor.optionalParameters
-            .mapTo(requiredNames.toMutableSet()) { it.name }
-        return call.copy(
-            args = normalizeToolArguments(
-                raw = call.args,
-                parameterNames = parameterNames,
-                requiredParameterNames = requiredNames,
-            ),
-        )
     }
 
     private suspend fun reportResults(

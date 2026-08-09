@@ -52,7 +52,7 @@ kotlin {
                 implementation(compose.components.resources)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
-                implementation("ai.koog:agents-tools:1.0.0")
+                implementation("ai.koog:agents-tools:1.1.1")
                 implementation("io.ktor:ktor-client-core:3.3.3")
                 implementation("io.ktor:ktor-client-content-negotiation:3.3.3")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.3.3")
@@ -61,7 +61,7 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("ai.koog:agents-tools:1.0.0")
+                implementation("ai.koog:agents-tools:1.1.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
                 implementation("io.ktor:ktor-client-mock:3.3.3")
             }
@@ -76,14 +76,14 @@ kotlin {
             dependsOn(commonMain)
             dependencies {
                 implementation(project(":extensions:h5Container"))
-                implementation("ai.koog:koog-agents:1.0.0")
-                implementation("ai.koog:agents-ext:1.0.0-beta")
-                implementation("ai.koog:http-client-ktor:1.0.0")
-                implementation("ai.koog:prompt-executor-deepseek-client:1.0.0-beta")
-                implementation("ai.koog:prompt-executor-google-client:1.0.0-beta")
-                implementation("ai.koog:prompt-executor-openrouter-client:1.0.0")
-                implementation("ai.koog:prompt-executor-mistralai-client:1.0.0-beta")
-                implementation("ai.koog:prompt-executor-dashscope-client:1.0.0-beta")
+                implementation("ai.koog:koog-agents:1.1.1")
+                implementation("ai.koog:agents-ext:1.1.1-beta")
+                implementation("ai.koog:http-client-ktor:1.1.1")
+                implementation("ai.koog:prompt-executor-deepseek-client:1.1.1-beta")
+                implementation("ai.koog:prompt-executor-google-client:1.1.1-beta")
+                implementation("ai.koog:prompt-executor-openrouter-client:1.1.1")
+                implementation("ai.koog:prompt-executor-mistralai-client:1.1.1-beta")
+                implementation("ai.koog:prompt-executor-dashscope-client:1.1.1-beta")
             }
         }
         val mobileMain by creating {
@@ -99,7 +99,7 @@ kotlin {
                 implementation("androidx.datastore:datastore-preferences:1.2.1")
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
-                implementation("ai.koog:prompt-executor-bedrock-client:1.0.0")
+                implementation("ai.koog:prompt-executor-bedrock-client:1.1.1")
                 implementation("io.ktor:ktor-client-cio:3.3.3")
             }
         }
