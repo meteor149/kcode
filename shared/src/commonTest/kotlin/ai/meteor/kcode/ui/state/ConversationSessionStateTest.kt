@@ -2,6 +2,7 @@ package ai.meteor.kcode.ui.state
 
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.history.StoredConversation
+import ai.meteor.kcode.history.ThreadGoal
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -63,6 +64,10 @@ private class RecordingConversationHistoryRepository : ConversationHistoryReposi
     override suspend fun setPinned(conversationId: Long, pinned: Boolean) {
         pinChanges += conversationId to pinned
     }
+
+    override suspend fun setGoal(conversationId: Long, title: String, goal: ThreadGoal) = Unit
+
+    override suspend fun clearGoal(conversationId: Long) = Unit
 
     override suspend fun deleteConversation(conversationId: Long) = Unit
 }

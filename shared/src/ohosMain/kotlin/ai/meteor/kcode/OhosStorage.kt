@@ -5,6 +5,8 @@ package ai.meteor.kcode
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.history.StoredConversation
 import ai.meteor.kcode.history.StoredMessage
+import ai.meteor.kcode.history.ThreadGoal
+import ai.meteor.kcode.history.ThreadGoalStatus
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
@@ -161,6 +163,26 @@ internal object OhosConversationHistoryRepository : ConversationHistoryRepositor
         }
     }
 
+    override suspend fun setGoal(conversationId: Long, title: String, goal: ThreadGoal) = mutate { conversations ->
+        val index = conversations.indexOfFirst { it.id == conversationId }
+        val existing = conversations.getOrNull(index)
+        val updated = StoredConversation(
+            id = conversationId,
+            title = title,
+            createdAt = existing?.createdAt ?: goal.createdAt,
+            updatedAt = maxOf(existing?.updatedAt ?: 0L, goal.updatedAt),
+            isPinned = existing?.isPinned ?: false,
+            goal = goal,
+            messages = existing?.messages.orEmpty(),
+        )
+        if (index >= 0) conversations[index] = updated else conversations += updated
+    }
+
+    override suspend fun clearGoal(conversationId: Long) = mutate { conversations ->
+        val index = conversations.indexOfFirst { it.id == conversationId }
+        if (index >= 0) conversations[index] = conversations[index].copy(goal = null)
+    }
+
     override suspend fun deleteConversation(conversationId: Long) = mutate { conversations ->
         conversations.removeAll { it.id == conversationId }
     }
@@ -233,6 +255,18 @@ private fun List<StoredConversation>.toJson(): JsonArray = buildJsonArray {
             put("createdAt", conversation.createdAt)
             put("updatedAt", conversation.updatedAt)
             put("isPinned", conversation.isPinned)
+            conversation.goal?.let { goal ->
+                putJsonObject("goal") {
+                    put("goalId", goal.goalId)
+                    put("objective", goal.objective)
+                    put("status", goal.status.name)
+                    goal.tokenBudget?.let { put("tokenBudget", it) }
+                    put("tokensUsed", goal.tokensUsed)
+                    put("timeUsedSeconds", goal.timeUsedSeconds)
+                    put("createdAt", goal.createdAt)
+                    put("updatedAt", goal.updatedAt)
+                }
+            }
             putJsonArray("messages") {
                 conversation.messages.forEach { message ->
                     add(buildJsonObject {
@@ -257,7 +291,21 @@ private fun storedConversation(element: JsonElement): StoredConversation? = runC
         createdAt = objectValue.long("createdAt"),
         updatedAt = objectValue.long("updatedAt"),
         isPinned = objectValue["isPinned"]?.jsonPrimitive?.booleanOrNull ?: false,
+        goal = objectValue["goal"]?.jsonObject?.let(::storedGoal),
         messages = objectValue["messages"]?.jsonArray.orEmpty().mapNotNull(::storedMessage),
+    )
+}.getOrNull()
+
+private fun storedGoal(objectValue: JsonObject): ThreadGoal? = runCatching {
+    ThreadGoal(
+        goalId = objectValue.string("goalId"),
+        objective = objectValue.string("objective"),
+        status = ThreadGoalStatus.valueOf(objectValue.string("status")),
+        tokenBudget = objectValue["tokenBudget"]?.jsonPrimitive?.longOrNull,
+        tokensUsed = objectValue.long("tokensUsed"),
+        timeUsedSeconds = objectValue.long("timeUsedSeconds"),
+        createdAt = objectValue.long("createdAt"),
+        updatedAt = objectValue.long("updatedAt"),
     )
 }.getOrNull()
 

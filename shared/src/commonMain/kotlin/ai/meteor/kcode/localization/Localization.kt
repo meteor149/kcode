@@ -148,6 +148,21 @@ object UiText {
     val SubAgentPending = LocalizedText(Res.string.subagent_pending_en, Res.string.subagent_pending_zh)
     val SubAgentWaiting = LocalizedText(Res.string.subagent_waiting_en, Res.string.subagent_waiting_zh)
     val SubAgentInterrupted = LocalizedText(Res.string.subagent_interrupted_en, Res.string.subagent_interrupted_zh)
+    val Goal = LocalizedText(Res.string.goal_en, Res.string.goal_zh)
+    val GoalStatus = LocalizedText(Res.string.goal_status_en, Res.string.goal_status_zh)
+    val GoalTokens = LocalizedText(Res.string.goal_tokens_en, Res.string.goal_tokens_zh)
+    val GoalNoGoal = LocalizedText(Res.string.goal_no_goal_en, Res.string.goal_no_goal_zh)
+    val GoalCleared = LocalizedText(Res.string.goal_cleared_en, Res.string.goal_cleared_zh)
+    val GoalObjectiveRequired = LocalizedText(
+        Res.string.goal_objective_required_en,
+        Res.string.goal_objective_required_zh,
+    )
+    val GoalActive = LocalizedText(Res.string.goal_active_en, Res.string.goal_active_zh)
+    val GoalPaused = LocalizedText(Res.string.goal_paused_en, Res.string.goal_paused_zh)
+    val GoalBlocked = LocalizedText(Res.string.goal_blocked_en, Res.string.goal_blocked_zh)
+    val GoalUsageLimited = LocalizedText(Res.string.goal_usage_limited_en, Res.string.goal_usage_limited_zh)
+    val GoalBudgetLimited = LocalizedText(Res.string.goal_budget_limited_en, Res.string.goal_budget_limited_zh)
+    val GoalComplete = LocalizedText(Res.string.goal_complete_en, Res.string.goal_complete_zh)
     val MessagePlaceholder = LocalizedText(Res.string.message_placeholder_en, Res.string.message_placeholder_zh)
     val ReplyPlaceholder = LocalizedText(Res.string.reply_placeholder_en, Res.string.reply_placeholder_zh)
     val RegenerateAnswer = LocalizedText(Res.string.regenerate_answer_en, Res.string.regenerate_answer_zh)

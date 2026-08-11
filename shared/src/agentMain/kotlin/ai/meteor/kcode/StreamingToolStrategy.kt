@@ -28,6 +28,7 @@ internal class StreamingToolStrategy(
     private val onDelta: suspend (String) -> Unit,
     private val additionalContextProvider: suspend () -> String = { "" },
     private val continuationAfterResponse: suspend () -> String? = { null },
+    private val onUsage: suspend (Int) -> Unit = {},
 ) {
     fun create() = functionalStrategy<String, String>("streaming_single_run") { input ->
         val visibleText = StringBuilder()
@@ -81,6 +82,8 @@ internal class StreamingToolStrategy(
                     is StreamFrame.ToolCallComplete,
                     -> toolCallTracker.onFrame(frame)?.let { event -> onToolUse(event) }
 
+                    is StreamFrame.End -> frame.metaInfo.totalTokensCount?.let { onUsage(it) }
+
                     else -> Unit
                 }
             }
@@ -109,7 +112,7 @@ internal class StreamingToolStrategy(
             pendingToolResults = try {
                 calls.map { call ->
                     val descriptor = tools.getToolOrNull(call.tool)?.descriptor
-                    val approved = authorizeToolCall(
+                    val approved = call.tool in InternalToolNames || authorizeToolCall(
                         mode = permissionModeProvider(),
                         request = ToolApprovalRequest(
                             name = call.tool,
@@ -325,3 +328,15 @@ private fun String.trackedToolInput(): String = take(4_097)
 
 private fun String.limitToolText(maxLength: Int): String =
     if (length <= maxLength) this else take(maxLength) + "\n… (truncated)"
+
+private val InternalToolNames = setOf(
+    "spawn_agent",
+    "send_message",
+    "followup_task",
+    "interrupt_agent",
+    "list_agents",
+    "wait_agent",
+    "get_goal",
+    "create_goal",
+    "update_goal",
+)

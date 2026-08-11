@@ -2,6 +2,8 @@
 
 package ai.meteor.kcode.ui.pages.chat
 
+import ai.meteor.kcode.chat.parseGoalCommand
+
 import ai.meteor.kcode.ui.design.Mist
 import ai.meteor.kcode.ui.design.Leaf
 import ai.meteor.kcode.ui.design.LeafInk
@@ -162,10 +164,11 @@ internal fun MobileComposer(
 ) {
     var value by remember { mutableStateOf("") }
     val sendInteraction = remember { MutableInteractionSource() }
-    val sendDescription = text(if (generating) UiText.StopGeneration else UiText.SendMessage)
+    val goalCommandReady = generating && parseGoalCommand(value) != null
+    val sendDescription = text(if (generating && !goalCommandReady) UiText.StopGeneration else UiText.SendMessage)
 
     fun submit() {
-        if (value.isNotBlank() && !generating) {
+        if (value.isNotBlank() && (!generating || parseGoalCommand(value) != null)) {
             onSend(value)
             value = ""
         }
@@ -199,7 +202,7 @@ internal fun MobileComposer(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp, max = 120.dp)
                     .onFocusChanged { if (it.isFocused) onFocus() }
                     .focusRequester(focusRequester),
-                enabled = !generating,
+                enabled = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
                 cursorBrush = SolidColor(Leaf),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
@@ -241,7 +244,7 @@ internal fun MobileComposer(
                 )
                 Spacer(Modifier.width(KcodeSpacing.hair))
                 Button(
-                    onClick = if (generating) onStop else ::submit,
+                    onClick = if (generating && !goalCommandReady) onStop else ::submit,
                     enabled = generating || value.isNotBlank(),
                     modifier = Modifier.pressScale(
                         sendInteraction,
@@ -259,7 +262,7 @@ internal fun MobileComposer(
                         disabledContentColor = SoftInk,
                     ),
                 ) {
-                    if (generating) {
+                    if (generating && !goalCommandReady) {
                         KcodeIcon(KcodeIconAsset.Stop, Ink.copy(alpha = .94f), Modifier.size(if (extraCompact) 12.5.dp else 14.dp))
                     } else {
                         KcodeIcon(KcodeIconAsset.Send, Ink, Modifier.size(18.dp))
@@ -286,10 +289,11 @@ internal fun Composer(
 ) {
     var value by remember { mutableStateOf("") }
     val sendInteraction = remember { MutableInteractionSource() }
-    val sendDescription = text(if (generating) UiText.StopGeneration else UiText.SendMessage)
+    val goalCommandReady = generating && parseGoalCommand(value) != null
+    val sendDescription = text(if (generating && !goalCommandReady) UiText.StopGeneration else UiText.SendMessage)
 
     fun submit() {
-        if (value.isNotBlank() && !generating) {
+        if (value.isNotBlank() && (!generating || parseGoalCommand(value) != null)) {
             onSend(value)
             value = ""
         }
@@ -326,7 +330,7 @@ internal fun Composer(
                             submit(); true
                         } else false
                     },
-                enabled = !generating,
+                enabled = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
                 cursorBrush = SolidColor(Leaf),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
@@ -364,7 +368,7 @@ internal fun Composer(
                 )
                 Spacer(Modifier.weight(1f))
                 Button(
-                    onClick = if (generating) onStop else ::submit,
+                    onClick = if (generating && !goalCommandReady) onStop else ::submit,
                     enabled = generating || value.isNotBlank(),
                     modifier = Modifier.pressScale(
                         sendInteraction,
@@ -382,7 +386,7 @@ internal fun Composer(
                         disabledContentColor = SoftInk,
                     ),
                 ) {
-                    if (generating) {
+                    if (generating && !goalCommandReady) {
                         KcodeIcon(KcodeIconAsset.Stop, Ink.copy(alpha = .94f), Modifier.size(12.5.dp))
                     } else {
                         KcodeIcon(KcodeIconAsset.Send, Ink, Modifier.size(18.dp))

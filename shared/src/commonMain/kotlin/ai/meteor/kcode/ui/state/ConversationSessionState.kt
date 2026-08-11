@@ -2,6 +2,7 @@ package ai.meteor.kcode.ui.state
 
 import ai.meteor.kcode.history.StoredMessage
 import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.history.ThreadGoal
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.MessageRole
 import ai.meteor.kcode.model.conversationTitle
@@ -22,9 +23,12 @@ internal class ConversationState(
     val id: Long,
     initialTitle: String,
     initialPinned: Boolean = false,
+    initialGoal: ThreadGoal? = null,
 ) {
     var title by mutableStateOf(initialTitle)
     var isPinned by mutableStateOf(initialPinned)
+    var goal by mutableStateOf(initialGoal)
+    var shouldResumeGoal by mutableStateOf(initialGoal?.status == ai.meteor.kcode.history.ThreadGoalStatus.Active)
     val messages = mutableStateListOf<ChatMessage>()
     var isGenerating by mutableStateOf(false)
     var isAwaitingFirstToken by mutableStateOf(false)
@@ -45,7 +49,7 @@ internal class ConversationSessionState(
             .onSuccess { storedConversations ->
                 if (conversations.isEmpty()) {
                     conversations += storedConversations.map { stored ->
-                        ConversationState(stored.id, stored.title, stored.isPinned).apply {
+                        ConversationState(stored.id, stored.title, stored.isPinned, stored.goal).apply {
                             messages += stored.messages.map(StoredMessage::toChatMessage)
                         }
                     }

@@ -56,6 +56,7 @@ interface ChatService {
         configuration: ModelConfiguration,
         history: List<ChatMessage>,
         prompt: String,
+        goalSession: GoalSession? = null,
         onToolUse: suspend (ToolUseEvent) -> Unit = {},
         onSubAgent: suspend (SubAgentEvent) -> Unit = {},
         onDelta: suspend (String) -> Unit,

@@ -47,9 +47,32 @@ internal data class MessageEntity(
     val createdAt: Long,
 )
 
+@Entity(
+    foreignKeys = [
+        ForeignKey(
+            entity = ConversationEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["conversationId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+internal data class ThreadGoalEntity(
+    @androidx.room3.PrimaryKey val conversationId: Long,
+    val goalId: String,
+    val objective: String,
+    val status: String,
+    val tokenBudget: Long?,
+    val tokensUsed: Long,
+    val timeUsedSeconds: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 internal data class HistoryRows(
     val conversations: List<ConversationEntity>,
     val messages: List<MessageEntity>,
+    val goals: List<ThreadGoalEntity>,
 )
 
 @Dao
@@ -60,6 +83,9 @@ internal interface ConversationHistoryDao {
     @Query("SELECT * FROM MessageEntity ORDER BY conversationId, createdAt, id")
     suspend fun loadMessages(): List<MessageEntity>
 
+    @Query("SELECT * FROM ThreadGoalEntity")
+    suspend fun loadGoals(): List<ThreadGoalEntity>
+
     @Query("SELECT * FROM ConversationEntity WHERE id = :id LIMIT 1")
     suspend fun loadConversation(id: Long): ConversationEntity?
 
@@ -69,17 +95,43 @@ internal interface ConversationHistoryDao {
     @Upsert
     suspend fun upsertMessage(message: MessageEntity)
 
+    @Upsert
+    suspend fun upsertGoal(goal: ThreadGoalEntity)
+
     @Query("DELETE FROM MessageEntity WHERE conversationId = :conversationId AND id >= :messageIdInclusive")
     suspend fun deleteMessagesFrom(conversationId: Long, messageIdInclusive: Long)
 
     @Query("UPDATE ConversationEntity SET isPinned = :pinned, updatedAt = :timestamp WHERE id = :conversationId")
     suspend fun setPinned(conversationId: Long, pinned: Boolean, timestamp: Long)
 
+    @Query("DELETE FROM ThreadGoalEntity WHERE conversationId = :conversationId")
+    suspend fun clearGoal(conversationId: Long)
+
     @Query("DELETE FROM ConversationEntity WHERE id = :conversationId")
     suspend fun deleteConversation(conversationId: Long)
 
     @Transaction
-    suspend fun loadSnapshot(): HistoryRows = HistoryRows(loadConversations(), loadMessages())
+    suspend fun loadSnapshot(): HistoryRows = HistoryRows(loadConversations(), loadMessages(), loadGoals())
+
+    @Transaction
+    suspend fun setGoal(
+        conversationId: Long,
+        title: String,
+        goal: ThreadGoalEntity,
+        timestamp: Long,
+    ) {
+        val existing = loadConversation(conversationId)
+        upsertConversation(
+            ConversationEntity(
+                id = conversationId,
+                title = title,
+                createdAt = existing?.createdAt ?: timestamp,
+                updatedAt = timestamp,
+                isPinned = existing?.isPinned ?: false,
+            ),
+        )
+        upsertGoal(goal)
+    }
 
     @Transaction
     suspend fun append(
@@ -115,9 +167,9 @@ internal interface ConversationHistoryDao {
 }
 
 @Database(
-    entities = [ConversationEntity::class, MessageEntity::class],
-    version = 2,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    entities = [ConversationEntity::class, MessageEntity::class, ThreadGoalEntity::class],
+    version = 3,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
     exportSchema = true,
 )
 @ConstructedBy(HistoryDatabaseConstructor::class)
@@ -140,6 +192,7 @@ internal class RoomConversationHistoryRepository(
         val rows = dao.loadSnapshot()
         val conversations = rows.conversations
         val messages = rows.messages.groupBy(MessageEntity::conversationId)
+        val goals = rows.goals.associateBy(ThreadGoalEntity::conversationId)
         lastTimestamp = maxOf(
             conversations.maxOfOrNull(ConversationEntity::updatedAt) ?: 0L,
             messages.values.flatten().maxOfOrNull(MessageEntity::createdAt) ?: 0L,
@@ -151,6 +204,7 @@ internal class RoomConversationHistoryRepository(
                 createdAt = conversation.createdAt,
                 updatedAt = conversation.updatedAt,
                 isPinned = conversation.isPinned,
+                goal = goals[conversation.id]?.toThreadGoal(),
                 messages = messages[conversation.id].orEmpty().map { message ->
                     StoredMessage(
                         id = message.id,
@@ -193,6 +247,30 @@ internal class RoomConversationHistoryRepository(
         dao.setPinned(conversationId, pinned, nextTimestamp())
     }
 
+    override suspend fun setGoal(conversationId: Long, title: String, goal: ThreadGoal) {
+        val timestamp = nextTimestamp()
+        dao.setGoal(
+            conversationId = conversationId,
+            title = title,
+            goal = ThreadGoalEntity(
+                conversationId = conversationId,
+                goalId = goal.goalId,
+                objective = goal.objective,
+                status = goal.status.name,
+                tokenBudget = goal.tokenBudget,
+                tokensUsed = goal.tokensUsed,
+                timeUsedSeconds = goal.timeUsedSeconds,
+                createdAt = goal.createdAt,
+                updatedAt = goal.updatedAt,
+            ),
+            timestamp = timestamp,
+        )
+    }
+
+    override suspend fun clearGoal(conversationId: Long) {
+        dao.clearGoal(conversationId)
+    }
+
     override suspend fun deleteConversation(conversationId: Long) {
         dao.deleteConversation(conversationId)
     }
@@ -202,3 +280,14 @@ internal class RoomConversationHistoryRepository(
         return maxOf(wallClock, lastTimestamp + 1).also { lastTimestamp = it }
     }
 }
+
+private fun ThreadGoalEntity.toThreadGoal(): ThreadGoal = ThreadGoal(
+    goalId = goalId,
+    objective = objective,
+    status = runCatching { ThreadGoalStatus.valueOf(status) }.getOrDefault(ThreadGoalStatus.Paused),
+    tokenBudget = tokenBudget,
+    tokensUsed = tokensUsed,
+    timeUsedSeconds = timeUsedSeconds,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)

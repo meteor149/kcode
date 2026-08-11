@@ -17,6 +17,8 @@ import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.history.ThreadGoalStatus
+import ai.meteor.kcode.history.ThreadGoal
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.localization.UiText
@@ -34,6 +36,8 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -69,6 +73,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import ai.meteor.kcode.ui.component.kcodeHazeSource
@@ -102,6 +107,30 @@ internal fun ChatPane(
         setupModel = setupModelMessage,
         connectionFailed = connectionFailedMessage,
         unavailable = unavailableMessage,
+    )
+    val goalLabel = text(UiText.Goal)
+    val goalStatusLabel = text(UiText.GoalStatus)
+    val goalTokensLabel = text(UiText.GoalTokens)
+    val goalStatusNames = mapOf(
+        ThreadGoalStatus.Active to text(UiText.GoalActive),
+        ThreadGoalStatus.Paused to text(UiText.GoalPaused),
+        ThreadGoalStatus.Blocked to text(UiText.GoalBlocked),
+        ThreadGoalStatus.UsageLimited to text(UiText.GoalUsageLimited),
+        ThreadGoalStatus.BudgetLimited to text(UiText.GoalBudgetLimited),
+        ThreadGoalStatus.Complete to text(UiText.GoalComplete),
+    )
+    val goalMessages = GoalCommandMessages(
+        noGoal = text(UiText.GoalNoGoal),
+        cleared = text(UiText.GoalCleared),
+        objectiveRequired = text(UiText.GoalObjectiveRequired),
+        summarize = { goal ->
+            buildString {
+                append(goalLabel).append(": ").append(goal.objective)
+                append('\n').append(goalStatusLabel).append(": ").append(goalStatusNames.getValue(goal.status))
+                append('\n').append(goalTokensLabel).append(": ").append(goal.tokensUsed)
+                goal.tokenBudget?.let { append(" / ").append(it) }
+            }
+        },
     )
     val listState = rememberLazyListState()
     val listIsDragged by listState.interactionSource.collectIsDraggedAsState()
@@ -155,6 +184,20 @@ internal fun ChatPane(
         }
     }
 
+    LaunchedEffect(conversation?.id, configuration) {
+        conversation?.let { target ->
+            continueRestoredGoal(
+                target = target,
+                configuration = configuration,
+                service = service,
+                generationRunner = generationRunner,
+                historyRepository = historyRepository,
+                failureMessages = failureMessages,
+                followBottom = ::followConversationBottom,
+            )
+        }
+    }
+
     fun send(prompt: String) {
         sendMessage(
             prompt = prompt,
@@ -166,6 +209,7 @@ internal fun ChatPane(
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
+            goalMessages = goalMessages,
             onUserMessageAdded = { target, message ->
                 anchoredTurn = target.id to message.id
                 streamScrollFollower.stopFollowing()
@@ -233,7 +277,8 @@ internal fun ChatPane(
             val extraCompact = maxWidth < 360.dp
             val horizontalContentPadding = if (extraCompact) 12.dp else 20.dp
             val composerOuterPadding = if (extraCompact) 8.dp else 12.dp
-            val listTopPadding = if (extraCompact) 84.dp else 92.dp
+            val listTopPadding = (if (extraCompact) 84.dp else 92.dp) +
+                if (conversation?.goal == null) 0.dp else 54.dp
             val composerBottomPadding = if (mobileComposerHeightPx == 0) {
                 176.dp
             } else {
@@ -381,6 +426,18 @@ internal fun ChatPane(
                     exportConversation(ExportAction.Share)
                 },
             )
+            conversation?.goal?.let { goal ->
+                GoalStatusBanner(
+                    modifier = Modifier.align(Alignment.TopCenter)
+                        .padding(top = 72.dp, start = 16.dp, end = 16.dp)
+                        .widthIn(max = 720.dp)
+                        .fillMaxWidth(),
+                    goal = goal,
+                    statusName = goalStatusNames.getValue(goal.status),
+                    goalLabel = goalLabel,
+                    tokensLabel = goalTokensLabel,
+                )
+            }
         }
     } else {
         Column(modifier.fillMaxHeight().background(Paper)) {
@@ -412,6 +469,18 @@ internal fun ChatPane(
                 },
                 onConfigurationChange = onConfigurationChange,
             )
+            conversation?.goal?.let { goal ->
+                GoalStatusBanner(
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                        .widthIn(max = 760.dp)
+                        .fillMaxWidth(),
+                    goal = goal,
+                    statusName = goalStatusNames.getValue(goal.status),
+                    goalLabel = goalLabel,
+                    tokensLabel = goalTokensLabel,
+                )
+            }
             if (conversation == null || conversation.messages.isEmpty()) {
                 Welcome(
                     modifier = Modifier.weight(1f).then(conversationContentMotion),
@@ -475,6 +544,49 @@ internal fun ChatPane(
     }
     }
 
+}
+
+@Composable
+private fun GoalStatusBanner(
+    modifier: Modifier,
+    goal: ThreadGoal,
+    statusName: String,
+    goalLabel: String,
+    tokensLabel: String,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$goalLabel · $statusName",
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                text = goal.objective,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = buildString {
+                    append(tokensLabel).append(' ').append(goal.tokensUsed)
+                    goal.tokenBudget?.let { append('/').append(it) }
+                },
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
 }
 
 @Composable

@@ -5,11 +5,18 @@ import ai.meteor.kcode.ui.state.ConversationState
 
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ChatGenerationRunner
+import ai.meteor.kcode.chat.ConversationGoalSession
+import ai.meteor.kcode.chat.GoalSession
+import ai.meteor.kcode.chat.GoalCommand
+import ai.meteor.kcode.chat.goalContinuationPrompt
+import ai.meteor.kcode.chat.parseGoalCommand
 import ai.meteor.kcode.chat.ChatServiceUnavailable
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.SubAgentStatus
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.history.ThreadGoal
+import ai.meteor.kcode.history.ThreadGoalStatus
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.MessageRole
 import ai.meteor.kcode.model.ModelConfiguration
@@ -30,6 +37,13 @@ internal data class ChatFailureMessages(
     val unavailable: String?,
 )
 
+internal data class GoalCommandMessages(
+    val noGoal: String,
+    val cleared: String,
+    val objectiveRequired: String,
+    val summarize: (ThreadGoal) -> String,
+)
+
 internal fun sendMessage(
     prompt: String,
     configuration: ModelConfiguration?,
@@ -40,11 +54,31 @@ internal fun sendMessage(
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
+    goalMessages: GoalCommandMessages,
     onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
     followBottom: (ConversationState) -> Unit,
 ) {
     val cleanPrompt = prompt.trim()
     if (cleanPrompt.isEmpty()) return
+    val goalCommand = parseGoalCommand(cleanPrompt)
+    if (goalCommand != null) {
+        handleGoalCommand(
+            commandText = cleanPrompt,
+            command = goalCommand,
+            configuration = configuration,
+            conversation = conversation,
+            onSendToNew = onSendToNew,
+            service = service,
+            generationRunner = generationRunner,
+            historyRepository = historyRepository,
+            scope = scope,
+            failureMessages = failureMessages,
+            goalMessages = goalMessages,
+            onUserMessageAdded = onUserMessageAdded,
+            followBottom = followBottom,
+        )
+        return
+    }
     val target = conversation ?: onSendToNew(cleanPrompt)
     if (target.isGenerating) return
     val userMessage = ChatMessage(
@@ -78,6 +112,7 @@ internal fun sendMessage(
         service = service,
         generationRunner = generationRunner,
         historyRepository = historyRepository,
+        goalSession = ConversationGoalSession(target, historyRepository),
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = {
@@ -89,6 +124,241 @@ internal fun sendMessage(
                 content = userMessage.content,
             )
         },
+    )
+}
+
+private fun handleGoalCommand(
+    commandText: String,
+    command: GoalCommand,
+    configuration: ModelConfiguration?,
+    conversation: ConversationState?,
+    onSendToNew: (String) -> ConversationState,
+    service: ChatService,
+    generationRunner: ChatGenerationRunner,
+    historyRepository: ConversationHistoryRepository,
+    scope: CoroutineScope,
+    failureMessages: ChatFailureMessages,
+    goalMessages: GoalCommandMessages,
+    onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
+    followBottom: (ConversationState) -> Unit,
+) {
+    val titleSeed = when (command) {
+        is GoalCommand.Set -> command.objective
+        is GoalCommand.Edit -> command.objective
+        else -> commandText
+    }
+    val target = conversation ?: onSendToNew(titleSeed)
+    val userMessage = ChatMessage(nextMessageId(target), MessageRole.User, commandText)
+    val session = ConversationGoalSession(target, historyRepository)
+
+    fun appendFeedback(content: String, isError: Boolean = false) {
+        val assistant = ChatMessage(userMessage.id + 1L, MessageRole.Assistant, content, isError)
+        target.messages += userMessage
+        target.messages += assistant
+        onUserMessageAdded(target, userMessage)
+        followBottom(target)
+        scope.launch {
+            persistMessage(target, userMessage, historyRepository)
+            persistMessage(target, assistant, historyRepository)
+        }
+    }
+
+    when (command) {
+        GoalCommand.Show -> appendFeedback(target.goal?.let(goalMessages.summarize) ?: goalMessages.noGoal)
+        GoalCommand.Pause -> {
+            val goal = target.goal
+            if (goal == null) {
+                appendFeedback(goalMessages.noGoal, isError = true)
+            } else {
+                target.runningJob?.cancel()
+                scope.launch {
+                    target.runningJob?.join()
+                    val updated = session.setStatusFromUser(ThreadGoalStatus.Paused)
+                    appendFeedback(goalMessages.summarize(updated))
+                }
+            }
+        }
+        GoalCommand.Clear -> {
+            if (target.goal == null) {
+                appendFeedback(goalMessages.noGoal, isError = true)
+            } else {
+                target.runningJob?.cancel()
+                scope.launch {
+                    target.runningJob?.join()
+                    session.clearGoal()
+                    appendFeedback(goalMessages.cleared)
+                }
+            }
+        }
+        GoalCommand.Resume -> {
+            if (target.goal == null) {
+                appendFeedback(goalMessages.noGoal, isError = true)
+            } else {
+                startGoalRun(
+                    target = target,
+                    userMessage = userMessage,
+                    mutateGoal = { session.setStatusFromUser(ThreadGoalStatus.Active) },
+                    configuration = configuration,
+                    service = service,
+                    generationRunner = generationRunner,
+                    historyRepository = historyRepository,
+                    session = session,
+                    scope = scope,
+                    failureMessages = failureMessages,
+                    onUserMessageAdded = onUserMessageAdded,
+                    followBottom = followBottom,
+                )
+            }
+        }
+        is GoalCommand.Set -> {
+            if (command.objective.isBlank()) {
+                appendFeedback(goalMessages.objectiveRequired, isError = true)
+            } else {
+                target.runningJob?.cancel()
+                startGoalRun(
+                    target = target,
+                    userMessage = userMessage,
+                    mutateGoal = { session.setGoalFromUser(command.objective) },
+                    configuration = configuration,
+                    service = service,
+                    generationRunner = generationRunner,
+                    historyRepository = historyRepository,
+                    session = session,
+                    scope = scope,
+                    failureMessages = failureMessages,
+                    onUserMessageAdded = onUserMessageAdded,
+                    followBottom = followBottom,
+                )
+            }
+        }
+        is GoalCommand.Edit -> {
+            if (command.objective.isBlank()) {
+                appendFeedback(goalMessages.objectiveRequired, isError = true)
+            } else if (target.goal == null) {
+                appendFeedback(goalMessages.noGoal, isError = true)
+            } else {
+                target.runningJob?.cancel()
+                startGoalRun(
+                    target = target,
+                    userMessage = userMessage,
+                    mutateGoal = { session.editGoalFromUser(command.objective) },
+                    configuration = configuration,
+                    service = service,
+                    generationRunner = generationRunner,
+                    historyRepository = historyRepository,
+                    session = session,
+                    scope = scope,
+                    failureMessages = failureMessages,
+                    onUserMessageAdded = onUserMessageAdded,
+                    followBottom = followBottom,
+                )
+            }
+        }
+    }
+}
+
+private fun startGoalRun(
+    target: ConversationState,
+    userMessage: ChatMessage,
+    mutateGoal: suspend () -> ThreadGoal,
+    configuration: ModelConfiguration?,
+    service: ChatService,
+    generationRunner: ChatGenerationRunner,
+    historyRepository: ConversationHistoryRepository,
+    session: GoalSession,
+    scope: CoroutineScope,
+    failureMessages: ChatFailureMessages,
+    onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
+    followBottom: (ConversationState) -> Unit,
+) {
+    target.shouldResumeGoal = false
+    scope.launch {
+        target.runningJob?.join()
+        val goal = runCatching { mutateGoal() }.getOrElse { error ->
+            val failed = ChatMessage(userMessage.id + 1L, MessageRole.Assistant, error.message.orEmpty(), true)
+            target.messages += userMessage
+            target.messages += failed
+            onUserMessageAdded(target, userMessage)
+            persistMessage(target, userMessage, historyRepository)
+            persistMessage(target, failed, historyRepository)
+            return@launch
+        }
+        if (configuration == null) {
+            appendSetupRequiredMessages(
+                target,
+                userMessage,
+                failureMessages.setupModel,
+                historyRepository,
+                scope,
+                onUserMessageAdded,
+            )
+            return@launch
+        }
+        val history = target.messages.toList()
+        target.messages += userMessage
+        onUserMessageAdded(target, userMessage)
+        val assistantId = userMessage.id + 1L
+        prepareStreamingResponse(target, assistantId)
+        launchStreamingResponse(
+            target = target,
+            assistantId = assistantId,
+            configuration = configuration,
+            history = history,
+            prompt = goalContinuationPrompt(goal),
+            service = service,
+            generationRunner = generationRunner,
+            historyRepository = historyRepository,
+            goalSession = session,
+            failureMessages = failureMessages,
+            followBottom = followBottom,
+            beforeRequest = { persistMessage(target, userMessage, historyRepository) },
+        )
+    }
+}
+
+internal fun continueRestoredGoal(
+    target: ConversationState,
+    configuration: ModelConfiguration?,
+    service: ChatService,
+    generationRunner: ChatGenerationRunner,
+    historyRepository: ConversationHistoryRepository,
+    failureMessages: ChatFailureMessages,
+    followBottom: (ConversationState) -> Unit,
+) {
+    val goal = target.goal ?: return
+    val activeConfiguration = configuration ?: return
+    if (!target.shouldResumeGoal || target.isGenerating || goal.status != ThreadGoalStatus.Active) return
+    target.shouldResumeGoal = false
+    val assistantId = nextMessageId(target)
+    prepareStreamingResponse(target, assistantId)
+    launchStreamingResponse(
+        target = target,
+        assistantId = assistantId,
+        configuration = activeConfiguration,
+        history = target.messages.dropLast(1),
+        prompt = goalContinuationPrompt(goal),
+        service = service,
+        generationRunner = generationRunner,
+        historyRepository = historyRepository,
+        goalSession = ConversationGoalSession(target, historyRepository),
+        failureMessages = failureMessages,
+        followBottom = followBottom,
+        beforeRequest = {},
+    )
+}
+
+private suspend fun persistMessage(
+    target: ConversationState,
+    message: ChatMessage,
+    historyRepository: ConversationHistoryRepository,
+) {
+    historyRepository.appendMessage(
+        conversationId = target.id,
+        title = target.title,
+        messageId = message.id,
+        role = message.role.name,
+        content = if (message.toolUses.isEmpty() && message.subAgents.isEmpty()) message.content else message.toStoredContent(),
+        isError = message.isError,
     )
 }
 
@@ -129,6 +399,7 @@ internal fun regenerateMessage(
         service = service,
         generationRunner = generationRunner,
         historyRepository = historyRepository,
+        goalSession = ConversationGoalSession(target, historyRepository),
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = { historyRepository.deleteMessagesFrom(target.id, answer.id) },
@@ -186,6 +457,7 @@ private fun launchStreamingResponse(
     service: ChatService,
     generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
+    goalSession: GoalSession,
     failureMessages: ChatFailureMessages,
     followBottom: (ConversationState) -> Unit,
     beforeRequest: suspend () -> Unit,
@@ -197,6 +469,7 @@ private fun launchStreamingResponse(
                 configuration = configuration,
                 history = history,
                 prompt = prompt,
+                goalSession = goalSession,
                 onToolUse = { event ->
                     target.isAwaitingFirstToken = false
                     target.applyToolUseEvent(assistantId, event)
@@ -231,9 +504,19 @@ private fun launchStreamingResponse(
             }
         } catch (cancelled: CancellationException) {
             target.persistOrRemovePartialMessage(assistantId, historyRepository)
+            runCatching {
+                if (goalSession.getGoal()?.status == ThreadGoalStatus.Active) {
+                    goalSession.setStatusFromUser(ThreadGoalStatus.Paused)
+                }
+            }
             throw cancelled
         } catch (error: Throwable) {
             target.persistOrRemovePartialMessage(assistantId, historyRepository)
+            runCatching {
+                if (goalSession.getGoal()?.status == ThreadGoalStatus.Active) {
+                    goalSession.setStatusFromUser(ThreadGoalStatus.Blocked)
+                }
+            }
             val safeDetail = error.message?.replace(configuration.apiKey, "••••")
             val errorMessage = ChatMessage(
                 id = nextMessageId(target),

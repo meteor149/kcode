@@ -55,4 +55,28 @@ class ConversationHistoryRepositoryTest {
 
         assertEquals(listOf(2L), repository.loadAll().map { it.id })
     }
+
+    @Test
+    fun storesAndClearsAConversationGoalWithoutRequiringMessages() = runBlocking {
+        val repository = Room.inMemoryDatabaseBuilder<HistoryDatabase>()
+            .buildHistoryRepository()
+        val goal = ThreadGoal(
+            goalId = "goal-1",
+            objective = "Finish the migration",
+            status = ThreadGoalStatus.Active,
+            tokenBudget = 5_000,
+            tokensUsed = 120,
+            timeUsedSeconds = 9,
+            createdAt = 10,
+            updatedAt = 20,
+        )
+
+        repository.setGoal(7, "Migration", goal)
+
+        assertEquals(goal, repository.loadAll().single().goal)
+        assertTrue(repository.loadAll().single().messages.isEmpty())
+
+        repository.clearGoal(7)
+        assertEquals(null, repository.loadAll().single().goal)
+    }
 }

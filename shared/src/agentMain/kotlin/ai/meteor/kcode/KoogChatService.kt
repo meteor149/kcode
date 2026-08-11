@@ -2,6 +2,8 @@ package ai.meteor.kcode
 
 import ai.meteor.kcode.chat.ChatAvailability
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.chat.GoalSession
+import ai.meteor.kcode.chat.goalContinuationPrompt
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.koog.agents.core.agent.AIAgent
@@ -17,6 +19,7 @@ import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.skill.SkillRuntime
 import kotlinx.coroutines.coroutineScope
+import kotlin.time.TimeSource
 
 class KoogChatService(
     private val httpClientFactory: KoogHttpClient.Factory = KtorKoogHttpClient.Factory(),
@@ -37,6 +40,7 @@ class KoogChatService(
         configuration: ModelConfiguration,
         history: List<ChatMessage>,
         prompt: String,
+        goalSession: GoalSession?,
         onToolUse: suspend (ToolUseEvent) -> Unit,
         onSubAgent: suspend (SubAgentEvent) -> Unit,
         onDelta: suspend (String) -> Unit,
@@ -46,6 +50,8 @@ class KoogChatService(
         }
 
         val conversationContext = buildContext(history, prompt)
+        val goalTurnStart = TimeSource.Monotonic.markNow()
+        var accountedSeconds = 0L
         lateinit var coordinator: MultiAgentCoordinator
         coordinator = MultiAgentCoordinator(
             scope = this,
@@ -68,6 +74,7 @@ class KoogChatService(
                     agentPath = launch.path,
                     multiAgentInstructions = SubAgentInstructions,
                     coordinator = coordinator,
+                    goalSession = goalSession,
                     onToolUse = { event -> coordinator.onToolUse(launch.path, event) },
                     onDelta = {},
                     continuationAfterResponse = { null },
@@ -84,9 +91,16 @@ class KoogChatService(
                 agentPath = RootAgentPath,
                 multiAgentInstructions = RootMultiAgentInstructions,
                 coordinator = coordinator,
+                goalSession = goalSession,
                 onToolUse = onToolUse,
                 onDelta = onDelta,
-                continuationAfterResponse = coordinator::continuationAfterRootResponse,
+                continuationAfterResponse = { nextRootContinuation(coordinator, goalSession) },
+                onUsage = { tokens ->
+                    val elapsed = goalTurnStart.elapsedNow().inWholeSeconds
+                    val elapsedDelta = (elapsed - accountedSeconds).coerceAtLeast(0L)
+                    accountedSeconds = elapsed
+                    goalSession?.recordUsage(tokens.toLong(), elapsedDelta)
+                },
                 skillCatalogInstructions = skillTurn?.catalogInstructions,
             )
         } finally {
@@ -100,13 +114,16 @@ class KoogChatService(
         agentPath: String,
         multiAgentInstructions: String,
         coordinator: MultiAgentCoordinator,
+        goalSession: GoalSession?,
         onToolUse: suspend (ToolUseEvent) -> Unit,
         onDelta: suspend (String) -> Unit,
         continuationAfterResponse: suspend () -> String?,
+        onUsage: suspend (Int) -> Unit = {},
         skillCatalogInstructions: String? = null,
     ): String {
         val runtime = createAgentModelRuntime(configuration, httpClientFactory)
-        val tools = additionalTools + coordinator.toolsFor(agentPath)
+        val tools = additionalTools + coordinator.toolsFor(agentPath) +
+            (goalSession?.let(::goalTools) ?: ToolRegistry { })
         val strategy = StreamingToolStrategy(
             tools = tools,
             model = runtime.model,
@@ -116,6 +133,7 @@ class KoogChatService(
             onDelta = onDelta,
             additionalContextProvider = { coordinator.drainMailbox(agentPath) },
             continuationAfterResponse = continuationAfterResponse,
+            onUsage = onUsage,
         ).create()
         val agent = AIAgent(
             promptExecutor = MultiLLMPromptExecutor(runtime.client),
@@ -128,3 +146,10 @@ class KoogChatService(
         return agent.run(input)
     }
 }
+
+internal suspend fun nextRootContinuation(
+    coordinator: MultiAgentCoordinator,
+    goalSession: GoalSession?,
+): String? = coordinator.continuationAfterRootResponse()
+    ?: goalSession?.getGoal()?.takeIf { it.status == ai.meteor.kcode.history.ThreadGoalStatus.Active }
+        ?.let(::goalContinuationPrompt)

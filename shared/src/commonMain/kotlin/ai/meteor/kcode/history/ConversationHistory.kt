@@ -7,8 +7,25 @@ data class StoredConversation(
     val createdAt: Long,
     val updatedAt: Long,
     val isPinned: Boolean = false,
+    val goal: ThreadGoal? = null,
     val messages: List<StoredMessage>,
 )
+
+enum class ThreadGoalStatus { Active, Paused, Blocked, UsageLimited, BudgetLimited, Complete }
+
+data class ThreadGoal(
+    val goalId: String,
+    val objective: String,
+    val status: ThreadGoalStatus,
+    val tokenBudget: Long? = null,
+    val tokensUsed: Long = 0L,
+    val timeUsedSeconds: Long = 0L,
+    val createdAt: Long,
+    val updatedAt: Long,
+) {
+    val remainingTokens: Long?
+        get() = tokenBudget?.let { (it - tokensUsed).coerceAtLeast(0L) }
+}
 
 data class StoredMessage(
     val id: Long,
@@ -38,6 +55,12 @@ interface ConversationHistoryRepository {
     /** Moves a conversation into or out of the pinned section of recents. */
     suspend fun setPinned(conversationId: Long, pinned: Boolean)
 
+    /** Creates or replaces the durable goal attached to a conversation. */
+    suspend fun setGoal(conversationId: Long, title: String, goal: ThreadGoal)
+
+    /** Removes the durable goal attached to a conversation. */
+    suspend fun clearGoal(conversationId: Long)
+
     /** Deletes the conversation and all of its messages. */
     suspend fun deleteConversation(conversationId: Long)
 }
@@ -57,6 +80,10 @@ object TransientConversationHistoryRepository : ConversationHistoryRepository {
     override suspend fun deleteMessagesFrom(conversationId: Long, messageIdInclusive: Long) = Unit
 
     override suspend fun setPinned(conversationId: Long, pinned: Boolean) = Unit
+
+    override suspend fun setGoal(conversationId: Long, title: String, goal: ThreadGoal) = Unit
+
+    override suspend fun clearGoal(conversationId: Long) = Unit
 
     override suspend fun deleteConversation(conversationId: Long) = Unit
 }
