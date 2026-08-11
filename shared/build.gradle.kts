@@ -11,6 +11,17 @@ plugins {
 }
 
 val configuredReleaseVersion = providers.gradleProperty("releaseVersion").orElse("1.0.0")
+val configuredMacReleaseVersion = configuredReleaseVersion.map { version ->
+    val components = version.split('.')
+    val major = components.getOrNull(0)?.toIntOrNull() ?: 0
+    if (major > 0) {
+        version
+    } else {
+        val minor = components.getOrNull(1)?.toIntOrNull() ?: 0
+        val patch = components.getOrNull(2)?.toIntOrNull() ?: 0
+        "1.$minor.$patch"
+    }
+}
 
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
@@ -206,6 +217,8 @@ compose.desktop {
             }
             macOS {
                 iconFile.set(project.file("src/desktopMain/resources/kcode-icon.icns"))
+                packageVersion = configuredMacReleaseVersion.get()
+                dmgPackageVersion = configuredMacReleaseVersion.get()
             }
             linux {
                 iconFile.set(project.file("src/desktopMain/resources/kcode-icon.png"))
