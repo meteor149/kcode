@@ -10,6 +10,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val configuredReleaseVersion = providers.gradleProperty("releaseVersion").orElse("1.0.0")
+
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
     jvm("desktop") {
@@ -195,7 +197,7 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             modules("jdk.httpserver", "java.net.http")
             packageName = "kcode"
-            packageVersion = "1.0.0"
+            packageVersion = configuredReleaseVersion.get()
             description = "A calm, cross-platform AI workspace powered by Koog."
             vendor = "kcode"
 
