@@ -23,12 +23,21 @@ class SkillRuntimeTest {
 
         val catalogOnly = runtime.prepareTurn("Help me organize this")
         assertContains(catalogOnly.catalogInstructions, "writer")
+        assertContains(
+            catalogOnly.catalogInstructions,
+            "(file: /workspace/.agents/skills/writer/SKILL.md)",
+        )
+        assertContains(catalogOnly.catalogInstructions, "For a `file` locator, use `read_file`")
         assertFalse(catalogOnly.catalogInstructions.contains("SECRET BODY"))
         assertTrue(catalogOnly.selectedSkillFragments.isEmpty())
 
         val selected = runtime.prepareTurn("Use ${'$'}writer for this")
         assertEquals(1, selected.selectedSkillFragments.size)
         assertContains(selected.selectedSkillFragments.single(), "SECRET BODY")
+        assertContains(
+            selected.selectedSkillFragments.single(),
+            "<path>/workspace/.agents/skills/writer/SKILL.md</path>",
+        )
     }
 
     @Test

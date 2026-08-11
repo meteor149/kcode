@@ -52,7 +52,7 @@ class SkillRuntime(
     private fun renderSkillFragment(skill: SkillDescriptor, contents: String): String = buildString {
         appendLine("<skill>")
         appendLine("<name>${xml(skill.name.take(256))}</name>")
-        appendLine("<resource>${xml(skill.mainResource.take(1_024))}</resource>")
+        appendLine("<path>${xml(skill.mainResource.take(1_024))}</path>")
         appendLine(truncateUtf8(contents, SkillLimits.MaxPromptBytes))
         append("</skill>")
     }

@@ -10,7 +10,7 @@ class SkillListTool(
 ) : SimpleTool<SkillListTool.Args>(
     argsType = typeToken<Args>(),
     name = "skills_list",
-    description = "Lists enabled model-visible skills and their exact authority, package, and main resource handles.",
+    description = "Lists enabled model-visible skills and exact handles needed to read non-host skill resources.",
 ) {
     @Serializable
     data class Args(
@@ -37,7 +37,7 @@ class SkillReadTool(
 ) : SimpleTool<SkillReadTool.Args>(
     argsType = typeToken<Args>(),
     name = "skills_read",
-    description = "Reads one UTF-8 resource from an exact skill package. Reuse handles returned by skills_list or the skill catalog.",
+    description = "Reads one UTF-8 executor or orchestrator skill resource using exact handles returned by skills_list. Host file locators should use read_file.",
 ) {
     @Serializable
     data class Args(
