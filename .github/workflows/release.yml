@@ -212,10 +212,13 @@ jobs:
         run: |
           mapfile -d '' packages < <(find release-assets -maxdepth 1 -type f -print0)
           test "${#packages[@]}" -gt 0
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${packages[@]}" --clobber
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${packages[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
           else
             gh release create "$GITHUB_REF_NAME" "${packages[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --generate-notes \
               --title "Kcode $GITHUB_REF_NAME"
