@@ -276,6 +276,11 @@ private fun ConversationState.applyToolUseEvent(messageId: Long, event: ToolUseE
                 )
                 message.copy(toolUses = message.toolUses.filterNot { it.id == event.id } + toolUse)
             }
+            is ToolUseEvent.Updated -> message.copy(
+                toolUses = message.toolUses.map { toolUse ->
+                    if (toolUse.id != event.id) toolUse else toolUse.copy(input = event.input)
+                },
+            )
             is ToolUseEvent.Finished -> message.copy(
                 toolUses = message.toolUses.map { toolUse ->
                     if (toolUse.id != event.id) toolUse else toolUse.copy(

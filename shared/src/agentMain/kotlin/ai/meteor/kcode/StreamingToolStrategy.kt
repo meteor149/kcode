@@ -55,6 +55,7 @@ internal class StreamingToolStrategy(
 
             val frames = mutableListOf<StreamFrame>()
             var receivedDelta = false
+            val toolCallTracker = StreamingToolCallTracker(toolRound)
             stream.collect { frame ->
                 frames += frame
                 when (frame) {
@@ -68,6 +69,10 @@ internal class StreamingToolStrategy(
                         visibleText.append(frame.text)
                         onDelta(frame.text)
                     }
+
+                    is StreamFrame.ToolCallDelta,
+                    is StreamFrame.ToolCallComplete,
+                    -> toolCallTracker.onFrame(frame)?.let { event -> onToolUse(event) }
 
                     else -> Unit
                 }
@@ -84,16 +89,9 @@ internal class StreamingToolStrategy(
             }
 
             val eventIds = calls.mapIndexed { index, call ->
-                call.id ?: "${call.tool}:${toolRound}:$index"
-            }
-            calls.forEachIndexed { index, call ->
-                onToolUse(
-                    ToolUseEvent.Started(
-                        id = eventIds[index],
-                        name = call.tool,
-                        input = call.args.limitToolText(4_096),
-                    ),
-                )
+                val finalized = toolCallTracker.finalize(index, call)
+                finalized.event?.let { event -> onToolUse(event) }
+                finalized.id
             }
 
             pendingToolResults = try {
@@ -116,7 +114,7 @@ internal class StreamingToolStrategy(
                     onToolUse(
                         ToolUseEvent.Finished(
                             id = id,
-                            output = error.message.orEmpty().limitToolText(16_384),
+                            output = error.message.orEmpty(),
                             isError = true,
                         ),
                     )
@@ -137,10 +135,10 @@ internal class StreamingToolStrategy(
         results.forEachIndexed { index, result ->
             onToolUse(
                 ToolUseEvent.Finished(
-                    id = result.id ?: eventIds.getOrElse(index) {
+                    id = eventIds.getOrElse(index) {
                         "${result.tool}:${toolRound}:$index"
                     },
-                    output = result.output.limitToolText(16_384),
+                    output = result.output,
                     isError = result.toMessagePart().isError,
                 ),
             )
@@ -201,6 +199,117 @@ internal class StreamingToolStrategy(
         return toolResult.copy(parts = textParts) to providerAttachments
     }
 }
+
+internal class StreamingToolCallTracker(
+    private val toolRound: Int,
+) {
+    private val calls = mutableListOf<StreamingToolCall>()
+    private val callsByIndex = mutableMapOf<Int, StreamingToolCall>()
+    private val callsById = mutableMapOf<String, StreamingToolCall>()
+
+    fun onFrame(frame: StreamFrame): ToolUseEvent? = when (frame) {
+        is StreamFrame.ToolCallDelta -> update(
+            index = frame.index,
+            id = frame.id,
+            name = frame.name,
+            input = frame.content,
+            inputIsComplete = false,
+        )
+
+        is StreamFrame.ToolCallComplete -> update(
+            index = frame.index,
+            id = frame.id,
+            name = frame.name,
+            input = frame.content,
+            inputIsComplete = true,
+        )
+
+        else -> null
+    }
+
+    fun finalize(index: Int, call: MessagePart.Tool.Call): FinalizedToolCall {
+        val state = callsByIndex[index]
+            ?: call.id?.let(callsById::get)
+            ?: calls.getOrNull(index)
+            ?: newCall()
+        state.id = state.id ?: call.id
+        state.name = state.name ?: call.tool
+        state.input = call.args.trackedToolInput()
+        val event = state.nextEvent(index, allowFallbackId = true)
+        return FinalizedToolCall(
+            id = state.eventId ?: call.id ?: "${call.tool}:$toolRound:$index",
+            event = event,
+        )
+    }
+
+    private fun update(
+        index: Int?,
+        id: String?,
+        name: String?,
+        input: String?,
+        inputIsComplete: Boolean,
+    ): ToolUseEvent? {
+        val normalizedId = id?.takeIf(String::isNotBlank)
+        val state = index?.let(callsByIndex::get)
+            ?: normalizedId?.let(callsById::get)
+            ?: (if (index == null && normalizedId == null) calls.lastOrNull() else null)
+            ?: newCall()
+        index?.let { callsByIndex[it] = state }
+        normalizedId?.let { callsById[it] = state }
+        state.id = state.id ?: normalizedId
+        state.name = state.name ?: name?.takeIf(String::isNotBlank)
+        if (input != null) {
+            state.input = if (inputIsComplete) {
+                input.trackedToolInput()
+            } else {
+                (state.input + input).trackedToolInput()
+            }
+        }
+        return state.nextEvent(index ?: calls.indexOf(state))
+    }
+
+    private fun newCall(): StreamingToolCall = StreamingToolCall().also(calls::add)
+
+    private fun StreamingToolCall.nextEvent(
+        index: Int,
+        allowFallbackId: Boolean = false,
+    ): ToolUseEvent? {
+        val toolName = name ?: return null
+        val stableId = eventId ?: id ?: if (allowFallbackId || input.isNotEmpty()) {
+            "$toolName:$toolRound:$index"
+        } else {
+            return null
+        }
+        eventId = stableId
+        val visibleInput = input.limitToolText(4_096)
+        return if (!started) {
+            started = true
+            lastEmittedInput = visibleInput
+            ToolUseEvent.Started(stableId, toolName, visibleInput)
+        } else if (visibleInput != lastEmittedInput) {
+            lastEmittedInput = visibleInput
+            ToolUseEvent.Updated(stableId, visibleInput)
+        } else {
+            null
+        }
+    }
+
+    internal data class FinalizedToolCall(
+        val id: String,
+        val event: ToolUseEvent?,
+    )
+
+    private data class StreamingToolCall(
+        var id: String? = null,
+        var eventId: String? = null,
+        var name: String? = null,
+        var input: String = "",
+        var lastEmittedInput: String = "",
+        var started: Boolean = false,
+    )
+}
+
+private fun String.trackedToolInput(): String = take(4_097)
 
 private fun String.limitToolText(maxLength: Int): String =
     if (length <= maxLength) this else take(maxLength) + "\n… (truncated)"

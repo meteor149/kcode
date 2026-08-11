@@ -115,6 +115,29 @@ class SkillRuntimeTest {
         assertEquals(1, catalog.warnings.size)
     }
 
+    @Test
+    fun skillReadToolReturnsCompleteResource() = runTest {
+        val completeBody = "x".repeat(1_100_000)
+        val completeResource = "---\nname: large\ndescription: Large resource\n---\n$completeBody"
+        val runtime = runtime(
+            MemoryWorkspace(
+                mapOf("/workspace/.agents/skills/large/SKILL.md" to completeResource),
+            ),
+        )
+        val skill = runtime.catalog().entries.single()
+
+        val output = SkillReadTool(runtime).execute(
+            SkillReadTool.Args(
+                authorityKind = "host",
+                authorityId = skill.authority.id,
+                packageId = skill.packageId,
+                resourceId = skill.mainResource,
+            ),
+        )
+
+        assertEquals(completeResource, output)
+    }
+
     private fun runtime(workspace: AgentWorkspace): SkillRuntime = SkillRuntime(
         listOf(
             HostSkillProvider(

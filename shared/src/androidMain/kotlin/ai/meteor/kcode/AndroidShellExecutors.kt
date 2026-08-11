@@ -6,12 +6,12 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Process
-import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.shell.IPrivilegedShellService
 import ai.meteor.kcode.shell.PrivilegedShellUserService
 import java.nio.file.Files
 import java.nio.file.Path
+import java.io.FileInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -19,7 +19,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -27,13 +26,12 @@ import kotlin.coroutines.resumeWithException
 internal class AndroidShellExecutors(
     private val activity: Activity,
     private val modeProvider: suspend () -> ShellExecutionMode,
-) : ShellCommandExecutor {
+) : AgentShellExecutor {
     override suspend fun execute(
         command: String,
         workingDirectory: String?,
-        timeoutSeconds: Int,
-    ): ShellCommandExecutor.ExecutionResult {
-        val request = normalizeAndroidShellCommandRequest(command, workingDirectory, timeoutSeconds)
+    ): AgentShellExecutor.ExecutionResult {
+        val request = normalizeAndroidShellCommandRequest(command, workingDirectory)
         val mode = modeProvider()
         return execute(mode, request)
     }
@@ -41,12 +39,11 @@ internal class AndroidShellExecutors(
     private suspend fun execute(
         mode: ShellExecutionMode,
         request: AndroidShellCommandRequest,
-    ): ShellCommandExecutor.ExecutionResult = when (mode) {
+    ): AgentShellExecutor.ExecutionResult = when (mode) {
         ShellExecutionMode.App -> executeLocal(
             commandLine = listOf("/system/bin/sh", "-c", request.command),
             workingDirectory = resolveAppWorkingDirectory(request.workingDirectory),
             reportedWorkingDirectory = request.workingDirectory ?: activity.applicationContext.filesDir.absolutePath,
-            timeoutSeconds = request.timeoutSeconds,
             requestedMode = mode,
             identityLine = "uid=${Process.myUid()}",
         )
@@ -58,14 +55,13 @@ internal class AndroidShellExecutors(
             ),
             workingDirectory = activity.applicationContext.filesDir.toPath(),
             reportedWorkingDirectory = request.workingDirectory ?: ROOT_DEFAULT_DIRECTORY,
-            timeoutSeconds = request.timeoutSeconds,
             requestedMode = mode,
             identityLine = "requiredUid=0",
         )
         ShellExecutionMode.Adb -> executeWithShizuku(request)
     }
 
-    private suspend fun executeWithShizuku(request: AndroidShellCommandRequest): ShellCommandExecutor.ExecutionResult {
+    private suspend fun executeWithShizuku(request: AndroidShellCommandRequest): AgentShellExecutor.ExecutionResult {
         if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
             return failure("mode=adb\nerror=Shizuku is not running. Start Shizuku with adb, then try again.")
         }
@@ -81,33 +77,31 @@ internal class AndroidShellExecutors(
 
         val args = Shizuku.UserServiceArgs(
             ComponentName(activity.packageName, PrivilegedShellUserService::class.java.name),
-        ).daemon(false).processNameSuffix("adb_shell").version(3)
+        ).daemon(false).processNameSuffix("adb_shell").version(5)
 
         var connection: ServiceConnection? = null
         return try {
-            val service = withTimeoutOrNull(SHIZUKU_BIND_TIMEOUT_MILLIS) {
-                suspendCancellableCoroutine<IPrivilegedShellService> { continuation ->
-                    val candidate = object : ServiceConnection {
-                        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                            val value = IPrivilegedShellService.Stub.asInterface(binder)
-                            if (value == null) {
-                                if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Empty Shizuku service binder"))
-                            } else if (continuation.isActive) {
-                                continuation.resume(value)
-                            }
-                        }
-
-                        override fun onServiceDisconnected(name: ComponentName?) {
-                            if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Shizuku service disconnected"))
+            val service = suspendCancellableCoroutine<IPrivilegedShellService> { continuation ->
+                val candidate = object : ServiceConnection {
+                    override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                        val value = IPrivilegedShellService.Stub.asInterface(binder)
+                        if (value == null) {
+                            if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Empty Shizuku service binder"))
+                        } else if (continuation.isActive) {
+                            continuation.resume(value)
                         }
                     }
-                    connection = candidate
-                    Shizuku.bindUserService(args, candidate)
-                    continuation.invokeOnCancellation {
-                        runCatching { Shizuku.unbindUserService(args, candidate, true) }
+
+                    override fun onServiceDisconnected(name: ComponentName?) {
+                        if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Shizuku service disconnected"))
                     }
                 }
-            } ?: return failure("mode=adb\nerror=Timed out while connecting to the Shizuku UserService.")
+                connection = candidate
+                Shizuku.bindUserService(args, candidate)
+                continuation.invokeOnCancellation {
+                    runCatching { Shizuku.unbindUserService(args, candidate, true) }
+                }
+            }
 
             val actualUid = withContext(Dispatchers.IO) { service.uid() }
             if (actualUid != ADB_SHELL_UID) {
@@ -117,9 +111,11 @@ internal class AndroidShellExecutors(
                     service.execute(
                         request.command,
                         request.workingDirectory.orEmpty(),
-                        request.timeoutSeconds,
-                        MAX_OUTPUT_BYTES,
-                    )
+                    ).use { descriptor ->
+                        FileInputStream(descriptor.fileDescriptor).use { input ->
+                            input.readBytes().decodeToString()
+                        }
+                    }
                 }
                 parsePrivilegedResult("mode=adb\n$result")
             }
@@ -154,10 +150,9 @@ internal class AndroidShellExecutors(
         commandLine: List<String>,
         workingDirectory: Path,
         reportedWorkingDirectory: String,
-        timeoutSeconds: Int,
         requestedMode: ShellExecutionMode,
         identityLine: String,
-    ): ShellCommandExecutor.ExecutionResult = try {
+    ): AgentShellExecutor.ExecutionResult = try {
         coroutineScope {
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(commandLine)
@@ -176,38 +171,25 @@ internal class AndroidShellExecutors(
                 process.inputStream.use { input ->
                     val retained = java.io.ByteArrayOutputStream()
                     val buffer = ByteArray(4_096)
-                    var truncated = false
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
-                        val remaining = MAX_OUTPUT_BYTES - retained.size()
-                        if (remaining > 0) retained.write(buffer, 0, minOf(count, remaining))
-                        if (count > remaining) truncated = true
+                        retained.write(buffer, 0, count)
                     }
-                    retained.toByteArray().decodeToString() to truncated
+                    retained.toByteArray().decodeToString()
                 }
             }
             try {
-                val completed = withTimeoutOrNull(timeoutSeconds * 1_000L) {
-                    while (process.isAlive) delay(50)
-                    true
-                } == true
-                if (!completed) {
-                    process.destroy()
-                    delay(150)
-                    if (process.isAlive) process.destroyForcibly()
-                }
-                val (text, truncated) = output.await()
-                ShellCommandExecutor.ExecutionResult(
+                while (process.isAlive) delay(50)
+                val text = output.await()
+                AgentShellExecutor.ExecutionResult(
                     output = buildString {
                         append("mode=").append(requestedMode.code).append('\n')
                         append(identityLine).append('\n')
                         append("cwd=").append(reportedWorkingDirectory).append('\n')
                         append(text)
-                        if (!completed) append("\nCommand timed out after $timeoutSeconds seconds")
-                        if (truncated) append("\n[output truncated at $MAX_OUTPUT_BYTES bytes]")
                     }.trimEnd(),
-                    exitCode = if (completed) process.exitValue() else null,
+                    exitCode = process.exitValue(),
                 )
             } finally {
                 if (process.isAlive) process.destroyForcibly()
@@ -241,7 +223,7 @@ internal class AndroidShellExecutors(
         return directory
     }
 
-    private fun parsePrivilegedResult(output: String): ShellCommandExecutor.ExecutionResult {
+    private fun parsePrivilegedResult(output: String): AgentShellExecutor.ExecutionResult {
         val lines = output.lines().toMutableList()
         val exitCodeIndex = lines.indexOfFirst { it.startsWith("exitCode=") }
         val exitCode = if (exitCodeIndex >= 0) {
@@ -249,11 +231,11 @@ internal class AndroidShellExecutors(
         } else {
             null
         }
-        return ShellCommandExecutor.ExecutionResult(lines.joinToString("\n").trimEnd(), exitCode)
+        return AgentShellExecutor.ExecutionResult(lines.joinToString("\n").trimEnd(), exitCode)
     }
 
-    private fun failure(output: String): ShellCommandExecutor.ExecutionResult =
-        ShellCommandExecutor.ExecutionResult(output, null)
+    private fun failure(output: String): AgentShellExecutor.ExecutionResult =
+        AgentShellExecutor.ExecutionResult(output, null)
 
     private fun rootVerifiedCommand(command: String, workingDirectory: String): String =
         "actual_uid=\$(id -u); " +
@@ -266,22 +248,18 @@ internal class AndroidShellExecutors(
 
     private companion object {
         const val ADB_SHELL_UID = 2_000
-        const val MAX_OUTPUT_BYTES = 65_536
         const val ROOT_DEFAULT_DIRECTORY = "/"
-        const val SHIZUKU_BIND_TIMEOUT_MILLIS = 10_000L
     }
 }
 
 internal data class AndroidShellCommandRequest(
     val command: String,
     val workingDirectory: String?,
-    val timeoutSeconds: Int,
 )
 
 internal fun normalizeAndroidShellCommandRequest(
     command: String,
     workingDirectory: String?,
-    timeoutSeconds: Int,
 ): AndroidShellCommandRequest {
     val normalizedCommand = command.trim()
     require(normalizedCommand.isNotEmpty()) { "Command must not be empty" }
@@ -290,7 +268,6 @@ internal fun normalizeAndroidShellCommandRequest(
     return AndroidShellCommandRequest(
         command = normalizedCommand,
         workingDirectory = workingDirectory?.let(::normalizeAndroidAbsolutePath),
-        timeoutSeconds = timeoutSeconds.coerceIn(1, MAX_ANDROID_SHELL_TIMEOUT_SECONDS),
     )
 }
 
@@ -309,4 +286,3 @@ private fun normalizeAndroidAbsolutePath(path: String): String {
 }
 
 private const val MAX_ANDROID_SHELL_COMMAND_CHARS = 8_192
-private const val MAX_ANDROID_SHELL_TIMEOUT_SECONDS = 20

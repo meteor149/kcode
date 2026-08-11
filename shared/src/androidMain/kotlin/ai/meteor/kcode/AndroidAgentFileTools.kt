@@ -5,8 +5,6 @@ import ai.koog.agents.ext.tool.file.EditFileTool
 import ai.koog.agents.ext.tool.file.ListDirectoryTool
 import ai.koog.agents.ext.tool.file.ReadFileTool
 import ai.koog.agents.ext.tool.file.WriteFileTool
-import ai.koog.agents.ext.tool.shell.BraveModeConfirmationHandler
-import ai.koog.agents.ext.tool.shell.ExecuteShellCommandTool
 import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import android.app.Activity
@@ -70,7 +68,7 @@ fun createAndroidKoogChatRuntime(
         tool(ReadMediaFileTool(fileSystem))
         webContainerTools(webContainerController)
         tool(WebSearchTool(webSearchConfigurationProvider))
-        tool(ExecuteShellCommandTool(shellExecutor, BraveModeConfirmationHandler()))
+        tool(AgentShellTool(shellExecutor))
         skillTools(skillRuntime)
         artifactTools(artifactRepository)
     }
@@ -94,7 +92,6 @@ internal class AndroidPrivateAgentWorkspace(
     override suspend fun readText(path: String): String = io {
         val target = checked(path, allowRoot = false)
         require(Files.isRegularFile(target)) { "File does not exist: $path" }
-        require(Files.size(target) <= MaxFileBytes) { "File exceeds the $MaxFileBytes-byte limit" }
         Files.readAllBytes(target).decodeToString()
     }
 

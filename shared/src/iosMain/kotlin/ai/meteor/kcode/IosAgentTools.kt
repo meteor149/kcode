@@ -118,7 +118,6 @@ internal class IosAgentWorkspace(
         val target = checked(path, allowRoot = false)
         val metadata = SystemFileSystem.metadataOrNull(target)
         require(metadata?.isRegularFile == true) { "File does not exist: $path" }
-        require(metadata.size <= MAX_FILE_BYTES) { "File exceeds the $MAX_FILE_BYTES-byte limit" }
         return SystemFileSystem.source(target).buffered().use { source ->
             source.readByteArray().decodeToString()
         }

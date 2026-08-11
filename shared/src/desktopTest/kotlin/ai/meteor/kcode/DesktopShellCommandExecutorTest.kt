@@ -1,6 +1,5 @@
 package ai.meteor.kcode
 
-import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -14,35 +13,34 @@ class DesktopShellCommandExecutorTest {
         val workspace = Files.createTempDirectory("kcode-desktop-shell")
         val command = if (System.getProperty("os.name").lowercase().contains("win")) "cd" else "pwd"
 
-        val result = DesktopShellCommandExecutor(workspace).execute(command, "/workspace", 10)
+        val result = DesktopShellCommandExecutor(workspace).execute(command, "/workspace")
 
         assertEquals(0, result.exitCode)
         assertContains(result.output.lowercase(), workspace.toRealPath().toString().lowercase())
     }
 
     @Test
-    fun mapsVirtualWorkingDirectoryAndClampsTimeout() = runBlocking {
+    fun mapsVirtualWorkingDirectory() = runBlocking {
         val workspace = Files.createTempDirectory("kcode-desktop-shell")
         val project = Files.createDirectories(workspace.resolve("project"))
-        var invocation: Triple<String, String?, Int>? = null
+        var invocation: Pair<String, String?>? = null
         val executor = DesktopShellCommandExecutor(
             workspace = workspace,
-            delegate = object : ShellCommandExecutor {
+            delegate = object : AgentShellExecutor {
                 override suspend fun execute(
                     command: String,
                     workingDirectory: String?,
-                    timeoutSeconds: Int,
-                ): ShellCommandExecutor.ExecutionResult {
-                    invocation = Triple(command, workingDirectory, timeoutSeconds)
-                    return ShellCommandExecutor.ExecutionResult("done", 0)
+                ): AgentShellExecutor.ExecutionResult {
+                    invocation = command to workingDirectory
+                    return AgentShellExecutor.ExecutionResult("done", 0)
                 }
             },
         )
 
-        val result = executor.execute("  pwd  ", "/workspace/project", 60)
+        val result = executor.execute("  pwd  ", "/workspace/project")
 
-        assertEquals(Triple("pwd", project.toRealPath().toString(), 20), invocation)
-        assertEquals(ShellCommandExecutor.ExecutionResult("done", 0), result)
+        assertEquals("pwd" to project.toRealPath().toString(), invocation)
+        assertEquals(AgentShellExecutor.ExecutionResult("done", 0), result)
     }
 
     @Test
@@ -50,17 +48,16 @@ class DesktopShellCommandExecutorTest {
         val workspace = Files.createTempDirectory("kcode-desktop-shell")
         val executor = DesktopShellCommandExecutor(
             workspace = workspace,
-            delegate = object : ShellCommandExecutor {
+            delegate = object : AgentShellExecutor {
                 override suspend fun execute(
                     command: String,
                     workingDirectory: String?,
-                    timeoutSeconds: Int,
-                ) = ShellCommandExecutor.ExecutionResult("unexpected", 0)
+                ) = AgentShellExecutor.ExecutionResult("unexpected", 0)
             },
         )
 
         assertFailsWith<IllegalArgumentException> {
-            executor.execute("pwd", "/tmp", 10)
+            executor.execute("pwd", "/tmp")
         }
         Unit
     }

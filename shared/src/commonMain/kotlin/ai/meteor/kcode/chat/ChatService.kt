@@ -12,6 +12,11 @@ sealed interface ToolUseEvent {
         val input: String,
     ) : ToolUseEvent
 
+    data class Updated(
+        override val id: String,
+        val input: String,
+    ) : ToolUseEvent
+
     data class Finished(
         override val id: String,
         val output: String,

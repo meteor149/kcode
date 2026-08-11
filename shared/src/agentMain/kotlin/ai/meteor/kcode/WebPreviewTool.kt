@@ -192,7 +192,7 @@ class WebInspectContainerTool(
                 append("\nhandle=").append(element.handle)
                 append(" tag=").append(element.tag)
                 element.role?.let { append(" role=").append(it) }
-                append(" name=").append(element.name.replace('\n', ' ').take(200))
+                append(" name=").append(element.name.replace('\n', ' '))
                 append(" selector=").append(element.selector)
                 append(" bounds=").append(element.x).append(',').append(element.y)
                     .append(',').append(element.width).append(',').append(element.height)
@@ -277,7 +277,7 @@ class WebConsoleTool(
             if (snapshot.entries.isEmpty()) append("\nNo new console entries.")
             snapshot.entries.forEach { entry ->
                 append("\n[").append(entry.sequence).append("][").append(entry.level).append("] ")
-                append(entry.message.replace('\n', ' ').take(4_000))
+                append(entry.message.replace('\n', ' '))
                 entry.source?.let { append(" (").append(it).append(':').append(entry.line ?: 0).append(')') }
             }
         }

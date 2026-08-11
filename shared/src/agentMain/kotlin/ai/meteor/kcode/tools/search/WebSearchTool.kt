@@ -6,7 +6,6 @@ import ai.koog.serialization.typeToken
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
@@ -38,11 +37,6 @@ class WebSearchTool(
 ) {
     private val client = HttpClient(engine) {
         expectSuccess = true
-        install(HttpTimeout) {
-            requestTimeoutMillis = REQUEST_TIMEOUT_MS
-            connectTimeoutMillis = CONNECT_TIMEOUT_MS
-            socketTimeoutMillis = REQUEST_TIMEOUT_MS
-        }
         install(ContentNegotiation) { json(SearchJson) }
     }
 
@@ -70,12 +64,12 @@ class WebSearchTool(
         return buildString {
             append("Web search results via ").append(configuration.provider.name).append(" for: ").append(query)
             results.forEachIndexed { index, item ->
-                append("\n\n").append(index + 1).append(". ").append(item.title.clean(MAX_TITLE_LENGTH))
-                append("\nURL: ").append(item.url.take(MAX_URL_LENGTH))
-                item.snippet.clean(MAX_SNIPPET_LENGTH).takeIf(String::isNotBlank)?.let {
+                append("\n\n").append(index + 1).append(". ").append(item.title.clean())
+                append("\nURL: ").append(item.url)
+                item.snippet.clean().takeIf(String::isNotBlank)?.let {
                     append("\nSnippet: ").append(it)
                 }
-                item.publishedDate?.takeIf(String::isNotBlank)?.let { append("\nPublished: ").append(it.take(80)) }
+                item.publishedDate?.takeIf(String::isNotBlank)?.let { append("\nPublished: ").append(it) }
             }
         }
     }
@@ -147,7 +141,7 @@ class WebSearchTool(
         }.bodyAsText()
         return RSS_ITEM_PATTERN.findAll(xml).mapNotNull { itemMatch ->
             val item = itemMatch.groupValues[1]
-            val title = RSS_TITLE_PATTERN.find(item)?.groupValues?.get(1)?.let(::decodeHtml)?.clean(MAX_TITLE_LENGTH).orEmpty()
+            val title = RSS_TITLE_PATTERN.find(item)?.groupValues?.get(1)?.let(::decodeHtml)?.clean().orEmpty()
             val url = RSS_LINK_PATTERN.find(item)?.groupValues?.get(1)?.trim().orEmpty()
             if (title.isBlank() || !url.startsWith("http")) return@mapNotNull null
             val snippet = RSS_DESCRIPTION_PATTERN.find(item)?.groupValues?.get(1)?.let(::stripHtml).orEmpty()
@@ -167,10 +161,10 @@ class WebSearchTool(
 
     private fun extractGoogleSnippet(html: String): String {
         val plain = stripHtml(html)
-        return plain.substringBefore("Cached").substringBefore("Translate").clean(MAX_SNIPPET_LENGTH)
+        return plain.substringBefore("Cached").substringBefore("Translate").clean()
     }
 
-    private fun stripHtml(value: String): String = decodeHtml(value.replace(TAG_PATTERN, " ")).clean(MAX_SNIPPET_LENGTH)
+    private fun stripHtml(value: String): String = decodeHtml(value.replace(TAG_PATTERN, " ")).clean()
 
     private fun decodeHtml(value: String): String = value
         .replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
@@ -180,7 +174,7 @@ class WebSearchTool(
         require(it.isNotEmpty()) { "$provider search is not configured. Add its API key in Settings > Internet search." }
     }
 
-    private fun String.clean(maxLength: Int): String = replace(Regex("\\s+"), " ").trim().take(maxLength)
+    private fun String.clean(): String = replace(Regex("\\s+"), " ").trim()
 
     @Serializable private data class BrightDataRequest(val zone: String = "serp_api1", val url: String, val format: String = "raw")
     @Serializable private data class BrightDataSearchResponse(val organic: List<BrightDataResult> = emptyList())
@@ -192,7 +186,7 @@ class WebSearchTool(
         val contents: ExaContents = ExaContents(),
     )
     @Serializable private data class ExaContents(val highlights: ExaHighlights = ExaHighlights())
-    @Serializable private data class ExaHighlights(val maxCharacters: Int = MAX_SNIPPET_LENGTH)
+    @Serializable private class ExaHighlights
     @Serializable private data class ExaSearchResponse(val results: List<ExaResult> = emptyList())
     @Serializable private data class ExaResult(
         val title: String? = null,
@@ -209,12 +203,7 @@ class WebSearchTool(
         const val GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
         const val MAX_QUERY_LENGTH = 500
         const val MAX_RESULTS = 10
-        const val MAX_TITLE_LENGTH = 300
-        const val MAX_URL_LENGTH = 2_048
-        const val MAX_SNIPPET_LENGTH = 1_500
         const val GOOGLE_SNIPPET_WINDOW = 1_200
-        const val CONNECT_TIMEOUT_MS = 10_000L
-        const val REQUEST_TIMEOUT_MS = 25_000L
         const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36"
         val SearchJson = Json { ignoreUnknownKeys = true; explicitNulls = false }
         val GOOGLE_RESULT_PATTERN = Regex("""(?is)<a[^>]+href=["']([^"']+)["'][^>]*>\s*<h3[^>]*>(.*?)</h3>""")

@@ -12,9 +12,6 @@ interface AgentWorkspace {
 
     suspend fun canonicalize(path: String): String = path
 
-    suspend fun readText(path: String, maxBytes: Int): String = readText(path).also { contents ->
-        require(contents.encodeToByteArray().size <= maxBytes) { "File exceeds $maxBytes bytes: $path" }
-    }
 }
 
 data class AgentWorkspaceEntry(

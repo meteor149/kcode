@@ -70,7 +70,7 @@ class HostSkillProvider(
         require(isContained(packageDirectory, request.resourceId)) { "Skill resource is outside its package" }
         val canonicalResource = workspace.canonicalize(request.resourceId)
         require(isContained(packageDirectory, canonicalResource)) { "Skill resource escapes its package" }
-        val contents = workspace.readText(canonicalResource, SkillLimits.MaxResourceBytes)
+        val contents = workspace.readText(canonicalResource)
         return SkillReadResult(
             authority = authority,
             packageId = request.packageId,
@@ -86,7 +86,7 @@ class HostSkillProvider(
         warnings: MutableList<SkillWarning>,
     ): LoadedSkill? = runCatching {
         val canonical = workspace.canonicalize(discoveryPath)
-        val contents = workspace.readText(canonical, SkillLimits.MaxResourceBytes)
+        val contents = workspace.readText(canonical)
         val parsed = SkillFrontmatterParser.parse(contents, discoveryPath.substringBeforeLast('/').substringAfterLast('/'))
         LoadedSkill(
             descriptor = SkillDescriptor(

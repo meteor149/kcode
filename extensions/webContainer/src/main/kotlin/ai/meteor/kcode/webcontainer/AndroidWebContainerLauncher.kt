@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
 class AndroidWebContainerLauncher(context: Context) : WebContainerController {
@@ -35,9 +34,7 @@ class AndroidWebContainerLauncher(context: Context) : WebContainerController {
     override suspend fun screenshot(containerId: String): WebContainerScreenshot {
         val activity = AndroidWebContainerSessions.awaitActivity(containerId)
         return withContext(Dispatchers.Main.immediate) {
-            withTimeout(10_000) {
-                while (activity.webView.width <= 0 || activity.webView.height <= 0) delay(16)
-            }
+            while (activity.webView.width <= 0 || activity.webView.height <= 0) delay(16)
             AndroidWebContainerSessions.screenshot(containerId, activity)
         }
     }
@@ -160,7 +157,7 @@ internal object AndroidWebContainerSessions {
 
     suspend fun awaitActivity(id: String): WebContainerActivity {
         val session = sessions[id] ?: error("Web container is not running: $id")
-        return withTimeout(10_000) { session.activity?.get() ?: session.ready.await() }
+        return session.activity?.get() ?: session.ready.await()
     }
 
     fun screenshot(id: String, activity: WebContainerActivity): WebContainerScreenshot {

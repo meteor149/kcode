@@ -3,13 +3,11 @@ package ai.meteor.kcode
 internal data class ShellCommandRequest(
     val command: String,
     val relativeWorkingDirectory: String,
-    val timeoutSeconds: Int,
 )
 
 internal fun normalizeShellCommandRequest(
     command: String,
     workingDirectory: String?,
-    timeoutSeconds: Int,
 ): ShellCommandRequest {
     val normalizedCommand = command.trim()
     require(normalizedCommand.isNotEmpty()) { "Command must not be empty" }
@@ -18,7 +16,6 @@ internal fun normalizeShellCommandRequest(
     return ShellCommandRequest(
         command = normalizedCommand,
         relativeWorkingDirectory = normalizeWorkspaceRelativePath(workingDirectory),
-        timeoutSeconds = timeoutSeconds.coerceIn(1, MAX_SHELL_TIMEOUT_SECONDS),
     )
 }
 
@@ -42,4 +39,3 @@ internal fun virtualWorkspacePath(relativePath: String): String =
 
 private const val VIRTUAL_WORKSPACE_ROOT = "/workspace"
 private const val MAX_SHELL_COMMAND_CHARS = 8_192
-private const val MAX_SHELL_TIMEOUT_SECONDS = 20

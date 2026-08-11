@@ -1,11 +1,11 @@
 package ai.meteor.kcode.shell
 
 import android.content.Context
+import android.os.ParcelFileDescriptor
 import android.os.Process
 import androidx.annotation.Keep
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /** Runs inside Shizuku's shell/root UserService process, never inside the app UID process. */
@@ -21,9 +21,7 @@ class PrivilegedShellUserService() : IPrivilegedShellService.Stub() {
     override fun execute(
         command: String,
         workingDirectory: String,
-        timeoutSeconds: Int,
-        maxOutputBytes: Int,
-    ): String {
+    ): ParcelFileDescriptor {
         val actualUid = uid()
         val workDir = resolveWorkingDirectory(workingDirectory)
         val process = ProcessBuilder("/system/bin/sh", "-c", command)
@@ -40,7 +38,6 @@ class PrivilegedShellUserService() : IPrivilegedShellService.Stub() {
         running.set(process)
 
         val retained = ByteArrayOutputStream()
-        var truncated = false
         val reader = Thread {
             process.inputStream.use { input ->
                 val buffer = ByteArray(4_096)
@@ -48,27 +45,25 @@ class PrivilegedShellUserService() : IPrivilegedShellService.Stub() {
                     val count = input.read(buffer)
                     if (count < 0) break
                     synchronized(retained) {
-                        val remaining = maxOutputBytes - retained.size()
-                        if (remaining > 0) retained.write(buffer, 0, minOf(count, remaining))
-                        if (count > remaining) truncated = true
+                        retained.write(buffer, 0, count)
                     }
                 }
             }
         }.apply { isDaemon = true; start() }
 
         return try {
-            val completed = process.waitFor(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroy()
-                if (!process.waitFor(150, TimeUnit.MILLISECONDS)) process.destroyForcibly()
-            }
-            reader.join(500)
-            buildString {
+            val exitCode = process.waitFor()
+            reader.join()
+            val result = buildString {
                 append("uid=").append(actualUid).append('\n')
                 append("cwd=").append(workDir.absolutePath).append('\n')
-                append("exitCode=").append(if (completed) process.exitValue() else "timeout").append('\n')
+                append("exitCode=").append(exitCode).append('\n')
                 synchronized(retained) { append(retained.toByteArray().decodeToString()) }
-                if (truncated) append("\n[output truncated at $maxOutputBytes bytes]")
+            }
+            val outputFile = File.createTempFile("kcode-shell-", ".out")
+            outputFile.writeText(result)
+            ParcelFileDescriptor.open(outputFile, ParcelFileDescriptor.MODE_READ_ONLY).also {
+                outputFile.delete()
             }
         } finally {
             running.compareAndSet(process, null)

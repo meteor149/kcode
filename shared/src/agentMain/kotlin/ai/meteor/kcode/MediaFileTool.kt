@@ -25,8 +25,7 @@ class ReadMediaFileTool<Path>(
         Reads an image or video file and sends it to the model as a native media attachment for
         visual analysis. Supported image containers include PNG, JPEG, GIF, WebP, BMP, and AVIF.
         Supported video containers include MP4, MOV, 3GP, WebM, Matroska, AVI, and MPEG. The selected
-        model and provider must support the detected media type. Files larger than
-        $MAX_MEDIA_TOOL_BYTES bytes are rejected.
+        model and provider must support the detected media type.
     """.trimIndent(),
 ) {
     @Serializable
@@ -55,11 +54,6 @@ class ReadMediaFileTool<Path>(
         val path = fileSystem.fromAbsolutePathString(args.path)
         val metadata = validateNotNull(fileSystem.metadata(path)) { "File not found: ${args.path}" }
         validate(metadata.type == FileMetadata.FileType.File) { "Not a file: ${args.path}" }
-        val size = fileSystem.size(path)
-        validate(size <= MAX_MEDIA_TOOL_BYTES) {
-            "File exceeds the $MAX_MEDIA_TOOL_BYTES-byte media tool limit: ${args.path}"
-        }
-
         val bytes = fileSystem.readBytes(path)
         val media = validateNotNull(detectMedia(bytes, fileSystem.extension(path))) {
             "Unsupported or unrecognized image/video format: ${args.path}"
@@ -159,5 +153,3 @@ private fun ByteArray.containsAscii(expected: String, limit: Int): Boolean {
 }
 
 private fun ByteArray.isIsoBaseMedia(): Boolean = asciiAt(4, "ftyp")
-
-internal const val MAX_MEDIA_TOOL_BYTES: Long = 20_971_520L

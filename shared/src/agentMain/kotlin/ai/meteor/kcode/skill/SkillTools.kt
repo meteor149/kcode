@@ -22,13 +22,11 @@ class SkillListTool(
         val catalog = runtime.catalog(args.forceReload)
         return catalog.entries.asSequence()
             .filter { it.enabled && it.promptVisible }
-            .take(100)
             .joinToString("\n") { skill ->
                 "name=${skill.name}; authority=${skill.authority.kind.name.lowercase()}:${skill.authority.id}; " +
                     "package=${skill.packageId}; main_resource=${skill.mainResource}; description=${skill.description}"
             }
             .ifBlank { "No enabled skills are available." }
-            .take(512 * 1_024)
     }
 }
 
@@ -60,6 +58,6 @@ class SkillReadTool(
                 packageId = args.packageId,
                 resourceId = args.resourceId,
             ),
-        ).contents.take(512 * 1_024)
+        ).contents
     }
 }

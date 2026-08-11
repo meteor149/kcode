@@ -45,7 +45,6 @@ class SkillRuntime(
         require(result.authority == request.authority) { "Provider changed the skill authority" }
         require(result.packageId == request.packageId) { "Provider changed the skill package" }
         require(result.resourceId == request.resourceId) { "Provider changed the skill resource" }
-        require(result.contents.encodeToByteArray().size <= SkillLimits.MaxResourceBytes) { "Skill resource is too large" }
         return result
     }
 

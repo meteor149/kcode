@@ -5,10 +5,6 @@ import ai.koog.agents.ext.tool.file.EditFileTool
 import ai.koog.agents.ext.tool.file.ListDirectoryTool
 import ai.koog.agents.ext.tool.file.ReadFileTool
 import ai.koog.agents.ext.tool.file.WriteFileTool
-import ai.koog.agents.ext.tool.shell.BraveModeConfirmationHandler
-import ai.koog.agents.ext.tool.shell.ExecuteShellCommandTool
-import ai.koog.agents.ext.tool.shell.JvmShellCommandExecutor
-import ai.koog.agents.ext.tool.shell.ShellCommandExecutor
 import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import ai.koog.rag.base.files.JVMFileSystemProvider
@@ -28,6 +24,8 @@ import java.nio.file.Path
 import kotlinx.io.Sink
 import kotlinx.io.Source
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.swing.Swing
 import javax.swing.JOptionPane
@@ -52,12 +50,7 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
                 tool(WriteFileTool(fileSystem))
                 tool(EditFileTool(fileSystem))
                 tool(ReadMediaFileTool(fileSystem))
-                tool(
-                    ExecuteShellCommandTool(
-                        executor = DesktopShellCommandExecutor(workspace),
-                        confirmationHandler = BraveModeConfirmationHandler(),
-                    ),
-                )
+                tool(AgentShellTool(DesktopShellCommandExecutor(workspace)))
                 webContainerTools(webContainerController)
                 tool(WebSearchTool(configurationProvider = {
                     settingsStore.load().let {
@@ -90,7 +83,6 @@ internal class DesktopAgentWorkspace(
     override suspend fun readText(path: String): String = withContext(Dispatchers.IO) {
         val target = checked(path, allowRoot = false)
         require(Files.isRegularFile(target)) { "File does not exist: $path" }
-        require(Files.size(target) <= MaxFileBytes) { "File exceeds the $MaxFileBytes-byte limit" }
         Files.readString(target)
     }
 
@@ -152,21 +144,19 @@ internal class DesktopAgentWorkspace(
 
 internal class DesktopShellCommandExecutor(
     workspace: Path,
-    private val delegate: ShellCommandExecutor = JvmShellCommandExecutor(),
-) : ShellCommandExecutor {
+    private val delegate: AgentShellExecutor = JvmAgentShellExecutor(),
+) : AgentShellExecutor {
     private val workspaceRoot = workspace.toRealPath()
 
     override suspend fun execute(
         command: String,
         workingDirectory: String?,
-        timeoutSeconds: Int,
-    ): ShellCommandExecutor.ExecutionResult {
-        val request = normalizeShellCommandRequest(command, workingDirectory, timeoutSeconds)
+    ): AgentShellExecutor.ExecutionResult {
+        val request = normalizeShellCommandRequest(command, workingDirectory)
         val directory = resolveWorkingDirectory(request.relativeWorkingDirectory)
         return delegate.execute(
             command = request.command,
             workingDirectory = directory.toString(),
-            timeoutSeconds = request.timeoutSeconds,
         )
     }
 
@@ -178,6 +168,34 @@ internal class DesktopShellCommandExecutor(
         }
         return directory
     }
+}
+
+private class JvmAgentShellExecutor : AgentShellExecutor {
+    override suspend fun execute(command: String, workingDirectory: String?): AgentShellExecutor.ExecutionResult =
+        coroutineScope {
+            val process = withContext(Dispatchers.IO) {
+                ProcessBuilder(commandLine(command))
+                    .directory(workingDirectory?.let { java.io.File(it) })
+                    .redirectErrorStream(true)
+                    .start()
+            }
+            val output = async(Dispatchers.IO) {
+                process.inputStream.use { it.readBytes().decodeToString() }
+            }
+            try {
+                val exitCode = withContext(Dispatchers.IO) { process.waitFor() }
+                AgentShellExecutor.ExecutionResult(output.await(), exitCode)
+            } finally {
+                if (process.isAlive) process.destroyForcibly()
+            }
+        }
+
+    private fun commandLine(command: String): List<String> =
+        if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+            listOf("cmd.exe", "/d", "/s", "/c", command)
+        } else {
+            listOf("/bin/sh", "-c", command)
+        }
 }
 
 private suspend fun confirmDesktopToolCall(request: ToolApprovalRequest): Boolean =
