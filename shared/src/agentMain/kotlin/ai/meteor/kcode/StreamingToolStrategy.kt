@@ -26,6 +26,8 @@ internal class StreamingToolStrategy(
     private val approver: ToolCallApprover,
     private val onToolUse: suspend (ToolUseEvent) -> Unit,
     private val onDelta: suspend (String) -> Unit,
+    private val additionalContextProvider: suspend () -> String = { "" },
+    private val continuationAfterResponse: suspend () -> String? = { null },
 ) {
     fun create() = functionalStrategy<String, String>("streaming_single_run") { input ->
         val visibleText = StringBuilder()
@@ -36,9 +38,13 @@ internal class StreamingToolStrategy(
         while (true) {
             val currentInput = pendingInput
             val stream = if (currentInput != null) {
-                requestLLMStreaming(currentInput).also { pendingInput = null }
+                val additionalContext = additionalContextProvider()
+                requestLLMStreaming(
+                    if (additionalContext.isBlank()) currentInput else "$currentInput\n\n$additionalContext",
+                ).also { pendingInput = null }
             } else {
                 val results = checkNotNull(pendingToolResults)
+                val additionalContext = additionalContextProvider()
                 appendPrompt {
                     user {
                         results.forEach { result ->
@@ -48,6 +54,7 @@ internal class StreamingToolStrategy(
                                 attachment(media.source, media.cacheControl)
                             }
                         }
+                        if (additionalContext.isNotBlank()) text(additionalContext)
                     }
                 }
                 llm.writeSession { requestLLMStreaming() }
@@ -83,6 +90,11 @@ internal class StreamingToolStrategy(
             val calls = response.parts
                 .filterIsInstance<MessagePart.Tool.Call>()
             if (calls.isEmpty()) {
+                val continuation = continuationAfterResponse()
+                if (!continuation.isNullOrBlank()) {
+                    pendingInput = continuation
+                    continue
+                }
                 return@functionalStrategy visibleText.toString().ifBlank {
                     response.parts.filterIsInstance<MessagePart.Text>().joinToString("") { it.text }
                 }

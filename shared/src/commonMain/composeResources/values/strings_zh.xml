@@ -153,6 +153,10 @@
     <string name="tool_failed_zh">失败</string>
     <string name="tool_input_zh">输入</string>
     <string name="tool_output_zh">输出</string>
+    <string name="subagent_zh">子 Agent</string>
+    <string name="subagent_pending_zh">等待运行</string>
+    <string name="subagent_waiting_zh">等待消息</string>
+    <string name="subagent_interrupted_zh">已中断</string>
     <string name="internet_search_zh">互联网搜索</string>
     <string name="internet_search_desc_zh">允许 Agent 搜索最新的公开互联网资料，并返回可引用的来源链接。</string>
     <string name="search_provider_zh">搜索服务</string>

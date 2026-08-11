@@ -25,4 +25,14 @@ class KcodePromptInstructionsTest {
         assertContains(composed, KcodeBaseInstructions)
         assertContains(composed, catalog)
     }
+
+    @Test
+    fun multiAgentPromptUsesCodexV2TaskPathsAndEnablesProactiveDelegation() {
+        val prompt = buildKcodeSystemPrompt(null, RootMultiAgentInstructions)
+
+        assertContains(prompt, "You are `/root`, the primary agent")
+        assertContains(prompt, "up to 4 agents can be active at once")
+        assertContains(prompt, "Proactive multi-agent delegation is active")
+        assertContains(prompt, "<multi_agent_mode>")
+    }
 }

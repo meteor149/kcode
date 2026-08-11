@@ -23,18 +23,43 @@ class ChatMessagePersistenceTest {
             ),
         )
 
-        val (text, toolUses) = decodeStoredMessageContent(original.toStoredContent())
+        val decoded = decodeStoredMessageContent(original.toStoredContent())
 
-        assertEquals(original.content, text)
-        assertEquals(original.toolUses, toolUses)
+        assertEquals(original.content, decoded.text)
+        assertEquals(original.toolUses, decoded.toolUses)
     }
 
     @Test
     fun keepsLegacyPlainTextMessagesReadable() {
         val legacy = "ordinary assistant text"
-        val (text, toolUses) = decodeStoredMessageContent(legacy)
+        val decoded = decodeStoredMessageContent(legacy)
 
-        assertEquals(legacy, text)
-        assertTrue(toolUses.isEmpty())
+        assertEquals(legacy, decoded.text)
+        assertTrue(decoded.toolUses.isEmpty())
+    }
+
+    @Test
+    fun roundTripsSubAgentRuntimeState() {
+        val original = ChatMessage(
+            id = 9,
+            role = MessageRole.Assistant,
+            content = "Delegating now.",
+            subAgents = listOf(
+                SubAgentInfo(
+                    path = "/root/research",
+                    parentPath = "/root",
+                    taskName = "research",
+                    prompt = "Inspect the source",
+                    status = SubAgentRunStatus.Completed,
+                    output = "Found the implementation.",
+                    textOffset = 15,
+                ),
+            ),
+        )
+
+        val decoded = decodeStoredMessageContent(original.toStoredContent())
+
+        assertEquals(original.content, decoded.text)
+        assertEquals(original.subAgents, decoded.subAgents)
     }
 }

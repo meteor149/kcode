@@ -6,11 +6,15 @@ import ai.meteor.kcode.ui.state.ConversationState
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.ChatServiceUnavailable
+import ai.meteor.kcode.chat.SubAgentEvent
+import ai.meteor.kcode.chat.SubAgentStatus
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.MessageRole
 import ai.meteor.kcode.model.ModelConfiguration
+import ai.meteor.kcode.model.SubAgentInfo
+import ai.meteor.kcode.model.SubAgentRunStatus
 import ai.meteor.kcode.model.ToolUseInfo
 import ai.meteor.kcode.model.ToolUseStatus
 import ai.meteor.kcode.model.toStoredContent
@@ -198,6 +202,11 @@ private fun launchStreamingResponse(
                     target.applyToolUseEvent(assistantId, event)
                     followBottom(target)
                 },
+                onSubAgent = { event ->
+                    target.isAwaitingFirstToken = false
+                    target.applySubAgentEvent(assistantId, event)
+                    followBottom(target)
+                },
                 onDelta = { delta ->
                     if (delta.isNotEmpty()) {
                         target.isAwaitingFirstToken = false
@@ -293,12 +302,46 @@ private fun ConversationState.applyToolUseEvent(messageId: Long, event: ToolUseE
     }
 }
 
+internal fun ConversationState.applySubAgentEvent(messageId: Long, event: SubAgentEvent) {
+    updateMessage(messageId) { message ->
+        when (event) {
+            is SubAgentEvent.Spawned -> message.copy(
+                subAgents = message.subAgents.filterNot { it.path == event.path } + SubAgentInfo(
+                    path = event.path,
+                    parentPath = event.parentPath,
+                    taskName = event.taskName,
+                    prompt = event.prompt,
+                    textOffset = message.content.length,
+                ),
+            )
+            is SubAgentEvent.StatusChanged -> message.copy(
+                subAgents = message.subAgents.map { agent ->
+                    if (agent.path != event.path) agent else agent.copy(
+                        status = event.status.toRunStatus(),
+                        currentTool = event.currentTool,
+                        output = event.output ?: agent.output,
+                    )
+                },
+            )
+        }
+    }
+}
+
+private fun SubAgentStatus.toRunStatus(): SubAgentRunStatus = when (this) {
+    SubAgentStatus.Pending -> SubAgentRunStatus.Pending
+    SubAgentStatus.Running -> SubAgentRunStatus.Running
+    SubAgentStatus.Waiting -> SubAgentRunStatus.Waiting
+    SubAgentStatus.Completed -> SubAgentRunStatus.Completed
+    SubAgentStatus.Failed -> SubAgentRunStatus.Failed
+    SubAgentStatus.Interrupted -> SubAgentRunStatus.Interrupted
+}
+
 private suspend fun ConversationState.persistOrRemovePartialMessage(
     messageId: Long,
     historyRepository: ConversationHistoryRepository,
 ) = withContext(NonCancellable) {
     val partial = messages.firstOrNull { it.id == messageId }
-    if (partial == null || (partial.content.isBlank() && partial.toolUses.isEmpty())) {
+    if (partial == null || (partial.content.isBlank() && partial.toolUses.isEmpty() && partial.subAgents.isEmpty())) {
         messages.removeAll { it.id == messageId }
         return@withContext
     }

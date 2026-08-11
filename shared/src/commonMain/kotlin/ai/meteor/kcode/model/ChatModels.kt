@@ -4,6 +4,19 @@ enum class MessageRole { User, Assistant }
 
 enum class ToolUseStatus { Running, Succeeded, Failed }
 
+enum class SubAgentRunStatus { Pending, Running, Waiting, Completed, Failed, Interrupted }
+
+data class SubAgentInfo(
+    val path: String,
+    val parentPath: String,
+    val taskName: String,
+    val prompt: String,
+    val status: SubAgentRunStatus = SubAgentRunStatus.Pending,
+    val currentTool: String? = null,
+    val output: String = "",
+    val textOffset: Int = 0,
+)
+
 data class ToolUseInfo(
     val id: String,
     val name: String,
@@ -20,6 +33,7 @@ data class ChatMessage(
     val content: String,
     val isError: Boolean = false,
     val toolUses: List<ToolUseInfo> = emptyList(),
+    val subAgents: List<SubAgentInfo> = emptyList(),
 )
 
 data class Conversation(

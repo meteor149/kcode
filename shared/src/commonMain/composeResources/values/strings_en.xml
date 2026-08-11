@@ -153,6 +153,10 @@
     <string name="tool_failed_en">Failed</string>
     <string name="tool_input_en">Input</string>
     <string name="tool_output_en">Output</string>
+    <string name="subagent_en">Sub-agent</string>
+    <string name="subagent_pending_en">Pending</string>
+    <string name="subagent_waiting_en">Waiting</string>
+    <string name="subagent_interrupted_en">Interrupted</string>
     <string name="internet_search_en">Internet search</string>
     <string name="internet_search_desc_en">Let the agent search current public internet sources and return source links.</string>
     <string name="search_provider_en">Search provider</string>

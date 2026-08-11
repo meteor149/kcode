@@ -24,6 +24,26 @@ sealed interface ToolUseEvent {
     ) : ToolUseEvent
 }
 
+enum class SubAgentStatus { Pending, Running, Waiting, Completed, Failed, Interrupted }
+
+sealed interface SubAgentEvent {
+    val path: String
+
+    data class Spawned(
+        override val path: String,
+        val parentPath: String,
+        val taskName: String,
+        val prompt: String,
+    ) : SubAgentEvent
+
+    data class StatusChanged(
+        override val path: String,
+        val status: SubAgentStatus,
+        val currentTool: String? = null,
+        val output: String? = null,
+    ) : SubAgentEvent
+}
+
 interface ChatService {
     val availability: ChatAvailability?
     suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String
@@ -37,6 +57,7 @@ interface ChatService {
         history: List<ChatMessage>,
         prompt: String,
         onToolUse: suspend (ToolUseEvent) -> Unit = {},
+        onSubAgent: suspend (SubAgentEvent) -> Unit = {},
         onDelta: suspend (String) -> Unit,
     ): String = reply(configuration, history, prompt).also { onDelta(it) }
 }

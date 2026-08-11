@@ -9,8 +9,17 @@ internal val KcodeBaseInstructions = """
     使用工具时遵守其参数契约、当前权限和用户授权；不要自行切换执行身份或把 Skill 当作额外权限。
 """.trimIndent()
 
-internal fun buildKcodeSystemPrompt(skillCatalogInstructions: String?): String = buildString {
+internal fun buildKcodeSystemPrompt(
+    skillCatalogInstructions: String?,
+    multiAgentInstructions: String? = null,
+): String = buildString {
     append(KcodeBaseInstructions)
+    multiAgentInstructions?.takeIf(String::isNotBlank)?.let { instructions ->
+        append("\n\n")
+        append(instructions)
+        append("\n\n")
+        append(ProactiveMultiAgentInstructions)
+    }
     skillCatalogInstructions?.takeIf(String::isNotBlank)?.let { catalog ->
         append("\n\n")
         append(catalog)

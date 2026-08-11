@@ -113,12 +113,13 @@ internal fun rememberConversationSessionState(
 }
 
 internal fun StoredMessage.toChatMessage(): ChatMessage {
-    val (messageText, toolUses) = decodeStoredMessageContent(content)
+    val decoded = decodeStoredMessageContent(content)
     return ChatMessage(
         id = id,
         role = if (role == MessageRole.User.name) MessageRole.User else MessageRole.Assistant,
-        content = messageText,
+        content = decoded.text,
         isError = isError,
-        toolUses = toolUses,
+        toolUses = decoded.toolUses,
+        subAgents = decoded.subAgents,
     )
 }
