@@ -80,16 +80,17 @@ class MultiAgentCoordinatorTest {
     }
 
     @Test
-    fun enforcesFourTotalConcurrencySlotsIncludingRoot() = runTest {
+    fun enforcesFiveTotalConcurrencySlotsIncludingRoot() = runTest {
         val never = CompletableDeferred<String>()
         val coordinator = coordinator { never.await() }
 
         coordinator.spawn(RootAgentPath, "one", "one", null)
         coordinator.spawn(RootAgentPath, "two", "two", null)
         coordinator.spawn(RootAgentPath, "three", "three", null)
+        coordinator.spawn(RootAgentPath, "four", "four", null)
 
         assertFailsWith<IllegalArgumentException> {
-            coordinator.spawn(RootAgentPath, "four", "four", null)
+            coordinator.spawn(RootAgentPath, "five", "five", null)
         }
     }
 

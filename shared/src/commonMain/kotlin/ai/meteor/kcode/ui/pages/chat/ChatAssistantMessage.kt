@@ -13,8 +13,6 @@ import ai.meteor.kcode.ui.design.KcodeRadius
 import ai.meteor.kcode.ui.design.KcodeSpacing
 
 import ai.meteor.kcode.model.ChatMessage
-import ai.meteor.kcode.model.SubAgentInfo
-import ai.meteor.kcode.model.SubAgentRunStatus
 import ai.meteor.kcode.model.ToolUseInfo
 import ai.meteor.kcode.model.ToolUseStatus
 import ai.meteor.kcode.ui.component.MarkdownText
@@ -83,33 +81,15 @@ internal fun AssistantMessageTimeline(
         return
     }
 
-    val timeline = buildList {
-        message.toolUses.forEach { add(AssistantTimelineItem.Tool(it)) }
-        message.subAgents.forEach { add(AssistantTimelineItem.Agent(it)) }
-    }.sortedBy(AssistantTimelineItem::textOffset)
+    val timeline = message.toolUses.sortedBy(ToolUseInfo::textOffset)
     var cursor = 0
-    timeline.forEach { item ->
-        val offset = item.textOffset.coerceIn(cursor, message.content.length)
+    timeline.forEach { toolUse ->
+        val offset = toolUse.textOffset.coerceIn(cursor, message.content.length)
         AssistantMarkdownSegment(message.content.substring(cursor, offset), compact, onLongPressText)
-        when (item) {
-            is AssistantTimelineItem.Tool -> ToolUseRow(toolUse = item.value, compact = compact)
-            is AssistantTimelineItem.Agent -> SubAgentRow(agent = item.value)
-        }
+        ToolUseRow(toolUse = toolUse, compact = compact)
         cursor = offset
     }
     AssistantMarkdownSegment(message.content.substring(cursor), compact, onLongPressText)
-}
-
-private sealed interface AssistantTimelineItem {
-    val textOffset: Int
-
-    data class Tool(val value: ToolUseInfo) : AssistantTimelineItem {
-        override val textOffset: Int = value.textOffset
-    }
-
-    data class Agent(val value: SubAgentInfo) : AssistantTimelineItem {
-        override val textOffset: Int = value.textOffset
-    }
 }
 
 @Composable
@@ -216,93 +196,6 @@ private fun ToolUseRow(toolUse: ToolUseInfo, compact: Boolean) {
 }
 
 @Composable
-private fun SubAgentRow(agent: SubAgentInfo) {
-    var expanded by remember(agent.path) { mutableStateOf(false) }
-    val active = agent.status == SubAgentRunStatus.Pending ||
-        agent.status == SubAgentRunStatus.Running ||
-        agent.status == SubAgentRunStatus.Waiting
-    val runningAlpha = if (active) {
-        val transition = rememberInfiniteTransition(label = "subagent-running-${agent.path}")
-        val animatedAlpha by transition.animateFloat(
-            initialValue = .35f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(760), RepeatMode.Reverse),
-            label = "subagent-running-alpha",
-        )
-        animatedAlpha
-    } else {
-        1f
-    }
-    val statusText = when (agent.status) {
-        SubAgentRunStatus.Pending -> text(UiText.SubAgentPending)
-        SubAgentRunStatus.Running -> text(UiText.ToolRunning)
-        SubAgentRunStatus.Waiting -> text(UiText.SubAgentWaiting)
-        SubAgentRunStatus.Completed -> text(UiText.ToolSucceeded)
-        SubAgentRunStatus.Failed -> text(UiText.ToolFailed)
-        SubAgentRunStatus.Interrupted -> text(UiText.SubAgentInterrupted)
-    }
-    val statusColor = if (
-        agent.status == SubAgentRunStatus.Failed || agent.status == SubAgentRunStatus.Interrupted
-    ) Error else LeafInk
-
-    Column(
-        Modifier.fillMaxWidth()
-            .padding(vertical = KcodeSpacing.xs)
-            .pressClickable { expanded = !expanded }
-            .clip(RoundedCornerShape(KcodeRadius.control))
-            .background(Panel)
-            .padding(horizontal = KcodeSpacing.sm, vertical = KcodeSpacing.xs),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                when (agent.status) {
-                    SubAgentRunStatus.Pending,
-                    SubAgentRunStatus.Running,
-                    SubAgentRunStatus.Waiting,
-                    -> Box(Modifier.size(7.dp).alpha(runningAlpha).clip(CircleShape).background(Leaf))
-                    SubAgentRunStatus.Completed -> KcodeIcon(KcodeIconAsset.Check, LeafInk, Modifier.size(15.dp))
-                    SubAgentRunStatus.Failed,
-                    SubAgentRunStatus.Interrupted,
-                    -> KcodeIcon(KcodeIconAsset.Info, Error, Modifier.size(15.dp))
-                }
-            }
-            Column(Modifier.weight(1f).padding(start = KcodeSpacing.xs)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${text(UiText.SubAgent)} · ${agent.taskName}",
-                        color = Ink,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text("  $statusText", color = statusColor, style = MaterialTheme.typography.labelSmall)
-                }
-                Text(
-                    agent.currentTool?.let { "${agent.path} · ${toolUseDisplayName(it)}" } ?: agent.path,
-                    color = SoftInk,
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            KcodeIcon(
-                KcodeIconAsset.ChevronDown,
-                SoftInk,
-                Modifier.size(15.dp).rotate(if (expanded) 180f else 0f),
-            )
-        }
-        AnimatedVisibility(visible = expanded, enter = fadeIn(tween(140)), exit = fadeOut(tween(100))) {
-            Column(
-                Modifier.fillMaxWidth().padding(start = KcodeSpacing.lg, top = KcodeSpacing.xs),
-                verticalArrangement = Arrangement.spacedBy(KcodeSpacing.xs),
-            ) {
-                ToolUseDetail(text(UiText.ToolInput), agent.prompt)
-                if (agent.output.isNotBlank()) ToolUseDetail(text(UiText.ToolOutput), agent.output)
-            }
-        }
-    }
-}
-
-@Composable
 private fun ToolUseDetail(label: String, value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(KcodeSpacing.hair)) {
         Text(label.uppercase(), color = SoftInk, style = MaterialTheme.typography.labelSmall)
@@ -317,7 +210,7 @@ private fun ToolUseDetail(label: String, value: String) {
     }
 }
 
-private fun toolUseDisplayName(name: String): String = when (name.lowercase()) {
+internal fun toolUseDisplayName(name: String): String = when (name.lowercase()) {
     "android_shell", "shell", "bash" -> "Shell"
     "read_file" -> "Read"
     "write_file" -> "Write"

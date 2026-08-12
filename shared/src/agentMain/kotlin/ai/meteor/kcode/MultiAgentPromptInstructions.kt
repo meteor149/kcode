@@ -23,7 +23,7 @@ internal val RootMultiAgentInstructions = """
     ```
     They may be addressed as to=/root.
 
-    All agents share the same workspace and tools. There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    All agents share the same workspace and tools. There are $MaxAgentConcurrency available concurrency slots, meaning that up to $MaxAgentConcurrency agents can be active at once, including you.
 """.trimIndent()
 
 internal val SubAgentInstructions = """
@@ -42,7 +42,7 @@ internal val SubAgentInstructions = """
     <payload text>
     ```
 
-    All agents share the same workspace and tools. There are 4 available concurrency slots, including the root agent.
+    All agents share the same workspace and tools. There are $MaxAgentConcurrency available concurrency slots, including the root agent.
 """.trimIndent()
 
 internal val ProactiveMultiAgentInstructions = """

@@ -140,6 +140,7 @@ internal fun ChatPane(
     val focusManager = LocalFocusManager.current
     val messageSelection = rememberMessageSelectionState(conversation?.id)
     var mobileComposerHeightPx by remember { mutableStateOf(0) }
+    var mobileAgentOverlayHeightPx by remember { mutableStateOf(0) }
     var anchoredTurn by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     // Text fields and keyboard actions can retain an earlier callback instance. Keep the
     // callback stable while making every invocation observe the latest recomposed state.
@@ -148,6 +149,12 @@ internal fun ChatPane(
     val regenerateDescription = text(UiText.RegenerateAnswer)
     val shareDescription = text(UiText.ShareImage)
     val conversationContentMotion = rememberConversationContentMotion(conversation?.id)
+    val runningSubAgents = conversation?.messages
+        ?.flatMap(ChatMessage::subAgents)
+        ?.associateBy { it.path }
+        ?.values
+        ?.filter { it.status.isRunning() }
+        .orEmpty()
     val messageAnchorTop = if (compact) 92.dp else 30.dp
     fun isAtConversationBottom(): Boolean {
         val target = currentConversation ?: return true
@@ -283,6 +290,8 @@ internal fun ChatPane(
                 176.dp
             } else {
                 with(density) { mobileComposerHeightPx.toDp() } + 18.dp
+            } + if (runningSubAgents.isEmpty()) 0.dp else {
+                with(density) { mobileAgentOverlayHeightPx.toDp() } + 10.dp
             }
             val composerOverlayBottom = if (mobileComposerHeightPx == 0) {
                 150.dp
@@ -341,10 +350,28 @@ internal fun ChatPane(
                         ?.second,
                     messageAnchorTop = messageAnchorTop,
                 )
+                if (runningSubAgents.isNotEmpty()) {
+                    RunningSubAgentOverlay(
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                            .widthIn(max = 720.dp)
+                            .fillMaxWidth()
+                            .padding(
+                                start = composerOuterPadding,
+                                end = composerOuterPadding,
+                                bottom = composerOverlayBottom,
+                            )
+                            .onSizeChanged { mobileAgentOverlayHeightPx = it.height },
+                        agents = runningSubAgents,
+                        hazeState = hazeState,
+                    )
+                }
                 AnimatedVisibility(
                     visible = !isAtConversationBottom(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(
-                        bottom = composerOverlayBottom - KcodeSize.floatingShadowGutter,
+                        bottom = composerOverlayBottom - KcodeSize.floatingShadowGutter +
+                            if (runningSubAgents.isEmpty()) 0.dp else {
+                                with(density) { mobileAgentOverlayHeightPx.toDp() } + 8.dp
+                            },
                     ),
                     enter = fadeIn(tween(160)),
                     exit = fadeOut(tween(140)),
@@ -525,6 +552,16 @@ internal fun ChatPane(
                         ?.second,
                     messageAnchorTop = messageAnchorTop,
                 )
+                if (runningSubAgents.isNotEmpty()) {
+                    RunningSubAgentOverlay(
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                            .widthIn(max = 760.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        agents = runningSubAgents,
+                        hazeState = hazeState,
+                    )
+                }
                 Composer(                    modifier = Modifier.align(Alignment.CenterHorizontally)
                         .widthIn(max = 760.dp)
                         .fillMaxWidth()

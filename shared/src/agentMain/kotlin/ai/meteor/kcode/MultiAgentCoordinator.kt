@@ -34,10 +34,12 @@ internal data class SubAgentSnapshot(
     val currentTool: String?,
 )
 
+internal const val MaxAgentConcurrency = 5
+
 internal class MultiAgentCoordinator(
     private val scope: CoroutineScope,
     rootContext: String,
-    private val maxConcurrency: Int = 4,
+    private val maxConcurrency: Int = MaxAgentConcurrency,
     private val runAgent: suspend (SubAgentLaunch) -> String,
     private val onEvent: suspend (SubAgentEvent) -> Unit = {},
 ) {

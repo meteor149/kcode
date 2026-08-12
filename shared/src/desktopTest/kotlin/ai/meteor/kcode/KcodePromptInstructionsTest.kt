@@ -31,7 +31,7 @@ class KcodePromptInstructionsTest {
         val prompt = buildKcodeSystemPrompt(null, RootMultiAgentInstructions)
 
         assertContains(prompt, "You are `/root`, the primary agent")
-        assertContains(prompt, "up to 4 agents can be active at once")
+        assertContains(prompt, "up to 5 agents can be active at once")
         assertContains(prompt, "Proactive multi-agent delegation is active")
         assertContains(prompt, "<multi_agent_mode>")
     }
