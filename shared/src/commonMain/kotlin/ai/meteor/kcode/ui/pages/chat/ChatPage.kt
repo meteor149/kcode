@@ -4,9 +4,11 @@ package ai.meteor.kcode.ui.pages.chat
 
 import ai.meteor.kcode.ui.design.Paper
 import ai.meteor.kcode.ui.design.Ink
+import ai.meteor.kcode.ui.design.Error
 
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ChatGenerationRunner
+import ai.meteor.kcode.chat.ConversationGoalSession
 import ai.meteor.kcode.ui.state.ConversationState
 import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.design.KcodeSpacing
@@ -26,6 +28,7 @@ import ai.meteor.kcode.localization.text
 import ai.meteor.kcode.localization.availabilityError
 import ai.meteor.kcode.localization.availabilityStatus
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -65,6 +68,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -77,6 +81,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import ai.meteor.kcode.ui.component.kcodeHazeSource
+import ai.meteor.kcode.ui.component.PressScaleStyle
+import ai.meteor.kcode.ui.component.pressClickable
 import ai.meteor.kcode.ui.component.rememberKcodeHazeState
 @Composable
 internal fun ChatPane(
@@ -111,6 +117,9 @@ internal fun ChatPane(
     val goalLabel = text(UiText.Goal)
     val goalStatusLabel = text(UiText.GoalStatus)
     val goalTokensLabel = text(UiText.GoalTokens)
+    val goalPauseAction = text(UiText.GoalPauseAction)
+    val goalResumeAction = text(UiText.GoalResumeAction)
+    val goalCancelAction = text(UiText.GoalCancelAction)
     val goalStatusNames = mapOf(
         ThreadGoalStatus.Active to text(UiText.GoalActive),
         ThreadGoalStatus.Paused to text(UiText.GoalPaused),
@@ -149,6 +158,7 @@ internal fun ChatPane(
     val regenerateDescription = text(UiText.RegenerateAnswer)
     val shareDescription = text(UiText.ShareImage)
     val conversationContentMotion = rememberConversationContentMotion(conversation?.id)
+    val visibleGoal = conversation?.goal?.takeUnless { it.status == ThreadGoalStatus.Complete }
     val runningSubAgents = conversation?.messages
         ?.flatMap(ChatMessage::subAgents)
         ?.associateBy { it.path }
@@ -232,6 +242,47 @@ internal fun ChatPane(
         )
     }
 
+    fun pauseGoal() {
+        val target = currentConversation ?: return
+        target.shouldResumeGoal = false
+        target.runningJob?.cancel()
+        scope.launch {
+            target.runningJob?.join()
+            val current = target.goal ?: return@launch
+            if (current.status != ThreadGoalStatus.Paused) {
+                ConversationGoalSession(target, historyRepository).setStatusFromUser(ThreadGoalStatus.Paused)
+            }
+        }
+    }
+
+    fun resumeGoal() {
+        val target = currentConversation ?: return
+        if (target.isGenerating) return
+        scope.launch {
+            ConversationGoalSession(target, historyRepository).setStatusFromUser(ThreadGoalStatus.Active)
+            target.shouldResumeGoal = true
+            continueRestoredGoal(
+                target = target,
+                configuration = currentConfiguration,
+                service = service,
+                generationRunner = generationRunner,
+                historyRepository = historyRepository,
+                failureMessages = failureMessages,
+                followBottom = ::followConversationBottom,
+            )
+        }
+    }
+
+    fun cancelGoal() {
+        val target = currentConversation ?: return
+        target.shouldResumeGoal = false
+        target.runningJob?.cancel()
+        scope.launch {
+            target.runningJob?.join()
+            if (target.goal != null) ConversationGoalSession(target, historyRepository).clearGoal()
+        }
+    }
+
     fun regenerate(answer: ChatMessage) {
         regenerateMessage(
             answer = answer,
@@ -285,7 +336,7 @@ internal fun ChatPane(
             val horizontalContentPadding = if (extraCompact) 12.dp else 20.dp
             val composerOuterPadding = if (extraCompact) 8.dp else 12.dp
             val listTopPadding = (if (extraCompact) 84.dp else 92.dp) +
-                if (conversation?.goal == null) 0.dp else 54.dp
+                if (visibleGoal == null) 0.dp else 54.dp
             val composerBottomPadding = if (mobileComposerHeightPx == 0) {
                 176.dp
             } else {
@@ -453,7 +504,7 @@ internal fun ChatPane(
                     exportConversation(ExportAction.Share)
                 },
             )
-            conversation?.goal?.let { goal ->
+            visibleGoal?.let { goal ->
                 GoalStatusBanner(
                     modifier = Modifier.align(Alignment.TopCenter)
                         .padding(top = 72.dp, start = 16.dp, end = 16.dp)
@@ -463,6 +514,12 @@ internal fun ChatPane(
                     statusName = goalStatusNames.getValue(goal.status),
                     goalLabel = goalLabel,
                     tokensLabel = goalTokensLabel,
+                    pauseLabel = goalPauseAction,
+                    resumeLabel = goalResumeAction,
+                    cancelLabel = goalCancelAction,
+                    onPause = ::pauseGoal,
+                    onResume = ::resumeGoal,
+                    onCancel = ::cancelGoal,
                 )
             }
         }
@@ -496,7 +553,7 @@ internal fun ChatPane(
                 },
                 onConfigurationChange = onConfigurationChange,
             )
-            conversation?.goal?.let { goal ->
+            visibleGoal?.let { goal ->
                 GoalStatusBanner(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                         .padding(horizontal = 24.dp, vertical = 8.dp)
@@ -506,6 +563,12 @@ internal fun ChatPane(
                     statusName = goalStatusNames.getValue(goal.status),
                     goalLabel = goalLabel,
                     tokensLabel = goalTokensLabel,
+                    pauseLabel = goalPauseAction,
+                    resumeLabel = goalResumeAction,
+                    cancelLabel = goalCancelAction,
+                    onPause = ::pauseGoal,
+                    onResume = ::resumeGoal,
+                    onCancel = ::cancelGoal,
                 )
             }
             if (conversation == null || conversation.messages.isEmpty()) {
@@ -590,39 +653,122 @@ private fun GoalStatusBanner(
     statusName: String,
     goalLabel: String,
     tokensLabel: String,
+    pauseLabel: String,
+    resumeLabel: String,
+    cancelLabel: String,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit,
 ) {
+    var expanded by remember(goal.goalId) { mutableStateOf(false) }
     Surface(
-        modifier = modifier,
+        modifier = modifier.animateContentSize()
+            .pressClickable(style = PressScaleStyle.Panel) { expanded = !expanded },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "$goalLabel · $statusName",
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Text(
-                text = goal.objective,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = buildString {
-                    append(tokensLabel).append(' ').append(goal.tokensUsed)
-                    goal.tokenBudget?.let { append('/').append(it) }
-                },
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                style = MaterialTheme.typography.labelSmall,
-            )
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$goalLabel · $statusName",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                if (!expanded) {
+                    Text(
+                        text = goal.objective,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    Box(Modifier.weight(1f))
+                }
+                Text(
+                    text = buildString {
+                        append(tokensLabel).append(' ').append(goal.tokensUsed)
+                        goal.tokenBudget?.let { append('/').append(it) }
+                    },
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                KcodeIcon(
+                    KcodeIconAsset.ChevronDown,
+                    MaterialTheme.colorScheme.onSecondaryContainer,
+                    Modifier.size(16.dp).rotate(if (expanded) 180f else 0f),
+                )
+            }
+            AnimatedVisibility(visible = expanded, enter = fadeIn(tween(140)), exit = fadeOut(tween(100))) {
+                Column(Modifier.fillMaxWidth().padding(top = KcodeSpacing.sm)) {
+                    Text(
+                        text = goal.objective,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = KcodeSpacing.sm),
+                        horizontalArrangement = Arrangement.spacedBy(KcodeSpacing.sm),
+                    ) {
+                        when (goal.status) {
+                            ThreadGoalStatus.Active -> GoalActionButton(
+                                modifier = Modifier.weight(1f),
+                                label = pauseLabel,
+                                onClick = {
+                                    expanded = false
+                                    onPause()
+                                },
+                            )
+                            ThreadGoalStatus.Complete -> Unit
+                            else -> GoalActionButton(
+                                modifier = Modifier.weight(1f),
+                                label = resumeLabel,
+                                onClick = {
+                                    expanded = false
+                                    onResume()
+                                },
+                            )
+                        }
+                        GoalActionButton(
+                            modifier = Modifier.weight(1f),
+                            label = cancelLabel,
+                            destructive = true,
+                            onClick = {
+                                expanded = false
+                                onCancel()
+                            },
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun GoalActionButton(
+    modifier: Modifier,
+    label: String,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier.pressClickable(style = PressScaleStyle.Button, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        color = if (destructive) MaterialTheme.colorScheme.errorContainer else {
+            MaterialTheme.colorScheme.surface.copy(alpha = .68f)
+        },
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = KcodeSpacing.sm, vertical = KcodeSpacing.xs),
+            color = if (destructive) Error else MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

@@ -169,6 +169,9 @@
     <string name="goal_usage_limited_en">Usage limited</string>
     <string name="goal_budget_limited_en">Budget limited</string>
     <string name="goal_complete_en">Complete</string>
+    <string name="goal_pause_action_en">Pause goal</string>
+    <string name="goal_resume_action_en">Resume goal</string>
+    <string name="goal_cancel_action_en">Cancel goal</string>
     <string name="internet_search_en">Internet search</string>
     <string name="internet_search_desc_en">Let the agent search current public internet sources and return source links.</string>
     <string name="search_provider_en">Search provider</string>
