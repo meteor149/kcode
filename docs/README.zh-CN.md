@@ -1,8 +1,8 @@
 <div align="center">
   <img src="../branding/kcode-mark-transparent.png" alt="kcode 标志" width="112" />
   <h1>kcode</h1>
-  <p><strong>为每一块屏幕而生的安静、本地优先 AI 工作空间。</strong></p>
-  <p>一套 Compose Multiplatform UI，一个 Koog Agent 运行时，以及属于你的模型、工具与数据。</p>
+  <p><strong>优雅、全功能、跨平台的原生 AI Agent。</strong></p>
+  <p>一套自适应 Compose UI，一个完整的 Agent 运行时，以及属于你的模型、工具、Skill 与数据。</p>
 
   <p>
     <a href="../README.md">English</a> · <strong>简体中文</strong>
@@ -11,53 +11,98 @@
   <p>
     <img src="https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin 2.3.21" />
     <img src="https://img.shields.io/badge/Compose_Multiplatform-1.8.2-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose Multiplatform 1.8.2" />
-    <img src="https://img.shields.io/badge/Koog-1.0.0-8FD694" alt="Koog 1.0.0" />
+    <img src="https://img.shields.io/badge/Koog-1.1.1-8FD694" alt="Koog 1.1.1" />
     <a href="../LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-3DA639" alt="Apache License 2.0" /></a>
   </p>
 </div>
 
 > [!IMPORTANT]
-> kcode 正处于积极开发阶段。当前请从源码构建，版本间可能存在破坏性变更；启用高权限工具前，请先阅读安全边界说明。
+> kcode 仍在快速演进中。版本间可能存在破坏性变更；请核对 Agent 执行的重要操作，并在启用高权限工具前阅读安全模型。
 
-## kcode 是什么？
+## 我们想做什么？
 
-kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) 与 [Koog](https://docs.koog.ai/) 构建的开源跨平台 AI 对话与 Agent 应用。它以同一套 UI 覆盖 Android、iOS、桌面与 Web，并将流式 Markdown、对话持久化、可见的工具调用、本地工作区、联网搜索和沙箱 Web 容器整合在一个专注、克制的交互体验中。
+kcode 是一款面向 Android、iOS、桌面、Web 与 HarmonyOS 的开源原生 AI Agent。我们相信，Agent 应该是一款经过认真设计的应用：它不应只是塞进聊天框的终端，也不应是为每个平台重复包装的一层网页。
 
-## 核心特性
+项目将一套自适应 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) 界面与基于 [Koog](https://docs.koog.ai/) 的 Agent 运行时结合起来，并在此基础上提供本地优先存储、真实工具、可复用 Skill、持久化 Goal、多 Agent 编排和可运行的 Web Artifact。一次对话可以自然地从普通问答进入工具执行，再延伸为持续推进的长期目标，最终沉淀为可以直接打开使用的小应用。
 
-- **一套 UI，覆盖全端**——Android、iOS、桌面和 Web 共用自适应 Compose UI。
-- **面向 Agent 的对话体验**——实时流式输出、Markdown 渲染、工具调用过程、停止与重新生成、消息多选，以及在已支持平台导出带渲染效果的长图。
-- **自带模型，自由切换**——支持 OpenAI、Azure OpenAI、Anthropic、Google Gemini、DeepSeek、OpenRouter、Amazon Bedrock、Mistral AI、阿里云 DashScope、Ollama 和智谱 GLM。
-- **实用的内置工具**——受限 `/workspace` 文件读写、Google/Exa/Bright Data 联网搜索，以及可运行本地应用或远程网站的 Web 容器。
-- **移动硬件能力桥**——本地 Web 应用可按平台申请摄像头、定位、指南针、运动传感器、振动、电池和网络等能力。
-- **统一权限审批门**——所有工具调用可统一设置为 `Deny`、`Ask` 或 `Bypass`；系统权限仍然有效。
-- **本地优先持久化**——设置采用版本化存储，对话历史通过 Room/SQLite 跨端保存。
+## kcode 能做什么？
+
+### 不止对话，真正完成任务
+
+- 实时输出富 Markdown，并将助手回复与工具调用记录保留在会话中。
+- 原位展示工具执行进度与结果，支持停止、重新生成、消息选择，以及在已支持平台导出渲染后的会话长图。
+- 在已支持的移动端 Host 进入后台后继续保持生成任务运行。
+- 通过 Google、Exa 或 Bright Data 搜索最新公开网页，并返回来源链接。
+- 读取、浏览、写入和局部修改工作区文件；平台实现允许时还可读取媒体文件。
+- 在桌面端工作区执行 Shell，或在 Android 上选择应用 UID、Shizuku 与 root 身份执行命令。
+- 具备外部操作能力的工具统一经过 `Deny`、`Ask` 或 `Bypass` 权限策略；内部多 Agent 协作与 Goal 状态维护会自动执行。
+
+### 规划并推进长期任务
+
+**Goal** 可以把一次会话变成持久化目标。Goal 会跨应用重启保存，记录状态、运行时间与可选 Token 预算，并允许 Agent 跨多个回合持续推进，直到真正完成或确实受阻。使用 `/goal <目标>` 创建 Goal，之后可在会话中暂停、恢复、编辑或取消；活动 Goal 会显示在输入框上方，已完成 Goal 会自动退出界面。
+
+**多 Agent 编排**允许根 Agent 把边界清晰的子任务并行派发给工作 Agent，在 Agent 间传递消息、中断或复用已有 Agent，并等待所有结果后再统一汇总。kcode 最多支持 5 个并发 Agent（包含根 Agent）。运行中的子 Agent 会以双列状态栏直接显示在输入框上方，点击即可查看其活动与输出内容。
+
+### 使用 Skill 扩展能力
+
+kcode 会从 `/workspace/.agents/skills` 与 `/workspace/.kcode/skills` 发现 `SKILL.md` 包，并只向当前任务注入相关说明。Skill 可以承载领域知识、可重复工作流与工具使用规范，不需要把这些内容长期堆叠在系统提示词中。运行时会校验 Skill 的包边界，并通过基于 Authority 的 Provider 模型为更多 Skill 来源保留扩展能力。
+
+内置的 `kcode-web-app-builder` Skill 覆盖完整的 Web 应用工作流：实现响应式应用、在真实 Web 容器中打开、检查并操作界面、收集控制台输出与截图、修复缺陷，并且只有得到用户明确同意后，才会将应用保存为 Artifact。
+
+### 构建并保留可运行的 Artifact
+
+Web Artifact 是由 Agent 工作区托管的本地小应用。Agent 可以直接从对话开始开发，在产品实际使用的 Web 容器中调试，然后将成品保存到 Artifact 应用库。保存后的应用会像原生应用入口一样启动，而不是被埋没在历史消息里。
+
+Web 容器支持本地应用与远程网站、前后台生命周期、活动容器悬浮坞、DOM 检查、安全交互句柄、控制台收集、截图和响应式调试。Android 与 iOS 还会在不绕过系统权限的前提下，将定位、运动传感器、振动、电池、相机、麦克风和文件选择等可用 Web API 桥接到原生设备能力。具体实现约束请参阅 [Artifact 存储](artifacts.md)与 [Web 容器说明](../extensions/webContainer/README.md)。
+
+### 自由选择模型
+
+kcode 当前已集成：
+
+- OpenAI 与 Azure OpenAI
+- Anthropic
+- Google Gemini
+- DeepSeek
+- OpenRouter
+- Amazon Bedrock（桌面端）
+- Mistral AI
+- 阿里云 DashScope / Qwen
+- Ollama
+- 智谱 GLM
+
+模型供应商、模型、服务地址、区域、凭据与 Temperature 均可在应用内配置。Ollama 可以连接无需 API Key 的本地服务。
 
 ## 平台支持
 
-| 能力 | Android | iOS | 桌面 | Web |
-| --- | :---: | :---: | :---: | :---: |
-| 共享 Compose UI 与 Koog Agent | ✅ | ✅ | ✅ | ✅ |
-| 流式 Markdown 与历史持久化 | ✅ | ✅ | ✅ | ✅ |
-| 沙箱文件工作区与联网搜索 | ✅ | ✅ | ✅ | ✅ |
-| Web 容器 | ✅ | ✅ | ✅ | ✅ |
-| 渲染后会话长图导出 | ✅ | — | ✅ | — |
-| 移动硬件能力桥 | ✅ | ✅ | — | 浏览器 API |
-| Shell 工具 | 应用 UID / Shizuku / root | — | — | — |
-| Amazon Bedrock 客户端 | — | — | ✅ | — |
+| 能力 | Android | iOS | 桌面 | Web | HarmonyOS |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| 自适应原生 Compose UI | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 模型对话与本地历史记录 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 流式 Koog Agent 运行时 | ✅ | ✅ | ✅ | ✅ | — |
+| 持久化 Goal | ✅ | ✅ | ✅ | ✅ | 手动管理 |
+| 多 Agent 编排与 Skill | ✅ | ✅ | ✅ | ✅ | — |
+| Agent 文件工作区与联网搜索 | ✅ | ✅ | ✅ | ✅ | — |
+| Web Artifact 与容器 | ✅ | ✅ | ✅ | ✅ | — |
+| 会话长图导出 | ✅ | — | ✅ | — | — |
+| 移动端原生 Web 能力桥 | ✅ | ✅ | — | 浏览器 API | — |
+| Shell 工具 | 应用 UID / Shizuku / root | — | `/workspace` | — | — |
+| Amazon Bedrock 客户端 | — | — | ✅ | — | — |
 
-实际可用性还取决于设备、浏览器、模型供应商及用户授予的权限；浏览器直连模型服务也会受到 CORS 策略限制。
+HarmonyOS 当前通过隔离的 Kotlin/Native + ArkTS Host 构建，已经具备共享 UI、模型对话、设置和本地会话持久化，但尚未接入完整 Koog Agent 运行时。各平台上的实际能力还取决于所选模型、设备或浏览器能力以及用户授予的权限；浏览器直连模型服务也会受到 CORS 策略限制。
 
-## 快速开始
+## 获取 kcode
+
+带 Tag 的版本会自动将签名 Android APK、Windows MSI、macOS DMG、Linux DEB 与 Web 分发包发布到 [GitHub Releases](https://github.com/meteor149/kcode/releases)。iOS 与 HarmonyOS 目前需要从源码构建。
 
 ### 环境要求
 
-- JDK 21（应用 JVM 字节码目标仍为 Java 17）
-- Android 端需要 Android Studio 与 Android SDK 35
+- JDK 21；JVM 字节码目标为 Java 17
+- Android 端需要 Android Studio 与 Android SDK 35（最低 Android API 35）
 - iOS 端需要 macOS、Xcode 与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 - Web 端需要现代浏览器
+- HarmonyOS 端需要 DevEco Studio 与 HarmonyOS 工具链
 
-请从项目根目录使用仓库自带的 Gradle Wrapper。Windows 用户可将 `./gradlew` 替换为 `gradlew.bat`。
+请从项目根目录使用仓库自带的 Gradle Wrapper。Windows 用户请将 `./gradlew` 替换为 `gradlew.bat`。
 
 ### 桌面端
 
@@ -67,7 +112,7 @@ kcode 是一款基于 [Compose Multiplatform](https://www.jetbrains.com/compose-
 
 ### Android
 
-启动 API 35 或更高版本的模拟器，或连接 Android 设备，然后执行：
+启动 API 35 或更高版本的模拟器，或连接兼容设备，然后执行：
 
 ```bash
 ./gradlew :apps:androidApp:installDebug
@@ -87,26 +132,42 @@ xcodegen generate
 open iosApp.xcodeproj
 ```
 
-Xcode Target 会自动构建并嵌入共享的 `KcodeShared` Framework，最低部署版本为 iOS 14。
+Xcode Target 会构建并嵌入共享的 `KcodeShared` Framework，最低部署版本为 iOS 14。
 
-## 配置模型供应商
+### HarmonyOS
 
-进入**设置 → 大模型供应商**，选择供应商并填写凭据；当前模型和生成参数可直接从会话输入区调整。Ollama 支持无需 API Key 的本地服务地址。
+HarmonyOS 使用独立 Gradle 工程，使其 Kotlin/Compose 分支与主工程工具链相互隔离。在 Windows 上请先发布两种原生 ABI：
+
+```powershell
+.\gradlew.bat -p apps\harmonyApp\kotlin publishDebugBinariesToHarmonyApp
+```
+
+之后使用 DevEco Studio 打开 `apps/harmonyApp`，或执行 Hvigor 的 `assembleHap` 任务。更多信息请参阅 [HarmonyOS 构建说明](../apps/harmonyApp/README.md)。
+
+## 首次使用
+
+1. 打开**设置 → 大模型供应商**并选择服务。
+2. 填写凭据，以及该服务要求的 Endpoint、Deployment 或 Region。
+3. 返回会话，从输入区选择模型和 Temperature。
+4. 进行普通对话、要求 Agent 使用工具、明确要求它并行派发子任务，或者使用 `/goal <目标>` 创建持久任务。
 
 各平台的凭据存储方式不同：
 
-- Android 使用 Android Keystore 加密 API Key。
-- iOS 使用 Keychain 保存敏感信息。
-- 桌面端目前将配置保存在 `~/.kcode`，后续仍需接入各系统原生密钥存储。
-- Web 使用 `localStorage`，只应在可信站点使用；生产部署推荐通过自己的服务端网关访问模型。
+- Android 使用加密 MMKV，并通过 Android Keystore 保护其密钥。
+- iOS 使用加密 MMKV，并通过 Keychain 保护其密钥。
+- 桌面端将设置保存在应用数据目录；原生桌面密钥链支持仍在规划中。
+- Web 使用浏览器存储。请仅在可信站点使用，生产环境推荐通过服务端模型网关访问。
+- HarmonyOS 将应用设置保存在应用私有数据目录。
 
-## 安全边界
+## 安全模型
 
-- Agent 文件工具只能访问虚拟 `/workspace`，会拒绝路径穿越和符号链接逃逸，并限制文件与工作区大小。
-- 所有工具调用都会经过统一权限审批门。`Bypass` 仅跳过 kcode 的确认，不会绕过 Android、iOS 或浏览器系统权限。
-- Android Shell 明确区分应用 UID、Shizuku 与 root 身份，并限制执行时间和输出大小；高权限来源必须由用户主动配置。
-- Web 应用运行在隔离容器中，通过统一 API 查询能力是否可用，并在访问敏感能力前请求授权。
-- 请勿提交 API Key、`local.properties`、设备截图、调试日志或生成的数据库。
+- 桌面、iOS 与 Web 提供位于应用私有存储中的虚拟 `/workspace`，拒绝路径穿越和符号链接逃逸。Skill 与 Artifact 资源同样受 Skill 包或托管工作区边界约束。
+- Android 文件与媒体工具除了私有工作区外，还可以接受真实绝对路径，但仍受到 Android/Linux 文件权限与所选执行身份的限制。
+- 全局工具权限门决定 kcode 是拒绝、询问还是直接执行工具。`Bypass` 只会跳过 kcode 自身的确认，不会绕过操作系统、浏览器、WebView、Keychain、Keystore、Shizuku 或 root 管理器的权限控制。
+- Android Shell 明确区分应用 UID、Shizuku/ADB shell 与 root 模式；权限来源不可用时会直接失败，不会静默切换到另一身份。
+- 本地 Web 应用运行在隔离容器中，并在运行时申请敏感能力。远程网站不会获得 kcode 的本地原生能力桥。
+- 保存 Artifact 必须得到用户明确确认，并使用经过路径校验、容量限制且支持失败回滚的存储流程。
+- 请勿提交 API Key、`local.properties`、设备截图、生成的数据库或其他隐私数据。
 
 发现安全问题时，请优先私下联系维护者，不要在公开 Issue 中披露可利用细节。
 
@@ -114,46 +175,51 @@ Xcode Target 会自动构建并嵌入共享的 `KcodeShared` Framework，最低�
 
 ```text
 apps/
-  androidApp/       Android 应用入口
-  iosApp/           轻量 SwiftUI Host
+  androidApp/          Android 应用 Host
+  iosApp/              共享 Framework 的 SwiftUI Host
+  harmonyApp/          ArkTS Host 与隔离的 Kotlin/Native Compose 工程
   web/
-    sqliteWasmWorker/ SQLite Wasm Worker 模块与 OPFS 桥接
-shared/             统一的 Compose Multiplatform 共享模块
-  src/commonMain/   UI、状态、Room Schema、搜索与服务协议
-  src/agentMain/    Koog 运行时与跨平台 Agent 工具
-  src/*Main/        Android、iOS、桌面和 Web 平台实现
-  schemas/          Room 迁移 Schema
+    sqliteWasmWorker/  SQLite Wasm Worker 与 OPFS 桥接
+shared/
+  src/commonMain/      自适应 UI、领域状态与持久化协议
+  src/agentMain/       Koog 运行时、工具、Goal、Skill 与多 Agent 编排
+  src/*Main/           各平台存储、网络、工具与 Host 集成
+  schemas/             Room 迁移 Schema
 extensions/
-  webContainer/      隔离 Web 容器运行时与硬件能力桥
-docs/               设计与工程文档
+  webContainer/        隔离 Web 运行时、生命周期、调试与原生能力桥
+docs/                  设计与工程文档
 ```
 
-Android、iOS 与桌面端使用相同的 Room Schema 和 Bundled SQLite；Web 通过 Worker 将同一 Schema 的 SQLite 数据库保存到 OPFS。
+Android、iOS 与桌面端使用相同的 Room Schema 和 Bundled SQLite；Web 通过 Worker 将同一 Schema 的 SQLite 数据库保存到 OPFS。HarmonyOS 当前使用应用私有 JSON 持久化，同时通过独立构建共享 commonMain 的应用与 UI 源码。
 
 ## 构建与测试
 
 ```bash
-# 主模块跨平台测试
+# shared 模块的跨平台测试
 ./gradlew :shared:allTests
 
-# 所有可用模块测试
+# 所有可用的多平台测试套件
 ./gradlew allTests
 
-# 构建 Android Debug APK
+# Android Debug APK
 ./gradlew :apps:androidApp:assembleDebug
 
-# 构建 Web 生产包
+# Web 生产包
 ./gradlew :shared:wasmJsBrowserProductionWebpack
 ```
 
+桌面安装包可通过 `:shared` 下的 `packageMsi`、`packageDmg` 与 `packageDeb` 任务构建。带 Tag 的提交会自动打包 Android、桌面和 Web 发布产物。
+
 ## 参与贡献
 
-欢迎提交 Issue 和 Pull Request。请先阅读 [AGENTS.md](../AGENTS.md)，了解项目结构、代码规范、测试命令和 PR 要求。提交应保持职责单一，为可观察行为补充测试；涉及 UI 时请附上截图或录屏。
+欢迎提交 Issue 与 Pull Request。请先阅读 [AGENTS.md](../AGENTS.md)，了解项目结构、代码规范、测试命令和 PR 要求。提交应保持职责单一、覆盖可观察行为；涉及 UI 时请附上前后对比截图或录屏。
+
+项目的长期方向很明确：在不断扩展 Agent 自主性、工具能力和平台覆盖的同时，始终保持安静、精致的原生体验与清晰的用户控制。每一项能力都应真正融入产品，而不是简单堆叠在聊天界面上。
 
 ## 开源协议
 
 Copyright 2026 The kcode Authors.
 
-本项目基于 [Apache License 2.0](../LICENSE) 开源。在遵守协议条款的前提下，你可以使用、修改、分发本项目，也可以将其用于商业用途。该协议包含明确的专利授权，并要求保留适用的版权、协议与 NOTICE 信息。第三方组件继续遵循各自的开源协议；kcode 名称与 Logo 的使用受 Apache-2.0 第 6 条商标条款约束。
+本项目基于 [Apache License 2.0](../LICENSE) 开源。在遵守协议条款的前提下，你可以使用、修改和分发本项目，也可以将其用于商业用途。该协议包含明确的专利授权，并要求保留适用的版权、协议与 NOTICE 信息。第三方组件继续遵循各自的开源协议；kcode 名称与 Logo 的使用受 Apache-2.0 第 6 条商标条款约束。
 
 版权归属信息请参阅 [NOTICE](../NOTICE)。
