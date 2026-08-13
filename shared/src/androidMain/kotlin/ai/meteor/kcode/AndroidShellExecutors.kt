@@ -77,7 +77,7 @@ internal class AndroidShellExecutors(
 
         val args = Shizuku.UserServiceArgs(
             ComponentName(activity.packageName, PrivilegedShellUserService::class.java.name),
-        ).daemon(false).processNameSuffix("adb_shell").version(5)
+        ).daemon(false).processNameSuffix("adb_shell").version(6)
 
         var connection: ServiceConnection? = null
         return try {

@@ -184,6 +184,42 @@ class AndroidAgentFileToolsTest {
     }
 
     @Test
+    fun rootUbuntuCommandVerifiesUidAndPreservesEachArgument() {
+        val runtime = UbuntuRuntimePaths(
+            runtimeDirectory = Path.of("/data/user/0/ai.meteor.kcode/files/ubuntu runtime"),
+            rootFileSystem = Path.of("/data/user/0/ai.meteor.kcode/files/rootfs"),
+            temporaryDirectory = Path.of("/data/user/0/ai.meteor.kcode/files/tmp"),
+            prootExecutable = Path.of("/data/app/lib/libkcode_proot.so"),
+            loaderExecutable = Path.of("/data/app/lib/libkcode_proot_loader.so"),
+        )
+
+        val command = buildRootUbuntuCommand(
+            runtime = runtime,
+            ubuntuCommandLine = listOf("proot", "-r", "root fs", "/bin/bash", "-lc", "printf '%s' \"\$PATH\""),
+        )
+
+        assertTrue(command.contains("actual_uid=\$(id -u)"))
+        assertTrue(command.contains("expected 0"))
+        assertTrue(command.contains("cd '${runtime.runtimeDirectory}'"))
+        assertTrue(command.contains("PROOT_LOADER='${runtime.loaderExecutable}'"))
+        assertTrue(command.contains("/system/bin/sh -c 'exec \"\$@\"' kcode-proot"))
+        assertTrue(command.contains("'root fs'"))
+        assertTrue(command.endsWith("'printf '\\''%s'\\'' \"\$PATH\"'"))
+    }
+
+    @Test
+    fun privilegedUbuntuResultKeepsIdentityHeaderAndExitCode() {
+        val result = parseUbuntuPrivilegedResult(
+            "environment=ubuntu-proot\nmode=adb\nandroidUid=2000\ncwd=/workspace\nexitCode=7\nfailed",
+        )
+
+        assertEquals(7, result.exitCode)
+        assertTrue(result.output.contains("mode=adb"))
+        assertTrue(result.output.contains("androidUid=2000"))
+        assertFalse(result.output.contains("exitCode="))
+    }
+
+    @Test
     fun rootfsArchivePathsCannotEscapeAtomicInstallDirectory() {
         assertEquals(
             Path.of("usr/bin/python3"),

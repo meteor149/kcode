@@ -1,5 +1,6 @@
 package ai.meteor.kcode
 
+import ai.meteor.kcode.settings.ShellExecutionMode
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -21,7 +22,7 @@ class AndroidUbuntuShellExecutorTest {
                 val workspace = File(context.filesDir, "agent_workspace").apply { mkdirs() }
                 val sharedFile = File(workspace, "ubuntu-runtime-smoke.txt")
                 sharedFile.delete()
-                val executor = AndroidUbuntuShellExecutor(context)
+                val executor = AndroidUbuntuShellExecutor(context) { ShellExecutionMode.App }
 
                 val result = executor.execute(
                     command = """
@@ -57,6 +58,47 @@ class AndroidUbuntuShellExecutorTest {
                 File(workspace, "reused-runtime").delete()
                 sharedFile.delete()
                 Unit
+            }
+        }
+    }
+
+    @Test
+    fun rootModeRunsProotWithAndroidRootUid() {
+        runBlocking {
+            withTimeout(5 * 60 * 1_000L) {
+                val context = ApplicationProvider.getApplicationContext<Context>()
+                val executor = AndroidUbuntuShellExecutor(context) { ShellExecutionMode.Root }
+
+                val result = executor.execute(
+                    command = "grep '^Uid:' /proc/self/status",
+                    workingDirectory = "/workspace",
+                )
+
+                assertEquals(result.output, 0, result.exitCode)
+                assertTrue(result.output, "mode=root" in result.output)
+                assertTrue(result.output, "androidUid=0" in result.output)
+                assertTrue(result.output, Regex("Uid:\\s+0\\s+0\\s+0\\s+0").containsMatchIn(result.output))
+            }
+        }
+    }
+
+    @Test
+    fun adbModeRunsProotInsideUid2000UserService() {
+        runBlocking {
+            withTimeout(5 * 60 * 1_000L) {
+                val context = ApplicationProvider.getApplicationContext<Context>()
+                val executor = AndroidUbuntuShellExecutor(context) { ShellExecutionMode.Adb }
+
+                val result = executor.execute(
+                    command = "grep '^Uid:' /proc/self/status && pwd && printf adb-ok",
+                    workingDirectory = "/workspace",
+                )
+
+                assertEquals(result.output, 0, result.exitCode)
+                assertTrue(result.output, "mode=adb" in result.output)
+                assertTrue(result.output, "androidUid=2000" in result.output)
+                assertTrue(result.output, Regex("Uid:\\s+2000\\s+2000\\s+2000\\s+2000").containsMatchIn(result.output))
+                assertTrue(result.output, "adb-ok" in result.output)
             }
         }
     }

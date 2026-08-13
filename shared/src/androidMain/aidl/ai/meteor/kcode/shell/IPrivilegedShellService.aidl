@@ -7,4 +7,5 @@ interface IPrivilegedShellService {
     ParcelFileDescriptor execute(String command, String workingDirectory) = 1;
     void cancel() = 2;
     int uid() = 3;
+    ParcelFileDescriptor executeUbuntu(String command, String workingDirectory) = 4;
 }

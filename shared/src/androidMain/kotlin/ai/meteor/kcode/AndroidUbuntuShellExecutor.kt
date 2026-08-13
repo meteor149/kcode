@@ -1,9 +1,17 @@
 package ai.meteor.kcode
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.IBinder
 import android.system.Os
+import ai.meteor.kcode.settings.ShellExecutionMode
+import ai.meteor.kcode.shell.IPrivilegedShellService
+import ai.meteor.kcode.shell.PrivilegedShellUserService
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -18,14 +26,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import rikka.shizuku.Shizuku
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
-/** Runs agent commands in an app-private Ubuntu user space without elevating the Android UID. */
+/** Runs Ubuntu commands with the same real Android identity selected for the system shell tool. */
 class AndroidUbuntuShellExecutor(
     context: Context,
+    private val modeProvider: suspend () -> ShellExecutionMode,
 ) : AgentShellExecutor {
     private val appContext = context.applicationContext
     private val environment = AndroidUbuntuEnvironment(appContext)
@@ -35,38 +48,70 @@ class AndroidUbuntuShellExecutor(
         workingDirectory: String?,
     ): AgentShellExecutor.ExecutionResult {
         val request = normalizeUbuntuShellCommandRequest(command, workingDirectory)
+        val mode = modeProvider()
         return try {
-            val runtime = environment.ensureInstalled()
-            val process = startProcess(runtime, request)
-            val output = collectProcess(process)
-            AgentShellExecutor.ExecutionResult(
-                output = buildString {
-                    appendLine("environment=ubuntu-proot")
-                    appendLine("androidUid=${android.os.Process.myUid()}")
-                    appendLine("cwd=${request.workingDirectory}")
-                    append(output)
-                }.trimEnd(),
-                exitCode = process.exitValue(),
-            )
+            when (mode) {
+                ShellExecutionMode.App,
+                ShellExecutionMode.Root,
+                -> executeLocal(mode, request)
+                ShellExecutionMode.Adb -> executeWithShizuku(request)
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             AgentShellExecutor.ExecutionResult(
-                output = "environment=ubuntu-proot\nerror=${error.message ?: error::class.simpleName}",
+                output = buildString {
+                    appendLine("environment=ubuntu-proot")
+                    appendLine("mode=${mode.code}")
+                    append("error=${error.message ?: error::class.simpleName}")
+                },
                 exitCode = null,
             )
         }
     }
 
-    private fun startProcess(
-        runtime: UbuntuRuntimePaths,
+    private suspend fun executeLocal(
+        mode: ShellExecutionMode,
         request: UbuntuShellCommandRequest,
-    ): Process {
+    ): AgentShellExecutor.ExecutionResult {
+        val runtime = environment.ensureInstalled()
         val commandLine = buildUbuntuProotCommand(
             runtime = runtime,
             request = request,
             bindMounts = environment.availableBindMounts(),
         )
+        val process = startLocalProcess(runtime, commandLine, mode)
+        val output = collectProcess(process)
+        return AgentShellExecutor.ExecutionResult(
+            output = buildString {
+                appendLine("environment=ubuntu-proot")
+                appendLine("mode=${mode.code}")
+                if (mode == ShellExecutionMode.Root) {
+                    appendLine("androidUid=0")
+                } else {
+                    appendLine("androidUid=${android.os.Process.myUid()}")
+                }
+                appendLine("cwd=${request.workingDirectory}")
+                append(output)
+            }.trimEnd(),
+            exitCode = process.exitValue(),
+        )
+    }
+
+    private fun startLocalProcess(
+        runtime: UbuntuRuntimePaths,
+        ubuntuCommandLine: List<String>,
+        mode: ShellExecutionMode,
+    ): Process {
+        val commandLine = when (mode) {
+            ShellExecutionMode.App -> ubuntuCommandLine
+            ShellExecutionMode.Root -> listOf(
+                "su",
+                "-c",
+                buildRootUbuntuCommand(runtime, ubuntuCommandLine),
+            )
+            ShellExecutionMode.Adb -> error("ADB Ubuntu commands must run through Shizuku")
+        }
         return ProcessBuilder(commandLine)
             .directory(runtime.runtimeDirectory.toFile())
             .redirectErrorStream(true)
@@ -79,6 +124,89 @@ class AndroidUbuntuShellExecutor(
                 environment()["LANG"] = "C.UTF-8"
             }
             .start()
+    }
+
+    private suspend fun executeWithShizuku(
+        request: UbuntuShellCommandRequest,
+    ): AgentShellExecutor.ExecutionResult {
+        require(runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
+            "Shizuku is not running. Start Shizuku with adb, then try again."
+        }
+        val providerUid = Shizuku.getUid()
+        require(providerUid == ADB_SHELL_UID) {
+            "Shizuku is running as UID $providerUid, not adb shell UID 2000. Start Shizuku through adb."
+        }
+        require(ensureShizukuPermission()) { "Shizuku permission was not granted." }
+
+        val args = Shizuku.UserServiceArgs(
+            ComponentName(appContext.packageName, PrivilegedShellUserService::class.java.name),
+        ).daemon(false).processNameSuffix("adb_shell").version(SHIZUKU_USER_SERVICE_VERSION)
+        var connection: ServiceConnection? = null
+        var service: IPrivilegedShellService? = null
+        return try {
+            val connectedService = suspendCancellableCoroutine { continuation ->
+                val candidate = object : ServiceConnection {
+                    override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                        val value = IPrivilegedShellService.Stub.asInterface(binder)
+                        if (value == null) {
+                            if (continuation.isActive) {
+                                continuation.resumeWithException(IllegalStateException("Empty Shizuku service binder"))
+                            }
+                        } else if (continuation.isActive) {
+                            continuation.resume(value)
+                        }
+                    }
+
+                    override fun onServiceDisconnected(name: ComponentName?) {
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(IllegalStateException("Shizuku service disconnected"))
+                        }
+                    }
+                }
+                connection = candidate
+                Shizuku.bindUserService(args, candidate)
+                continuation.invokeOnCancellation {
+                    runCatching { Shizuku.unbindUserService(args, candidate, true) }
+                }
+            }
+            service = connectedService
+
+            val actualUid = withContext(Dispatchers.IO) { connectedService.uid() }
+            require(actualUid == ADB_SHELL_UID) {
+                "The UserService has UID $actualUid instead of adb shell UID 2000."
+            }
+            val result = withContext(Dispatchers.IO) {
+                connectedService.executeUbuntu(request.command, request.workingDirectory).use { descriptor ->
+                    FileInputStream(descriptor.fileDescriptor).use { input ->
+                        input.readBytes().decodeToString()
+                    }
+                }
+            }
+            parseUbuntuPrivilegedResult(result)
+        } catch (error: CancellationException) {
+            service?.let { runCatching { it.cancel() } }
+            throw error
+        } finally {
+            connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } }
+        }
+    }
+
+    private suspend fun ensureShizukuPermission(): Boolean = withContext(Dispatchers.Main.immediate) {
+        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) return@withContext true
+        if (Shizuku.shouldShowRequestPermissionRationale()) return@withContext false
+        suspendCancellableCoroutine { continuation ->
+            val requestCode = (System.nanoTime() and 0x7fff).toInt()
+            lateinit var listener: Shizuku.OnRequestPermissionResultListener
+            listener = Shizuku.OnRequestPermissionResultListener { code, grantResult ->
+                if (code == requestCode) {
+                    Shizuku.removeRequestPermissionResultListener(listener)
+                    if (continuation.isActive) continuation.resume(grantResult == PackageManager.PERMISSION_GRANTED)
+                }
+            }
+            Shizuku.addRequestPermissionResultListener(listener)
+            continuation.invokeOnCancellation { Shizuku.removeRequestPermissionResultListener(listener) }
+            Shizuku.requestPermission(requestCode)
+        }
     }
 
     private suspend fun collectProcess(process: Process): String {
@@ -109,6 +237,39 @@ class AndroidUbuntuShellExecutor(
         }
     }
 }
+
+internal fun buildRootUbuntuCommand(
+    runtime: UbuntuRuntimePaths,
+    ubuntuCommandLine: List<String>,
+): String = buildString {
+    append("actual_uid=\$(id -u); ")
+    append("if [ \"\$actual_uid\" != \"0\" ]; then ")
+    append("echo \"kcode: su returned UID \$actual_uid, expected 0\" >&2; exit 126; fi; ")
+    append("cd ").append(shellQuoteUbuntuHostArgument(runtime.runtimeDirectory.toString())).append(" || exit 1; ")
+    append("exec /system/bin/env -i ")
+    append("HOME=").append(shellQuoteUbuntuHostArgument(runtime.runtimeDirectory.toString())).append(' ')
+    append("TMPDIR=").append(shellQuoteUbuntuHostArgument(runtime.temporaryDirectory.toString())).append(' ')
+    append("PROOT_TMP_DIR=").append(shellQuoteUbuntuHostArgument(runtime.temporaryDirectory.toString())).append(' ')
+    append("PROOT_LOADER=").append(shellQuoteUbuntuHostArgument(runtime.loaderExecutable.toString())).append(' ')
+    append("LANG=C.UTF-8 ")
+    // APK install paths commonly contain '='. Android's env would mistake the PRoot path for another assignment,
+    // so start a fixed-path shell first and pass the complete PRoot argv through its positional parameters.
+    append("/system/bin/sh -c 'exec \"\$@\"' kcode-proot ")
+    append(ubuntuCommandLine.joinToString(" ", transform = ::shellQuoteUbuntuHostArgument))
+}
+
+internal fun parseUbuntuPrivilegedResult(output: String): AgentShellExecutor.ExecutionResult {
+    val lines = output.lines().toMutableList()
+    val exitCodeIndex = lines.indexOfFirst { it.startsWith("exitCode=") }
+    val exitCode = if (exitCodeIndex >= 0) {
+        lines.removeAt(exitCodeIndex).substringAfter('=').toIntOrNull()
+    } else {
+        null
+    }
+    return AgentShellExecutor.ExecutionResult(lines.joinToString("\n").trimEnd(), exitCode)
+}
+
+private fun shellQuoteUbuntuHostArgument(value: String): String = "'${value.replace("'", "'\\''")}'"
 
 internal data class UbuntuShellCommandRequest(
     val command: String,
@@ -200,14 +361,20 @@ private fun normalizeUbuntuAbsolutePath(path: String): String {
     return if (components.isEmpty()) "/" else "/${components.joinToString("/")}"
 }
 
-private class AndroidUbuntuEnvironment(
+internal class AndroidUbuntuEnvironment private constructor(
     private val context: Context,
+    private val runtimeDirectory: Path,
+    private val workspaceDirectory: Path,
 ) {
-    private val runtimeDirectory = context.filesDir.toPath().resolve(RUNTIME_DIRECTORY_NAME)
+    constructor(context: Context) : this(
+        context = context,
+        runtimeDirectory = context.filesDir.toPath().resolve(RUNTIME_DIRECTORY_NAME),
+        workspaceDirectory = context.filesDir.toPath().resolve("agent_workspace"),
+    )
+
     private val rootFileSystem = runtimeDirectory.resolve("rootfs")
     private val stagingDirectory = runtimeDirectory.resolve("installing")
     private val temporaryDirectory = runtimeDirectory.resolve("tmp")
-    private val workspaceDirectory = context.filesDir.toPath().resolve("agent_workspace")
     private val nativeLibraryDirectory = Path.of(context.applicationInfo.nativeLibraryDir)
 
     suspend fun ensureInstalled(): UbuntuRuntimePaths = InstallMutex.withLock {
@@ -262,7 +429,7 @@ private class AndroidUbuntuEnvironment(
     }
 
     private suspend fun installRootFileSystem() {
-        require(context.filesDir.usableSpace >= MINIMUM_FREE_SPACE_BYTES) {
+        require(runtimeDirectory.toFile().usableSpace >= MINIMUM_FREE_SPACE_BYTES) {
             "At least ${MINIMUM_FREE_SPACE_BYTES / (1024 * 1024)} MiB free space is required to install Ubuntu"
         }
         deleteRuntimeTree(stagingDirectory)
@@ -400,8 +567,19 @@ private class AndroidUbuntuEnvironment(
         Files.deleteIfExists(path)
     }
 
-    private companion object {
-        val InstallMutex = Mutex()
+    companion object {
+        private val InstallMutex = Mutex()
+
+        internal fun forAdb(context: Context): AndroidUbuntuEnvironment {
+            val base = Path.of(ADB_RUNTIME_PARENT_DIRECTORY)
+                .resolve(context.packageName)
+                .resolve("ubuntu")
+            return AndroidUbuntuEnvironment(
+                context = context,
+                runtimeDirectory = base.resolve(RUNTIME_DIRECTORY_NAME),
+                workspaceDirectory = base.resolve("agent_workspace"),
+            )
+        }
     }
 }
 
@@ -421,4 +599,7 @@ private const val PROCESS_POLL_MILLIS = 25L
 private const val MINIMUM_FREE_SPACE_BYTES = 384L * 1024L * 1024L
 private const val UNIX_PERMISSION_MASK = 0x1ff
 private const val ANDROID_UID_USER_RANGE = 100_000
+private const val ADB_SHELL_UID = 2_000
+private const val ADB_RUNTIME_PARENT_DIRECTORY = "/data/local/tmp"
+private const val SHIZUKU_USER_SERVICE_VERSION = 6
 private val REQUIRED_ROOTFS_PATHS = listOf("bin/bash", "usr/bin/env", "usr/bin/apt", "usr/bin/python3", "etc/os-release")
