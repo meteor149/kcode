@@ -3,4 +3,5 @@
     <string name="generation_notification_channel">Model responses</string>
     <string name="generation_notification_title">kcode is generating a response</string>
     <string name="generation_notification_text">The response will continue while the app is in the background.</string>
+    <string name="scheduled_task_notification_channel">Scheduled tasks</string>
 </resources>

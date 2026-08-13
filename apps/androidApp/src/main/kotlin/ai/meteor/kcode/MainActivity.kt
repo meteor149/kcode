@@ -1,8 +1,11 @@
 package ai.meteor.kcode
 
+import android.Manifest
 import android.app.AlertDialog
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -27,12 +30,21 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private lateinit var scheduledTaskPlatformHost: AndroidScheduledTaskPlatformHost
+    private val notificationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {}
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        scheduledTaskPlatformHost = AndroidScheduledTaskPlatformHost(applicationContext)
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         val settingsStore = createAndroidAppSettingsStore(applicationContext)
         val historyRepository = createAndroidConversationHistoryRepository(applicationContext)
         val imageSaver = AndroidConversationImageSaver(this)
@@ -64,10 +76,21 @@ class MainActivity : ComponentActivity() {
                 imageSaver = imageSaver,
                 shellSettingsAvailable = true,
                 toolPermissionControlsAvailable = true,
+                scheduledTaskPlatformHost = scheduledTaskPlatformHost,
                 onShellExecutionModeChanged = shellExecutionMode::set,
                 onToolPermissionModeChanged = toolPermissionMode::set,
             )
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        scheduledTaskPlatformHost.setForeground(true)
+    }
+
+    override fun onStop() {
+        scheduledTaskPlatformHost.setForeground(false)
+        super.onStop()
     }
 
     private suspend fun confirmToolCall(request: ToolApprovalRequest): Boolean =

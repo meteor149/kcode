@@ -196,4 +196,12 @@
     <string name="refresh_artifacts_zh">刷新</string>
     <string name="open_artifact_zh">打开</string>
     <string name="web_app_artifact_zh">Web 应用</string>
+    <string name="standalone_task_zh">独立任务</string>
+    <string name="standalone_task_pending_zh">%1$d 个待处理</string>
+    <string name="add_to_recent_zh">聊聊这个</string>
+    <string name="close_standalone_conversation_zh">关闭且不加入最近会话</string>
+    <string name="scheduled_task_triggered_zh">定时任务已完成</string>
+    <string name="show_task_process_zh">展开执行过程</string>
+    <string name="hide_task_process_zh">收起执行过程</string>
+    <string name="scheduled_task_process_available_zh">%1$s 已完成，打开 kcode 查看执行过程。</string>
 </resources>

@@ -57,6 +57,8 @@ interface ChatService {
         history: List<ChatMessage>,
         prompt: String,
         goalSession: GoalSession? = null,
+        scheduledTaskSession: ScheduledTaskSession? = null,
+        scheduledTaskCompletionSession: ScheduledTaskCompletionSession? = null,
         onToolUse: suspend (ToolUseEvent) -> Unit = {},
         onSubAgent: suspend (SubAgentEvent) -> Unit = {},
         onDelta: suspend (String) -> Unit,

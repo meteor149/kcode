@@ -6,6 +6,8 @@ import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.artifact.EmptyArtifactRepository
 import ai.meteor.kcode.chat.ChatGenerationRunner
+import ai.meteor.kcode.chat.ForegroundScheduledTaskPlatformHost
+import ai.meteor.kcode.chat.ScheduledTaskPlatformHost
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.UnsupportedConversationImageSaver
 import ai.meteor.kcode.history.ConversationHistoryRepository
@@ -32,6 +34,7 @@ fun KcodeApp(
     imageSaver: ConversationImageSaver = UnsupportedConversationImageSaver,
     shellSettingsAvailable: Boolean = false,
     toolPermissionControlsAvailable: Boolean = false,
+    scheduledTaskPlatformHost: ScheduledTaskPlatformHost = ForegroundScheduledTaskPlatformHost,
     onShellExecutionModeChanged: (ShellExecutionMode) -> Unit = {},
     onToolPermissionModeChanged: (ToolPermissionMode) -> Unit = {},
 ) {
@@ -48,6 +51,7 @@ fun KcodeApp(
             imageSaver,
             shellSettingsAvailable,
             toolPermissionControlsAvailable,
+            scheduledTaskPlatformHost,
             onShellExecutionModeChanged,
             onToolPermissionModeChanged,
         )

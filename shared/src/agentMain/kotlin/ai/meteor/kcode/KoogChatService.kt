@@ -3,6 +3,8 @@ package ai.meteor.kcode
 import ai.meteor.kcode.chat.ChatAvailability
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.GoalSession
+import ai.meteor.kcode.chat.ScheduledTaskSession
+import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
 import ai.meteor.kcode.chat.goalContinuationPrompt
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.ToolUseEvent
@@ -41,6 +43,8 @@ class KoogChatService(
         history: List<ChatMessage>,
         prompt: String,
         goalSession: GoalSession?,
+        scheduledTaskSession: ScheduledTaskSession?,
+        scheduledTaskCompletionSession: ScheduledTaskCompletionSession?,
         onToolUse: suspend (ToolUseEvent) -> Unit,
         onSubAgent: suspend (SubAgentEvent) -> Unit,
         onDelta: suspend (String) -> Unit,
@@ -75,6 +79,8 @@ class KoogChatService(
                     multiAgentInstructions = SubAgentInstructions,
                     coordinator = coordinator,
                     goalSession = goalSession,
+                    scheduledTaskSession = scheduledTaskSession,
+                    scheduledTaskCompletionSession = null,
                     onToolUse = { event -> coordinator.onToolUse(launch.path, event) },
                     onDelta = {},
                     continuationAfterResponse = { null },
@@ -92,6 +98,8 @@ class KoogChatService(
                 multiAgentInstructions = RootMultiAgentInstructions,
                 coordinator = coordinator,
                 goalSession = goalSession,
+                scheduledTaskSession = scheduledTaskSession,
+                scheduledTaskCompletionSession = scheduledTaskCompletionSession,
                 onToolUse = onToolUse,
                 onDelta = onDelta,
                 continuationAfterResponse = { nextRootContinuation(coordinator, goalSession) },
@@ -115,6 +123,8 @@ class KoogChatService(
         multiAgentInstructions: String,
         coordinator: MultiAgentCoordinator,
         goalSession: GoalSession?,
+        scheduledTaskSession: ScheduledTaskSession?,
+        scheduledTaskCompletionSession: ScheduledTaskCompletionSession?,
         onToolUse: suspend (ToolUseEvent) -> Unit,
         onDelta: suspend (String) -> Unit,
         continuationAfterResponse: suspend () -> String?,
@@ -123,7 +133,9 @@ class KoogChatService(
     ): String {
         val runtime = createAgentModelRuntime(configuration, httpClientFactory)
         val tools = additionalTools + coordinator.toolsFor(agentPath) +
-            (goalSession?.let(::goalTools) ?: ToolRegistry { })
+            (goalSession?.let(::goalTools) ?: ToolRegistry { }) +
+            (scheduledTaskSession?.let(::scheduledTaskTools) ?: ToolRegistry { }) +
+            (scheduledTaskCompletionSession?.let(::scheduledTaskCompletionTools) ?: ToolRegistry { })
         val strategy = StreamingToolStrategy(
             tools = tools,
             model = runtime.model,

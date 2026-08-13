@@ -9,6 +9,7 @@ import ai.meteor.kcode.ui.design.Error
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.ConversationGoalSession
+import ai.meteor.kcode.chat.ScheduledTaskCoordinator
 import ai.meteor.kcode.ui.state.ConversationState
 import ai.meteor.kcode.ui.design.KcodeSize
 import ai.meteor.kcode.ui.design.KcodeSpacing
@@ -76,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import kotlin.time.Clock
@@ -100,6 +102,7 @@ internal fun ChatPane(
     onNewConversation: () -> Unit,
     onSendToNew: (String) -> ConversationState,
     historyRepository: ConversationHistoryRepository,
+    scheduledTaskCoordinator: ScheduledTaskCoordinator,
     imageSaver: ConversationImageSaver,
     toolPermissionControlsAvailable: Boolean,
     toolPermissionMode: ToolPermissionMode,
@@ -149,6 +152,7 @@ internal fun ChatPane(
     val exportState = rememberChatExportState(imageSaver)
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
+    val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val messageSelection = rememberMessageSelectionState(conversation?.id)
     var mobileComposerHeightPx by remember { mutableStateOf(0) }
     var mobileAgentOverlayHeightPx by remember { mutableStateOf(0) }
@@ -227,6 +231,7 @@ internal fun ChatPane(
                 generationRunner = generationRunner,
                 historyRepository = historyRepository,
                 failureMessages = failureMessages,
+                scheduledTaskSession = scheduledTaskCoordinator.sessionFor(target.id, target.title),
                 followBottom = ::followConversationBottom,
             )
         }
@@ -244,6 +249,9 @@ internal fun ChatPane(
             scope = scope,
             failureMessages = failureMessages,
             goalMessages = goalMessages,
+            scheduledTaskSessionFor = { target ->
+                scheduledTaskCoordinator.sessionFor(target.id, target.title)
+            },
             onUserMessageAdded = { target, message ->
                 anchoredTurn = target.id to message.id
                 streamScrollFollower.stopFollowing()
@@ -257,6 +265,8 @@ internal fun ChatPane(
             },
             followBottom = ::followConversationBottom,
         )
+        focusManager.clearFocus(force = true)
+        softwareKeyboardController?.hide()
     }
 
     fun pauseGoal() {
@@ -285,6 +295,7 @@ internal fun ChatPane(
                 generationRunner = generationRunner,
                 historyRepository = historyRepository,
                 failureMessages = failureMessages,
+                scheduledTaskSession = scheduledTaskCoordinator.sessionFor(target.id, target.title),
                 followBottom = ::followConversationBottom,
             )
         }
@@ -310,6 +321,9 @@ internal fun ChatPane(
             historyRepository = historyRepository,
             scope = scope,
             failureMessages = failureMessages,
+            scheduledTaskSession = currentConversation?.let { target ->
+                scheduledTaskCoordinator.sessionFor(target.id, target.title)
+            },
             shouldFollowLatest = isAtConversationBottom(),
             onFollowLatestChange = { streamScrollFollower.followLatest = it },
             followBottom = ::followConversationBottom,

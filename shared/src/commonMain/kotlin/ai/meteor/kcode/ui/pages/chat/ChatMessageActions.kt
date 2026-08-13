@@ -13,8 +13,12 @@ import ai.meteor.kcode.chat.parseGoalCommand
 import ai.meteor.kcode.chat.ChatServiceUnavailable
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.SubAgentStatus
+import ai.meteor.kcode.chat.ScheduledTaskSession
+import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
+import ai.meteor.kcode.chat.scheduledTaskExecutionPrompt
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.history.ScheduledTask
 import ai.meteor.kcode.history.ThreadGoal
 import ai.meteor.kcode.history.ThreadGoalStatus
 import ai.meteor.kcode.model.ChatMessage
@@ -55,6 +59,7 @@ internal fun sendMessage(
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
     goalMessages: GoalCommandMessages,
+    scheduledTaskSessionFor: (ConversationState) -> ScheduledTaskSession? = { null },
     onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
     followBottom: (ConversationState) -> Unit,
 ) {
@@ -74,6 +79,7 @@ internal fun sendMessage(
             scope = scope,
             failureMessages = failureMessages,
             goalMessages = goalMessages,
+            scheduledTaskSessionFor = scheduledTaskSessionFor,
             onUserMessageAdded = onUserMessageAdded,
             followBottom = followBottom,
         )
@@ -113,6 +119,7 @@ internal fun sendMessage(
         generationRunner = generationRunner,
         historyRepository = historyRepository,
         goalSession = ConversationGoalSession(target, historyRepository),
+        scheduledTaskSession = scheduledTaskSessionFor(target),
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = {
@@ -139,6 +146,7 @@ private fun handleGoalCommand(
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
     goalMessages: GoalCommandMessages,
+    scheduledTaskSessionFor: (ConversationState) -> ScheduledTaskSession?,
     onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
     followBottom: (ConversationState) -> Unit,
 ) {
@@ -203,6 +211,7 @@ private fun handleGoalCommand(
                     generationRunner = generationRunner,
                     historyRepository = historyRepository,
                     session = session,
+                    scheduledTaskSession = scheduledTaskSessionFor(target),
                     scope = scope,
                     failureMessages = failureMessages,
                     onUserMessageAdded = onUserMessageAdded,
@@ -224,6 +233,7 @@ private fun handleGoalCommand(
                     generationRunner = generationRunner,
                     historyRepository = historyRepository,
                     session = session,
+                    scheduledTaskSession = scheduledTaskSessionFor(target),
                     scope = scope,
                     failureMessages = failureMessages,
                     onUserMessageAdded = onUserMessageAdded,
@@ -247,6 +257,7 @@ private fun handleGoalCommand(
                     generationRunner = generationRunner,
                     historyRepository = historyRepository,
                     session = session,
+                    scheduledTaskSession = scheduledTaskSessionFor(target),
                     scope = scope,
                     failureMessages = failureMessages,
                     onUserMessageAdded = onUserMessageAdded,
@@ -266,6 +277,7 @@ private fun startGoalRun(
     generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
     session: GoalSession,
+    scheduledTaskSession: ScheduledTaskSession?,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
     onUserMessageAdded: (ConversationState, ChatMessage) -> Unit,
@@ -309,6 +321,7 @@ private fun startGoalRun(
             generationRunner = generationRunner,
             historyRepository = historyRepository,
             goalSession = session,
+            scheduledTaskSession = scheduledTaskSession,
             failureMessages = failureMessages,
             followBottom = followBottom,
             beforeRequest = { persistMessage(target, userMessage, historyRepository) },
@@ -323,6 +336,7 @@ internal fun continueRestoredGoal(
     generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
     failureMessages: ChatFailureMessages,
+    scheduledTaskSession: ScheduledTaskSession? = null,
     followBottom: (ConversationState) -> Unit,
 ) {
     val goal = target.goal ?: return
@@ -341,6 +355,7 @@ internal fun continueRestoredGoal(
         generationRunner = generationRunner,
         historyRepository = historyRepository,
         goalSession = ConversationGoalSession(target, historyRepository),
+        scheduledTaskSession = scheduledTaskSession,
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = {},
@@ -362,6 +377,52 @@ private suspend fun persistMessage(
     )
 }
 
+internal suspend fun runScheduledTask(
+    target: ConversationState,
+    task: ScheduledTask,
+    configuration: ModelConfiguration?,
+    service: ChatService,
+    generationRunner: ChatGenerationRunner,
+    historyRepository: ConversationHistoryRepository,
+    scheduledTaskSession: ScheduledTaskSession,
+    scheduledTaskCompletionSession: ScheduledTaskCompletionSession,
+    failureMessages: ChatFailureMessages,
+    followBottom: (ConversationState) -> Unit = {},
+    onResponseFinished: suspend (completed: Boolean) -> Unit = {},
+): Boolean {
+    val activeConfiguration = configuration ?: return false
+    if (target.isGenerating) return false
+    val history = target.messages.toList()
+    val userMessage = ChatMessage(
+        id = nextMessageId(target),
+        role = MessageRole.User,
+        content = task.prompt,
+    )
+    persistMessage(target, userMessage, historyRepository)
+    target.messages += userMessage
+    val assistantId = userMessage.id + 1L
+    prepareStreamingResponse(target, assistantId)
+    followBottom(target)
+    launchStreamingResponse(
+        target = target,
+        assistantId = assistantId,
+        configuration = activeConfiguration,
+        history = history,
+        prompt = scheduledTaskExecutionPrompt(task.prompt),
+        service = service,
+        generationRunner = generationRunner,
+        historyRepository = historyRepository,
+        goalSession = ConversationGoalSession(target, historyRepository),
+        scheduledTaskSession = scheduledTaskSession,
+        scheduledTaskCompletionSession = scheduledTaskCompletionSession,
+        failureMessages = failureMessages,
+        followBottom = followBottom,
+        beforeRequest = {},
+        onResponseFinished = onResponseFinished,
+    )
+    return true
+}
+
 internal fun regenerateMessage(
     answer: ChatMessage,
     configuration: ModelConfiguration?,
@@ -371,6 +432,7 @@ internal fun regenerateMessage(
     historyRepository: ConversationHistoryRepository,
     scope: CoroutineScope,
     failureMessages: ChatFailureMessages,
+    scheduledTaskSession: ScheduledTaskSession? = null,
     shouldFollowLatest: Boolean,
     onFollowLatestChange: (Boolean) -> Unit,
     followBottom: (ConversationState) -> Unit,
@@ -400,6 +462,7 @@ internal fun regenerateMessage(
         generationRunner = generationRunner,
         historyRepository = historyRepository,
         goalSession = ConversationGoalSession(target, historyRepository),
+        scheduledTaskSession = scheduledTaskSession,
         failureMessages = failureMessages,
         followBottom = followBottom,
         beforeRequest = { historyRepository.deleteMessagesFrom(target.id, answer.id) },
@@ -458,18 +521,24 @@ private fun launchStreamingResponse(
     generationRunner: ChatGenerationRunner,
     historyRepository: ConversationHistoryRepository,
     goalSession: GoalSession,
+    scheduledTaskSession: ScheduledTaskSession? = null,
+    scheduledTaskCompletionSession: ScheduledTaskCompletionSession? = null,
     failureMessages: ChatFailureMessages,
     followBottom: (ConversationState) -> Unit,
     beforeRequest: suspend () -> Unit,
+    onResponseFinished: suspend (completed: Boolean) -> Unit = {},
 ) {
     target.runningJob = generationRunner.launch {
         runCatching { beforeRequest() }
+        var responseFinished = false
         try {
             val answer = service.replyStreaming(
                 configuration = configuration,
                 history = history,
                 prompt = prompt,
                 goalSession = goalSession,
+                scheduledTaskSession = scheduledTaskSession,
+                scheduledTaskCompletionSession = scheduledTaskCompletionSession,
                 onToolUse = { event ->
                     target.isAwaitingFirstToken = false
                     target.applyToolUseEvent(assistantId, event)
@@ -502,6 +571,7 @@ private fun launchStreamingResponse(
                     content = assistantMessage.toStoredContent(),
                 )
             }
+            responseFinished = true
         } catch (cancelled: CancellationException) {
             target.persistOrRemovePartialMessage(assistantId, historyRepository)
             runCatching {
@@ -540,10 +610,12 @@ private fun launchStreamingResponse(
                     isError = true,
                 )
             }
+            responseFinished = true
         } finally {
             target.isGenerating = false
             target.isAwaitingFirstToken = false
             target.runningJob = null
+            runCatching { onResponseFinished(responseFinished) }
         }
     }
 }

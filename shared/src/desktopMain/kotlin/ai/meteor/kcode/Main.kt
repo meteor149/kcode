@@ -10,6 +10,7 @@ import androidx.compose.ui.window.rememberWindowState
 import ai.meteor.kcode.settings.createDesktopAppSettingsStore
 import ai.meteor.kcode.history.createDesktopConversationHistoryRepository
 import ai.meteor.kcode.export.DesktopConversationImageSaver
+import androidx.compose.runtime.remember
 
 fun main() {
     val settingsStore = createDesktopAppSettingsStore()
@@ -25,6 +26,7 @@ fun main() {
             state = state,
             title = "kcode",
         ) {
+            val scheduledTaskPlatformHost = remember(window) { DesktopScheduledTaskPlatformHost(window) }
             KcodeApp(
                 chatService = runtime.chatService,
                 webContainerController = runtime.webContainerController,
@@ -33,6 +35,7 @@ fun main() {
                 historyRepository = historyRepository,
                 imageSaver = DesktopConversationImageSaver(),
                 toolPermissionControlsAvailable = true,
+                scheduledTaskPlatformHost = scheduledTaskPlatformHost,
             )
         }
     }

@@ -204,6 +204,26 @@ object UiText {
     val WebCollapseBackground = LocalizedText(Res.string.web_collapse_background_en, Res.string.web_collapse_background_zh)
     val WebRestoreContainer = LocalizedText(Res.string.web_restore_container_en, Res.string.web_restore_container_zh)
     val WebCloseContainer = LocalizedText(Res.string.web_close_container_en, Res.string.web_close_container_zh)
+    val StandaloneTask = LocalizedText(Res.string.standalone_task_en, Res.string.standalone_task_zh)
+    val StandaloneTaskPending = LocalizedText(
+        Res.string.standalone_task_pending_en,
+        Res.string.standalone_task_pending_zh,
+    )
+    val AddToRecent = LocalizedText(Res.string.add_to_recent_en, Res.string.add_to_recent_zh)
+    val CloseStandaloneConversation = LocalizedText(
+        Res.string.close_standalone_conversation_en,
+        Res.string.close_standalone_conversation_zh,
+    )
+    val ScheduledTaskTriggered = LocalizedText(
+        Res.string.scheduled_task_triggered_en,
+        Res.string.scheduled_task_triggered_zh,
+    )
+    val ShowTaskProcess = LocalizedText(Res.string.show_task_process_en, Res.string.show_task_process_zh)
+    val HideTaskProcess = LocalizedText(Res.string.hide_task_process_en, Res.string.hide_task_process_zh)
+    val ScheduledTaskProcessAvailable = LocalizedText(
+        Res.string.scheduled_task_process_available_en,
+        Res.string.scheduled_task_process_available_zh,
+    )
 }
 
 @Composable

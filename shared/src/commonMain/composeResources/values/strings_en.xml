@@ -196,4 +196,12 @@
     <string name="refresh_artifacts_en">Refresh</string>
     <string name="open_artifact_en">Open</string>
     <string name="web_app_artifact_en">Web application</string>
+    <string name="standalone_task_en">Standalone task</string>
+    <string name="standalone_task_pending_en">%1$d pending</string>
+    <string name="add_to_recent_en">Chat about this</string>
+    <string name="close_standalone_conversation_en">Close without adding to recent chats</string>
+    <string name="scheduled_task_triggered_en">Scheduled task finished</string>
+    <string name="show_task_process_en">Show execution process</string>
+    <string name="hide_task_process_en">Hide execution process</string>
+    <string name="scheduled_task_process_available_en">%1$s finished. Open kcode to view the execution process.</string>
 </resources>

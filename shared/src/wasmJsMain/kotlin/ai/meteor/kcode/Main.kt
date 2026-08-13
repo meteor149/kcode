@@ -18,6 +18,7 @@ fun main() {
             settingsStore = WebAppSettingsStore,
             historyRepository = historyRepository,
             toolPermissionControlsAvailable = true,
+            scheduledTaskPlatformHost = WebScheduledTaskPlatformHost,
             onToolPermissionModeChanged = { permissionState.mode = it },
         )
     }

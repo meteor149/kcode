@@ -10,6 +10,7 @@ import platform.UIKit.UIBackgroundTaskInvalid
 
 /** UIKit/SwiftUI host entry point. The complete screen tree comes from commonMain. */
 fun MainViewController(): UIViewController {
+    IosScheduledTaskPlatformHost.requestAuthorization()
     val settingsStore = IosAppSettingsStore()
     val permissionState = IosToolPermissionState()
     var viewController: UIViewController? = null
@@ -48,6 +49,7 @@ fun MainViewController(): UIViewController {
             settingsStore = settingsStore,
             historyRepository = createIosConversationHistoryRepository(),
             toolPermissionControlsAvailable = true,
+            scheduledTaskPlatformHost = IosScheduledTaskPlatformHost,
             onToolPermissionModeChanged = { permissionState.mode = it },
         )
     }.also { viewController = it }

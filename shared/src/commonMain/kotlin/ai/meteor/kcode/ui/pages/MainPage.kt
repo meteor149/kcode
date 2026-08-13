@@ -6,6 +6,9 @@ import ai.meteor.kcode.ui.design.Paper
 
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ChatGenerationRunner
+import ai.meteor.kcode.chat.ScheduledTaskCoordinator
+import ai.meteor.kcode.chat.ScheduledTaskPlatformHost
+import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
 
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
@@ -17,6 +20,10 @@ import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.LocalAppLanguage
+import ai.meteor.kcode.localization.UiText
+import ai.meteor.kcode.localization.availabilityError
+import ai.meteor.kcode.localization.text
+import ai.meteor.kcode.localization.resolveText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -41,7 +48,11 @@ import ai.meteor.kcode.ui.component.BoxWithResponsiveWidth
 import ai.meteor.kcode.ui.component.kcodeHazeSource
 import ai.meteor.kcode.ui.component.rememberKcodeHazeState
 import ai.meteor.kcode.ui.component.WebBackgroundContainersOverlay
+import ai.meteor.kcode.ui.component.markdownToPlainText
 import ai.meteor.kcode.ui.pages.chat.ChatPane
+import ai.meteor.kcode.ui.pages.chat.ChatFailureMessages
+import ai.meteor.kcode.ui.pages.chat.runScheduledTask
+import ai.meteor.kcode.ui.pages.chat.StandaloneConversationOverlay
 import ai.meteor.kcode.ui.state.rememberConversationSessionState
 import ai.meteor.kcode.ui.pages.setting.PersistenceFailure
 import ai.meteor.kcode.ui.pages.setting.SettingsPageOverlay
@@ -64,11 +75,13 @@ internal fun KcodeMain(
     imageSaver: ConversationImageSaver,
     shellSettingsAvailable: Boolean,
     toolPermissionControlsAvailable: Boolean,
+    scheduledTaskPlatformHost: ScheduledTaskPlatformHost,
     onShellExecutionModeChanged: (ShellExecutionMode) -> Unit,
     onToolPermissionModeChanged: (ToolPermissionMode) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val conversationSession = rememberConversationSessionState(historyRepository)
+    val scheduledTaskCoordinator = remember(historyRepository) { ScheduledTaskCoordinator(historyRepository) }
     var sidebarOpen by remember { mutableStateOf(false) }
     var destination by rememberSaveable { mutableStateOf(MainDestination.Chat) }
     var appSettings by remember { mutableStateOf(StoredAppSettings()) }
@@ -119,6 +132,62 @@ internal fun KcodeMain(
     }
 
     CompositionLocalProvider(LocalAppLanguage provides AppLanguage.fromCode(appSettings.language)) {
+        val appLanguage = LocalAppLanguage.current
+        val scheduledTaskFailureMessages = ChatFailureMessages(
+            setupModel = text(UiText.SetupModelFirst),
+            connectionFailed = text(UiText.ModelConnectionFailed),
+            unavailable = chatService.availability?.let { availabilityError(it) },
+        )
+        val scheduledTaskNotificationTitle = text(UiText.ScheduledTaskTriggered)
+        LaunchedEffect(scheduledTaskCoordinator, configuration, appLanguage, conversationSession.isLoaded) {
+            if (!conversationSession.isLoaded) return@LaunchedEffect
+            scheduledTaskCoordinator.run { task ->
+                if (configuration == null) return@run false
+                val target = conversationSession.createPendingStandaloneConversation(task.name)
+                val completionSession = ScheduledTaskCompletionSession { result ->
+                    conversationSession.setPendingStandaloneResult(target.id, result)
+                }
+                val accepted = runCatching {
+                    runScheduledTask(
+                        target = target,
+                        task = task,
+                        configuration = configuration,
+                        service = chatService,
+                        generationRunner = generationRunner,
+                        historyRepository = historyRepository,
+                        scheduledTaskSession = scheduledTaskCoordinator.sessionFor(target.id, target.title),
+                        scheduledTaskCompletionSession = completionSession,
+                        failureMessages = scheduledTaskFailureMessages,
+                        onResponseFinished = { completed ->
+                            val result = completionSession.result()
+                            if (completed) {
+                                if (result != null) {
+                                    conversationSession.appendPendingStandaloneResultMessage(target.id)
+                                }
+                                conversationSession.revealStandaloneConversation(target.id)
+                                if (!scheduledTaskPlatformHost.isAppInForeground()) {
+                                    scheduledTaskPlatformHost.showTriggeredNotification(
+                                        scheduledTaskNotificationTitle,
+                                        result?.let { markdownToPlainText(it).ifBlank { it } }
+                                            ?: resolveText(
+                                                appLanguage,
+                                                UiText.ScheduledTaskProcessAvailable,
+                                                task.name,
+                                            ),
+                                    )
+                                }
+                            } else {
+                                conversationSession.discardPendingStandaloneConversation(target.id)
+                            }
+                        },
+                    )
+                }.getOrElse {
+                    conversationSession.discardPendingStandaloneConversation(target.id)
+                    false
+                }
+                accepted
+            }
+        }
         val hazeState = rememberKcodeHazeState()
         Box(
             Modifier
@@ -149,6 +218,7 @@ internal fun KcodeMain(
                                         onNewConversation = ::newConversation,
                                         onSendToNew = conversationSession::ensureConversation,
                                         historyRepository = historyRepository,
+                                        scheduledTaskCoordinator = scheduledTaskCoordinator,
                                         imageSaver = imageSaver,
                                         toolPermissionControlsAvailable = toolPermissionControlsAvailable,
                                         toolPermissionMode = ToolPermissionMode.fromCode(appSettings.toolPermissionMode),
@@ -205,6 +275,17 @@ internal fun KcodeMain(
                     controller = controller,
                     hazeState = hazeState,
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+                )
+            }
+            conversationSession.floatingConversations.firstOrNull()?.let { floating ->
+                StandaloneConversationOverlay(
+                    conversation = floating,
+                    pendingCount = conversationSession.floatingConversations.size,
+                    onAddToRecent = {
+                        conversationSession.promoteFloatingConversation(floating.id)
+                        destination = MainDestination.Chat
+                    },
+                    onClose = { conversationSession.discardFloatingConversation(floating.id) },
                 )
             }
         }

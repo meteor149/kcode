@@ -339,4 +339,6 @@ private val InternalToolNames = setOf(
     "get_goal",
     "create_goal",
     "update_goal",
+    "schedule_task",
+    "complete_scheduled_task",
 )

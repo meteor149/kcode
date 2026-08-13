@@ -93,6 +93,7 @@ internal fun ConversationMessageList(
     modifier: Modifier,
     compact: Boolean,
     conversation: ConversationState,
+    messages: List<ChatMessage> = conversation.messages,
     listState: LazyListState,
     contentPadding: PaddingValues,
     itemSpacing: Dp,
@@ -107,12 +108,13 @@ internal fun ConversationMessageList(
     onRegenerate: (ChatMessage) -> Unit,
     anchoredUserMessageId: Long?,
     messageAnchorTop: Dp,
+    actionsEnabled: Boolean = true,
 ) {
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
-        val anchoredUserIndex = conversation.messages.indexOfFirst { it.id == anchoredUserMessageId }
+        val anchoredUserIndex = messages.indexOfFirst { it.id == anchoredUserMessageId }
         val anchoredAssistantId = anchoredUserIndex.takeIf { it >= 0 }
-            ?.let { conversation.messages.getOrNull(it + 1)?.id }
+            ?.let { messages.getOrNull(it + 1)?.id }
         var userHeightPx by remember(anchoredUserMessageId) { mutableStateOf(0) }
         var assistantHeightPx by remember(anchoredUserMessageId) { mutableStateOf(0) }
         var thinkingHeightPx by remember(anchoredUserMessageId) { mutableStateOf(0) }
@@ -135,7 +137,7 @@ internal fun ConversationMessageList(
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(itemSpacing),
         ) {
-            items(conversation.messages, key = { it.id }) { message ->
+            items(messages, key = { it.id }) { message ->
                 val measurementModifier = when (message.id) {
                     anchoredUserMessageId -> Modifier.onSizeChanged { userHeightPx = it.height }
                     anchoredAssistantId -> Modifier.onSizeChanged { assistantHeightPx = it.height }
@@ -145,8 +147,8 @@ internal fun ConversationMessageList(
                     MessageItem(
                         message = message,
                         compact = compact,
-                        canRegenerate = !selectionMode && configurationAvailable && !conversation.isGenerating,
-                        canShare = !selectionMode && !conversation.isGenerating,
+                        canRegenerate = actionsEnabled && !selectionMode && configurationAvailable && !conversation.isGenerating,
+                        canShare = actionsEnabled && !selectionMode && !conversation.isGenerating,
                         selectionMode = selectionMode,
                         selected = message.id in selectedMessageIds,
                         regenerateDescription = regenerateDescription,
