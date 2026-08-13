@@ -10,9 +10,11 @@ import ai.koog.prompt.message.MessagePart
 import ai.koog.rag.base.files.model.FileSystemEntry
 import ai.koog.serialization.kotlinx.KotlinxSerializer
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
@@ -137,6 +139,62 @@ class AndroidAgentFileToolsTest {
         }
         assertFailsWith<IllegalArgumentException> {
             normalizeAndroidShellCommandRequest("pwd", "C:\\Windows")
+        }
+    }
+
+    @Test
+    fun ubuntuShellNormalizesLinuxPathsAndAllowsLongScripts() {
+        val request = normalizeUbuntuShellCommandRequest(
+            command = "  python3 - <<'PY'\nprint('ok')\nPY  ",
+            workingDirectory = "/workspace/project/../demo",
+        )
+
+        assertEquals("python3 - <<'PY'\nprint('ok')\nPY", request.command)
+        assertEquals("/workspace/demo", request.workingDirectory)
+        assertEquals("/workspace", normalizeUbuntuShellCommandRequest("pwd", null).workingDirectory)
+        assertFailsWith<IllegalArgumentException> {
+            normalizeUbuntuShellCommandRequest("pwd", "relative/path")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            normalizeUbuntuShellCommandRequest("pwd", "C:\\Windows")
+        }
+    }
+
+    @Test
+    fun ubuntuProotCommandUsesIsolatedGuestEnvironmentAndWorkspaceBind() {
+        val runtime = UbuntuRuntimePaths(
+            runtimeDirectory = Path.of("runtime"),
+            rootFileSystem = Path.of("rootfs"),
+            temporaryDirectory = Path.of("tmp"),
+            prootExecutable = Path.of("proot"),
+            loaderExecutable = Path.of("loader"),
+        )
+        val command = buildUbuntuProotCommand(
+            runtime = runtime,
+            request = UbuntuShellCommandRequest("printf '%s' \"\$PATH\"", "/workspace"),
+            bindMounts = listOf(UbuntuBindMount(Path.of("workspace"), "/workspace")),
+        )
+
+        assertEquals("proot", command.first())
+        assertEquals("-0", command[1])
+        assertTrue("workspace:/workspace" in command)
+        assertTrue("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" in command)
+        assertEquals("printf '%s' \"\$PATH\"", command.last())
+        assertFalse(command.any { "system/bin" in it })
+    }
+
+    @Test
+    fun rootfsArchivePathsCannotEscapeAtomicInstallDirectory() {
+        assertEquals(
+            Path.of("usr/bin/python3"),
+            validatedRootfsRelativePath("ubuntu-noble-aarch64/usr/bin/python3"),
+        )
+        assertEquals(null, validatedRootfsRelativePath("ubuntu-noble-aarch64/"))
+        assertFailsWith<IllegalArgumentException> {
+            validatedRootfsRelativePath("ubuntu-noble-aarch64/../../escape")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            validatedRootfsRelativePath("different-root/etc/passwd")
         }
     }
 }

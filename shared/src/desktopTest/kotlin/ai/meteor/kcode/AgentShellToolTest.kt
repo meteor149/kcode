@@ -59,4 +59,19 @@ class AgentShellToolTest {
         assertContains(tool.descriptor.description, "Android OS environment")
         assertContains(tool.descriptor.description, "/system/bin/sh")
     }
+
+    @Test
+    fun acceptsPlatformSpecificToolName() {
+        val tool = AgentShellTool(
+            executor = object : AgentShellExecutor {
+                override suspend fun execute(
+                    command: String,
+                    workingDirectory: String?,
+                ) = AgentShellExecutor.ExecutionResult("", 0)
+            },
+            toolName = "execute_ubuntu_command",
+        )
+
+        assertEquals("execute_ubuntu_command", tool.descriptor.name)
+    }
 }
