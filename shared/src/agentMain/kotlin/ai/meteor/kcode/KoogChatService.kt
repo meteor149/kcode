@@ -29,6 +29,7 @@ class KoogChatService(
     private val toolPermissionModeProvider: suspend () -> ToolPermissionMode = { ToolPermissionMode.Ask },
     private val toolCallApprover: ToolCallApprover = ToolCallApprover { false },
     private val skillRuntime: SkillRuntime? = null,
+    private val conversationOverlayController: AgentConversationOverlayController? = null,
 ) : ChatService {
     override val availability: ChatAvailability? = null
 
@@ -54,6 +55,8 @@ class KoogChatService(
         }
 
         val conversationContext = buildContext(history, prompt)
+        val overlayTranscript = ConversationOverlayTranscript(history, prompt)
+        val overlayTurn = conversationOverlayController?.startTurn(overlayTranscript.snapshot())
         val goalTurnStart = TimeSource.Monotonic.markNow()
         var accountedSeconds = 0L
         lateinit var coordinator: MultiAgentCoordinator
@@ -87,7 +90,11 @@ class KoogChatService(
                     skillCatalogInstructions = childSkillTurn?.catalogInstructions,
                 )
             },
-            onEvent = onSubAgent,
+            onEvent = { event ->
+                overlayTranscript.apply(event)
+                overlayTurn?.update(overlayTranscript.snapshot())
+                onSubAgent(event)
+            },
         )
         try {
             val skillTurn = skillRuntime?.prepareTurn(prompt)
@@ -100,8 +107,16 @@ class KoogChatService(
                 goalSession = goalSession,
                 scheduledTaskSession = scheduledTaskSession,
                 scheduledTaskCompletionSession = scheduledTaskCompletionSession,
-                onToolUse = onToolUse,
-                onDelta = onDelta,
+                onToolUse = { event ->
+                    overlayTranscript.apply(event)
+                    overlayTurn?.update(overlayTranscript.snapshot())
+                    onToolUse(event)
+                },
+                onDelta = { delta ->
+                    overlayTranscript.appendResponse(delta)
+                    overlayTurn?.update(overlayTranscript.snapshot())
+                    onDelta(delta)
+                },
                 continuationAfterResponse = { nextRootContinuation(coordinator, goalSession) },
                 onUsage = { tokens ->
                     val elapsed = goalTurnStart.elapsedNow().inWholeSeconds
@@ -112,6 +127,7 @@ class KoogChatService(
                 skillCatalogInstructions = skillTurn?.catalogInstructions,
             )
         } finally {
+            overlayTurn?.finish()
             coordinator.shutdown()
         }
     }

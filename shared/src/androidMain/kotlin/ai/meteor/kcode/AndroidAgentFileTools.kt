@@ -60,6 +60,7 @@ fun createAndroidKoogChatRuntime(
     val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "android-app-data")
     val artifactRepository = createAndroidArtifactRepository(activity.applicationContext)
     val webContainerController = AndroidWebContainerLauncher(activity.applicationContext)
+    val conversationOverlayController = AndroidConversationOverlayController(activity)
     val fileTools = ToolRegistry {
         tool(ReadFileTool(fileSystem))
         tool(ListDirectoryTool(fileSystem))
@@ -83,9 +84,11 @@ fun createAndroidKoogChatRuntime(
             toolPermissionModeProvider = permissionModeProvider,
             toolCallApprover = toolCallApprover,
             skillRuntime = skillRuntime,
+            conversationOverlayController = conversationOverlayController,
         ),
         webContainerController = webContainerController,
         artifactRepository = artifactRepository,
+        conversationOverlayController = conversationOverlayController,
     )
 }
 

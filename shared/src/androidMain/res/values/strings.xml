@@ -4,4 +4,6 @@
     <string name="tool_confirmation_message">kcode wants to use this tool.\n\nPurpose\n%1$s\n\nInput\n%2$s</string>
     <string name="tool_confirmation_allow">Allow</string>
     <string name="tool_confirmation_deny">Deny</string>
+    <string name="conversation_overlay_title">kcode · Current conversation</string>
+    <string name="conversation_overlay_close_description">Close conversation overlay</string>
 </resources>

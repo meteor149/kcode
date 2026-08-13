@@ -137,6 +137,8 @@ kotlin {
             dependsOn(nativeSqliteMain)
             dependencies {
                 implementation("androidx.core:core-ktx:1.15.0")
+                implementation("androidx.lifecycle:lifecycle-runtime:2.8.7")
+                implementation("androidx.savedstate:savedstate:1.3.3")
                 implementation("dev.rikka.shizuku:api:13.1.5")
                 implementation("dev.rikka.shizuku:provider:13.1.5")
                 implementation("io.ktor:ktor-client-okhttp:3.3.3")

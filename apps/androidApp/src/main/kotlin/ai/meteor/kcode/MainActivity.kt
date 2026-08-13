@@ -10,6 +10,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import ai.meteor.kcode.KcodeApp
 import ai.meteor.kcode.activeAndroidWebContainerActivity
 import ai.meteor.kcode.createAndroidKoogChatRuntime
@@ -31,9 +34,23 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var scheduledTaskPlatformHost: AndroidScheduledTaskPlatformHost
+    private lateinit var agentRuntime: KcodeAgentRuntime
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {}
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            if (::agentRuntime.isInitialized) {
+                agentRuntime.conversationOverlayController?.setHostForeground(true)
+            }
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            if (::agentRuntime.isInitialized) {
+                agentRuntime.conversationOverlayController?.setHostForeground(false)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -50,7 +67,7 @@ class MainActivity : ComponentActivity() {
         val imageSaver = AndroidConversationImageSaver(this)
         val shellExecutionMode = AtomicReference(ShellExecutionMode.App)
         val toolPermissionMode = AtomicReference(ToolPermissionMode.Ask)
-        val runtime = createAndroidKoogChatRuntime(
+        agentRuntime = createAndroidKoogChatRuntime(
             activity = this,
             modeProvider = { shellExecutionMode.get() },
             permissionModeProvider = { toolPermissionMode.get() },
@@ -65,12 +82,13 @@ class MainActivity : ComponentActivity() {
                 }
             },
         )
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
         setContent {
             KcodeApp(
-                chatService = runtime.chatService,
+                chatService = agentRuntime.chatService,
                 generationRunner = (application as KcodeApplication).generationRunner,
-                webContainerController = runtime.webContainerController,
-                artifactRepository = runtime.artifactRepository,
+                webContainerController = agentRuntime.webContainerController,
+                artifactRepository = agentRuntime.artifactRepository,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
                 imageSaver = imageSaver,
@@ -91,6 +109,14 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         scheduledTaskPlatformHost.setForeground(false)
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
+        if (::agentRuntime.isInitialized) {
+            agentRuntime.conversationOverlayController?.close()
+        }
+        super.onDestroy()
     }
 
     private suspend fun confirmToolCall(request: ToolApprovalRequest): Boolean =

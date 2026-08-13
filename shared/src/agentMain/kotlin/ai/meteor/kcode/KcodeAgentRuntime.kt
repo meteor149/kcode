@@ -7,4 +7,5 @@ data class KcodeAgentRuntime(
     val chatService: KoogChatService,
     val webContainerController: WebContainerController,
     val artifactRepository: ArtifactRepository,
+    val conversationOverlayController: AgentConversationOverlayController? = null,
 )
