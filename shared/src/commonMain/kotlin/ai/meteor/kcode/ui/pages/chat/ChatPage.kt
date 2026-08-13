@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, kotlin.time.ExperimentalTime::class)
 
 package ai.meteor.kcode.ui.pages.chat
 
@@ -78,6 +78,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
+import kotlin.time.Clock
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import ai.meteor.kcode.ui.component.kcodeHazeSource
@@ -158,7 +160,22 @@ internal fun ChatPane(
     val regenerateDescription = text(UiText.RegenerateAnswer)
     val shareDescription = text(UiText.ShareImage)
     val conversationContentMotion = rememberConversationContentMotion(conversation?.id)
-    val visibleGoal = conversation?.goal?.takeUnless { it.status == ThreadGoalStatus.Complete }
+    val currentGoal = conversation?.goal
+    var completedGoalHidden by remember(conversation?.id, currentGoal) {
+        mutableStateOf(
+            currentGoal?.completedBannerRemainingMillis(Clock.System.now().toEpochMilliseconds()) == 0L,
+        )
+    }
+    LaunchedEffect(conversation?.id, currentGoal) {
+        val remainingMillis = currentGoal?.completedBannerRemainingMillis(
+            Clock.System.now().toEpochMilliseconds(),
+        ) ?: return@LaunchedEffect
+        if (remainingMillis > 0L) delay(remainingMillis)
+        completedGoalHidden = true
+    }
+    val visibleGoal = currentGoal?.takeUnless {
+        it.status == ThreadGoalStatus.Complete && completedGoalHidden
+    }
     val runningSubAgents = conversation?.messages
         ?.flatMap(ChatMessage::subAgents)
         ?.associateBy { it.path }
@@ -644,6 +661,14 @@ internal fun ChatPane(
     }
     }
 
+}
+
+internal const val CompletedGoalBannerVisibilityMillis = 3_000L
+
+internal fun ThreadGoal.completedBannerRemainingMillis(nowMillis: Long): Long? {
+    if (status != ThreadGoalStatus.Complete) return null
+    val elapsedMillis = (nowMillis - updatedAt).coerceAtLeast(0L)
+    return (CompletedGoalBannerVisibilityMillis - elapsedMillis).coerceAtLeast(0L)
 }
 
 @Composable
