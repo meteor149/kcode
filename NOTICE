@@ -2,3 +2,17 @@ kcode
 Copyright 2026 The kcode Authors
 
 This product includes software developed by the kcode project contributors.
+
+Android Ubuntu runtime
+----------------------
+The Android distribution includes PRoot, its ELF loader, and an Ubuntu 24.04
+ARM64 root filesystem obtained from OperitTerminalCore commit
+e4442bc6a047b6165bf59103721ad143149c620d:
+https://github.com/AAswordman/OperitTerminalCore
+
+OperitTerminalCore is licensed under LGPL-3.0. PRoot is licensed under
+GPL-2.0. The Ubuntu root filesystem contains packages under their respective
+licenses; package copyright and license files remain available inside
+/usr/share/doc in the installed environment. Corresponding upstream source
+locations and exact artifact hashes are documented in
+docs/android-ubuntu-runtime.md.

@@ -54,6 +54,13 @@ android {
             }
         }
     }
+
+    packaging {
+        jniLibs {
+            // PRoot is packaged as a native library so Android permits executing it.
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {
