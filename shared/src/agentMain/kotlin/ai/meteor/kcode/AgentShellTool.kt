@@ -16,10 +16,11 @@ interface AgentShellExecutor {
 
 class AgentShellTool(
     private val executor: AgentShellExecutor,
+    description: String = DefaultDescription,
 ) : SimpleTool<AgentShellTool.Args>(
     argsType = typeToken<Args>(),
     name = "execute_shell_command",
-    description = "Executes a shell command and returns its complete combined output and exit code.",
+    description = description,
 ) {
     @Serializable
     data class Args(
@@ -42,5 +43,10 @@ class AgentShellTool(
             }
             result.exitCode?.let { append("Exit code: $it") }
         }.trimEnd()
+    }
+
+    private companion object {
+        const val DefaultDescription =
+            "Executes a shell command and returns its complete combined output and exit code."
     }
 }

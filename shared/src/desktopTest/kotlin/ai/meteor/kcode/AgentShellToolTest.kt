@@ -1,6 +1,7 @@
 package ai.meteor.kcode
 
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
 
@@ -41,5 +42,21 @@ class AgentShellToolTest {
         val output = tool.execute(AgentShellTool.Args("build"))
 
         assertEquals(completeOutput + "\nExit code: 0", output)
+    }
+
+    @Test
+    fun acceptsPlatformSpecificDescription() {
+        val tool = AgentShellTool(
+            executor = object : AgentShellExecutor {
+                override suspend fun execute(
+                    command: String,
+                    workingDirectory: String?,
+                ) = AgentShellExecutor.ExecutionResult("", 0)
+            },
+            description = "Runs commands in an Android OS environment through /system/bin/sh.",
+        )
+
+        assertContains(tool.descriptor.description, "Android OS environment")
+        assertContains(tool.descriptor.description, "/system/bin/sh")
     }
 }

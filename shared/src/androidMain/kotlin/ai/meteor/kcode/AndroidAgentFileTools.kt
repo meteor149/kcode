@@ -68,7 +68,12 @@ fun createAndroidKoogChatRuntime(
         tool(ReadMediaFileTool(fileSystem))
         webContainerTools(webContainerController)
         tool(WebSearchTool(webSearchConfigurationProvider))
-        tool(AgentShellTool(shellExecutor))
+        tool(
+            AgentShellTool(
+                executor = shellExecutor,
+                description = AndroidShellToolDescription,
+            ),
+        )
         skillTools(skillRuntime)
         artifactTools(artifactRepository)
     }
@@ -83,6 +88,15 @@ fun createAndroidKoogChatRuntime(
         artifactRepository = artifactRepository,
     )
 }
+
+internal val AndroidShellToolDescription = """
+    Executes a shell command in an Android OS environment and returns its complete combined output and exit code.
+    Commands run through /system/bin/sh, not a desktop Linux shell. Do not assume that bash, GNU utilities, apt,
+    systemd, or other desktop Linux programs are installed; prefer Android/toybox-compatible commands and Android
+    absolute paths. The user-selected execution identity may be the app UID, adb shell through Shizuku, or root.
+    /workspace maps to the app's private agent workspace when the app identity is selected. If workingDirectory is
+    omitted, the platform chooses the default directory for the selected identity.
+""".trimIndent()
 
 internal class AndroidPrivateAgentWorkspace(
     private val root: Path,
