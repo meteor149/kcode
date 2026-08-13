@@ -56,6 +56,7 @@ fun createAndroidKoogChatRuntime(
         activity = activity,
         modeProvider = modeProvider,
     )
+    val ubuntuShellExecutor = AndroidUbuntuShellExecutor(activity.applicationContext)
     val skillWorkspace = AndroidPrivateAgentWorkspace(workspaceRoot)
     val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "android-app-data")
     val artifactRepository = createAndroidArtifactRepository(activity.applicationContext)
@@ -73,6 +74,13 @@ fun createAndroidKoogChatRuntime(
             AgentShellTool(
                 executor = shellExecutor,
                 description = AndroidShellToolDescription,
+            ),
+        )
+        tool(
+            AgentShellTool(
+                executor = ubuntuShellExecutor,
+                toolName = "execute_ubuntu_command",
+                description = AndroidUbuntuShellToolDescription,
             ),
         )
         skillTools(skillRuntime)
@@ -99,6 +107,15 @@ internal val AndroidShellToolDescription = """
     absolute paths. The user-selected execution identity may be the app UID, adb shell through Shizuku, or root.
     /workspace maps to the app's private agent workspace when the app identity is selected. If workingDirectory is
     omitted, the platform chooses the default directory for the selected identity.
+""".trimIndent()
+
+internal val AndroidUbuntuShellToolDescription = """
+    Executes a command inside kcode's complete Ubuntu 24.04 ARM64 user space powered by PRoot. This is a regular
+    GNU/Linux environment with bash, apt, Python, and standard Linux paths; it is separate from Android's system
+    shell and does not require root. /workspace is shared with kcode's agent workspace and is the default working
+    directory. The Ubuntu environment is installed atomically on first use, which can make the first call take
+    longer. Commands run as PRoot's emulated root user but retain kcode's Android application permissions.
+    systemd, kernel modules, real mounts, and other privileged kernel operations are unavailable under PRoot.
 """.trimIndent()
 
 internal class AndroidPrivateAgentWorkspace(
