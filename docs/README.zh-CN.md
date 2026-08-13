@@ -138,6 +138,45 @@ Android 向 Agent 提供两个命令环境：`execute_shell_command` 使用 Andr
 
 Ubuntu Guest 会显示 PRoot 模拟的 Linux root，但对 Android 文件系统和设备的真实访问权限始终来自所选身份。它不是虚拟机，也不提供独立启动的 Linux 内核或 systemd。PRoot 本身不会授予内核权限；Root 模式拥有的额外 Host 能力来自已校验的 Android UID 0，并继续受设备 `su`、Capability 与 SELinux 策略约束。安装安全措施、限制、产物来源、校验值与第三方协议见 [Android Ubuntu 运行时](android-ubuntu-runtime.md)。
 
+#### 通过 ADB 配置供应商
+
+经过授权的电脑可以直接配置 Android 版，无需在手机上逐项输入凭据。请先停止 kcode，避免已经打开的设置页覆盖外部更新；发送显式广播后再重新打开应用。以下 PowerShell 示例会同时选择 DeepSeek 与 Exa，API Key 的明文不会进入命令历史：
+
+```powershell
+$env:KCODE_MODEL_API_KEY = Read-Host "DeepSeek API key"
+$env:KCODE_SEARCH_API_KEY = Read-Host "Exa API key"
+adb shell am force-stop ai.meteor.kcode
+adb shell am broadcast --include-stopped-packages `
+  -a ai.meteor.kcode.action.CONFIGURE_SETTINGS `
+  -n ai.meteor.kcode/.AdbSettingsReceiver `
+  --es model-provider deepseek `
+  --es model deepseek-v4-pro `
+  --es model-api-key $env:KCODE_MODEL_API_KEY `
+  --es temperature 0.3 `
+  --es search-provider exa `
+  --es search-api-key $env:KCODE_SEARCH_API_KEY
+adb shell am start -n ai.meteor.kcode/.MainActivity
+Remove-Item Env:KCODE_MODEL_API_KEY, Env:KCODE_SEARCH_API_KEY
+```
+
+广播成功时只会返回发生变化的字段名，不会回显凭据值。所有选项都是通过 `--es` 传入的字符串；未传入的选项保持原值：
+
+| Extra | 可用值 |
+| --- | --- |
+| `model-provider` | `openai`、`azure_openai`、`anthropic`、`google`、`deepseek`、`openrouter`、`bedrock`、`mistral`、`alibaba`、`ollama` 或 `glm` |
+| `model` | 所选供应商提供的模型 ID；仅切换供应商时，如当前模型不适用，会自动选择其首个可用模型 |
+| `model-api-key` | 所选或当前大模型供应商的 API Key |
+| `model-endpoint` | Azure OpenAI 或 Ollama 所需的 Endpoint |
+| `model-region` | Amazon Bedrock 所需的 Region |
+| `model-deployment` | Azure OpenAI Deployment 名称 |
+| `model-api-version` | Azure OpenAI API Version |
+| `dashscope-region` | `china_mainland`、`singapore` 或 `united_states` |
+| `temperature` | `0` 至 `1` 之间的数字 |
+| `search-provider` | `google`、`exa` 或 `bright_data` |
+| `search-api-key` | Exa 或 Bright Data 的 API Key；Google 搜索不需要 Key |
+
+该 Receiver 要求调用方持有 Android 系统保护的 `DUMP` 权限，普通第三方应用无法调用，已授权连接中的 ADB shell 可以调用。全部字段会作为一个整体完成校验，再通过与设置页相同的 Keystore 加密 MMKV 保存。命令参数在执行期间仍可能被电脑或设备短暂观察到，因此只能使用可信电脑和调试连接；环境变量可避免 Key 明文进入 Shell 历史。
+
 ### Web
 
 ```bash
@@ -187,6 +226,7 @@ HarmonyOS 使用独立 Gradle 工程，使其 Kotlin/Compose 分支与主工程�
 - 全局工具权限门决定 kcode 是拒绝、询问还是直接执行工具。`Bypass` 只会跳过 kcode 自身的确认，不会绕过操作系统、浏览器、WebView、Keychain、Keystore、Shizuku 或 root 管理器的权限控制。
 - Android Shell 明确区分应用 UID、Shizuku/ADB shell 与 root 模式；权限来源不可用时会直接失败，不会静默切换到另一身份。
 - Android Ubuntu 工具遵循同一个执行身份。应用与 root 模式共用应用私有运行时，ADB 模式使用 `/data/local/tmp` 下由 shell 身份持有的独立运行时；PRoot 模拟的 Guest root 本身不会获得 Android root 权限。
+- Android 的 ADB 设置 Receiver 只接受来自持有系统 `DUMP` 权限调用方的显式广播；它会先校验完整更新，再写入常规加密设置存储，但 ADB 命令参数在执行期间仍对可信 Host 可见。
 - 定时任务仅在应用进程可用时执行，会持久化下一次运行状态，并将每次执行放入独立会话。应把任务 Prompt 视为未来的 Agent 指令：它会使用执行时配置的模型，并继续受交互式回合相同的工具权限、网络和操作系统边界约束。
 - Android 实时会话浮窗只会在后台仍有生成任务时显示，并需要系统“显示在其他应用上层”权限；关闭浮窗不会授予或撤销任何工具权限。
 - 本地 Web 应用运行在隔离容器中，并在运行时申请敏感能力。远程网站不会获得 kcode 的本地原生能力桥。

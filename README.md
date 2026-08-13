@@ -138,6 +138,45 @@ Only App and Root mode expose the regular private agent workspace; ADB mode's `/
 
 The Ubuntu guest reports PRoot's emulated Linux root, but its actual Android filesystem and device access always comes from the selected identity. It is not a VM and does not supply a booted Linux kernel or systemd. PRoot itself grants no kernel privilege; any extra host capability in Root mode comes from the verified Android UID 0 and remains subject to the device's `su`, capability, and SELinux policy. See [Android Ubuntu runtime](docs/android-ubuntu-runtime.md) for installation hardening, limits, provenance, checksums, and third-party licenses.
 
+#### Configure providers through ADB
+
+An authorized computer can configure the Android app without typing credentials on the device. Stop kcode first so an already-open settings screen cannot overwrite the external update, send an explicit broadcast, and then reopen the app. This Bash example selects DeepSeek plus Exa while keeping the secrets out of shell history:
+
+```bash
+read -rsp "DeepSeek API key: " KCODE_MODEL_API_KEY && echo
+read -rsp "Exa API key: " KCODE_SEARCH_API_KEY && echo
+adb shell am force-stop ai.meteor.kcode
+adb shell am broadcast --include-stopped-packages \
+  -a ai.meteor.kcode.action.CONFIGURE_SETTINGS \
+  -n ai.meteor.kcode/.AdbSettingsReceiver \
+  --es model-provider deepseek \
+  --es model deepseek-v4-pro \
+  --es model-api-key "$KCODE_MODEL_API_KEY" \
+  --es temperature 0.3 \
+  --es search-provider exa \
+  --es search-api-key "$KCODE_SEARCH_API_KEY"
+adb shell am start -n ai.meteor.kcode/.MainActivity
+unset KCODE_MODEL_API_KEY KCODE_SEARCH_API_KEY
+```
+
+The successful broadcast result lists only changed field names and never echoes credential values. Every option is a string extra supplied with `--es`; omitted options keep their current values:
+
+| Extra | Accepted value |
+| --- | --- |
+| `model-provider` | `openai`, `azure_openai`, `anthropic`, `google`, `deepseek`, `openrouter`, `bedrock`, `mistral`, `alibaba`, `ollama`, or `glm` |
+| `model` | A model ID offered for the selected provider; changing only the provider selects its first available model if necessary |
+| `model-api-key` | API key for the selected/current model provider |
+| `model-endpoint` | Endpoint required by Azure OpenAI or Ollama |
+| `model-region` | Region required by Amazon Bedrock |
+| `model-deployment` | Azure OpenAI deployment name |
+| `model-api-version` | Azure OpenAI API version |
+| `dashscope-region` | `china_mainland`, `singapore`, or `united_states` |
+| `temperature` | Number from `0` to `1` |
+| `search-provider` | `google`, `exa`, or `bright_data` |
+| `search-api-key` | API key for Exa or Bright Data; Google search does not use one |
+
+The receiver requires Android's system-protected `DUMP` permission, so normal third-party apps cannot invoke it; the ADB shell on an authorized connection can. Values are validated as one update and then stored through the same Keystore-protected encrypted MMKV used by the UI. Command arguments can still be observed transiently by the host or device, so use only a trusted computer and debugging connection. Environment variables prevent the literal keys from being saved in shell history.
+
 ### Web
 
 ```bash
@@ -187,6 +226,7 @@ Credential storage is platform-specific:
 - The global tool permission gate controls whether kcode denies, confirms, or immediately runs a tool. `Bypass` skips only kcode's prompt; it never bypasses operating-system, browser, WebView, Keychain, Keystore, Shizuku, or root-manager controls.
 - Android shell execution has explicit app UID, Shizuku/ADB-shell, and root modes. An unavailable privilege source fails instead of silently falling back to another identity.
 - Android's Ubuntu tool follows the same selected identity. App and root modes share the private runtime, while ADB mode has a shell-owned runtime under `/data/local/tmp`; PRoot's guest root does not itself grant Android root access.
+- Android's ADB settings receiver accepts only explicit broadcasts from senders holding the system `DUMP` permission. It validates the complete update before writing to the normal encrypted settings store, but ADB command arguments remain visible to the trusted host while the command runs.
 - Scheduled tasks execute only while the application process is available, persist their next-run state, and put each run in a separate conversation. Treat their prompts as future agent instructions using the model configured at run time and the same tool-permission, network, and operating-system constraints as an interactive turn.
 - Android's live conversation overlay is shown only while generation continues in the background and requires the operating system's “display over other apps” permission. Closing it does not grant or revoke any tool permission.
 - Local Web apps run in isolated containers and request sensitive capabilities at runtime. Remote sites never receive kcode's local native fallback bridge.
