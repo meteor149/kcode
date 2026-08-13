@@ -32,8 +32,8 @@ class WebBackgroundContainerOverlayTest {
             runBlocking { controller.launch(WebPreviewRequest("/workspace/floating-preview/index.html", title)) }
             val background = waitForAnyDescription(
                 device,
-                "Move preview to background",
-                "将预览移到后台",
+                "Move container to background",
+                "将容器移到后台",
             )
             background.click()
 
@@ -83,7 +83,7 @@ class WebBackgroundContainerOverlayTest {
                 "将 $title 切换到前台",
             ).click()
 
-            waitForAnyDescription(device, "Move preview to background", "将预览移到后台").click()
+            waitForAnyDescription(device, "Move container to background", "将容器移到后台").click()
             waitForAnyDescription(device, "Show background Web containers", "查看后台 Web 容器").click()
             waitForAnyDescription(device, "Close $title", "关闭 $title").click()
 
