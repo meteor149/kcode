@@ -23,7 +23,7 @@
 
 kcode is an open-source native AI agent for Android, iOS, desktop, Web, and HarmonyOS. It is built around a simple belief: an agent should feel like a thoughtfully designed application—not a terminal transplanted into a chat box, and not a thin web wrapper duplicated for every device.
 
-The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a small application you can open and use.
+The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
 
 ## What it can do
 
@@ -31,10 +31,10 @@ The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.c
 
 - Stream rich Markdown while preserving assistant responses and tool-call history in the conversation.
 - Expose tool progress and results in place, with stop, regenerate, message selection, and rendered conversation export on supported platforms.
-- Keep generation alive when the UI moves into the background on supported mobile hosts.
+- Keep generation alive when the UI moves into the background on supported mobile hosts. Android can also show the live conversation and tool activity in a movable system overlay after the app leaves the foreground.
 - Search the current Web through Google, Exa, or Bright Data and return source links.
 - Read, list, write, and patch workspace files; read media where the platform implementation supports it.
-- Run shell commands inside the desktop workspace, or on Android as the app UID, through Shizuku, or as root.
+- Run shell commands inside the desktop workspace. Android provides both its native `/system/bin/sh` environment and a complete Ubuntu 24.04 ARM64 user space, each using the selected app UID, Shizuku/ADB-shell, or real root identity.
 - Route capability-bearing tools through a global `Deny`, `Ask`, or `Bypass` permission policy; internal coordination and Goal bookkeeping remain automatic.
 
 ### Plan and finish longer work
@@ -42,6 +42,12 @@ The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.c
 **Goals** turn a conversation into a persistent objective. A Goal survives app restarts, tracks status, elapsed time, and optional token budget, and can continue across agent turns until it is completed or genuinely blocked. Create one with `/goal <objective>`, then pause, resume, edit, or clear it from the conversation. Active Goals are surfaced above the composer; completed Goals leave the UI automatically.
 
 **Multi-agent orchestration** lets the root agent delegate concrete subtasks, exchange messages, interrupt or reuse workers, and wait for their results before producing the final response. kcode supports five concurrent agents including the root coordinator. Running workers appear above the composer in a live two-column status area; selecting one opens its activity and output.
+
+### Schedule one-shot and recurring work
+
+When explicitly requested, the agent can create, list, pause, resume, and cancel scheduled prompts for the current conversation. A task can run once after a delay or at an absolute time, or repeat on an interval of at least one minute. Each run executes as a separate standalone conversation, presents its selected result in a floating card, and can be promoted into normal history or discarded. Android, iOS, desktop, and Web use the same persisted task model and can surface a platform notification, when permission and platform support allow it, after a result finishes in the background.
+
+Scheduling is process-based rather than an operating-system alarm service: tasks run while the kcode process is available. Persisted overdue tasks are recovered after the app starts again, and recurring schedules skip missed intervals instead of launching overlapping catch-up runs.
 
 ### Extend behavior with Skills
 
@@ -80,12 +86,15 @@ Providers, models, endpoints, regions, credentials, and temperature are configur
 | Model chat and local history | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Streaming Koog agent runtime | ✅ | ✅ | ✅ | ✅ | — |
 | Persistent Goals | ✅ | ✅ | ✅ | ✅ | Manual |
+| One-shot and recurring scheduled tasks | ✅ | ✅ | ✅ | ✅ | — |
 | Multi-agent orchestration and Skills | ✅ | ✅ | ✅ | ✅ | — |
 | Agent file workspace and Web search | ✅ | ✅ | ✅ | ✅ | — |
 | Web Artifacts and container | ✅ | ✅ | ✅ | ✅ | — |
 | Conversation image export | ✅ | — | ✅ | — | — |
 | Native mobile Web capability bridge | ✅ | ✅ | — | Browser APIs | — |
-| Shell tool | App UID / Shizuku / root | — | `/workspace` | — | — |
+| Native system shell tool | App UID / Shizuku / root | — | `/workspace` | — | — |
+| Ubuntu 24.04 PRoot tool | App UID / Shizuku / root (ARM64) | — | — | — | — |
+| Live conversation system overlay | ✅ | — | — | — | — |
 | Amazon Bedrock client | — | — | ✅ | — | — |
 
 HarmonyOS currently ships through an isolated Kotlin/Native + ArkTS host and provides the shared UI, provider-backed chat, settings, and local conversation persistence. The full Koog agent runtime is not connected there yet. Availability on every platform also depends on the selected model, device or browser capabilities, and granted permissions; direct browser-to-provider requests are subject to CORS.
@@ -98,6 +107,7 @@ Tagged builds publish a signed Android APK, Windows MSI, macOS DMG, Linux DEB, a
 
 - JDK 21; JVM bytecode targets Java 17
 - Android Studio and Android SDK 35 for Android (minimum Android API 35)
+- An ARM64 Android device and at least 384 MiB free in the selected runtime location to use the optional Ubuntu environment
 - macOS, Xcode, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) for iOS
 - A modern browser for the Wasm target
 - DevEco Studio and the HarmonyOS toolchain for HarmonyOS
@@ -117,6 +127,16 @@ Start an API 35+ emulator or connect a compatible device, then run:
 ```bash
 ./gradlew :apps:androidApp:installDebug
 ```
+
+Android exposes two command environments to the agent. `execute_shell_command` uses Android's `/system/bin/sh`; `execute_ubuntu_command` installs the bundled Ubuntu 24.04 ARM64 root filesystem on first use and runs GNU/Linux tools through PRoot. Both follow the shell mode selected in Settings:
+
+- **App** uses kcode's application UID and private `/workspace`.
+- **ADB** requires Shizuku started by `adb`, runs as UID 2000, and keeps a separate runtime and workspace under `/data/local/tmp/ai.meteor.kcode/ubuntu`.
+- **Root** requires a working `su` grant, verifies UID 0, and shares the app-mode runtime and workspace.
+
+Only App and Root mode expose the regular private agent workspace; ADB mode's `/workspace` is not visible to kcode's app-UID file tools. Because Root shares the private workspace, host files it creates can also retain ownership or permissions that App mode cannot read later.
+
+The Ubuntu guest reports PRoot's emulated Linux root, but its actual Android filesystem and device access always comes from the selected identity. It is not a VM and does not supply a booted Linux kernel or systemd. PRoot itself grants no kernel privilege; any extra host capability in Root mode comes from the verified Android UID 0 and remains subject to the device's `su`, capability, and SELinux policy. See [Android Ubuntu runtime](docs/android-ubuntu-runtime.md) for installation hardening, limits, provenance, checksums, and third-party licenses.
 
 ### Web
 
@@ -150,6 +170,7 @@ Then open `apps/harmonyApp` in DevEco Studio or run its Hvigor `assembleHap` tas
 2. Enter its credentials and any required endpoint, deployment, or region.
 3. Return to the conversation and choose a model and temperature from the composer.
 4. Ask a normal question, request tool-backed work, explicitly ask the agent to delegate parallel subtasks, or create a persistent objective with `/goal <objective>`.
+5. For automation, explicitly ask for a one-shot reminder or recurring task; the agent will manage it through the current conversation.
 
 Credential storage is platform-specific:
 
@@ -165,6 +186,9 @@ Credential storage is platform-specific:
 - Android file and media tools may accept real absolute paths in addition to the private workspace, but remain subject to Android/Linux filesystem permissions and the selected execution identity.
 - The global tool permission gate controls whether kcode denies, confirms, or immediately runs a tool. `Bypass` skips only kcode's prompt; it never bypasses operating-system, browser, WebView, Keychain, Keystore, Shizuku, or root-manager controls.
 - Android shell execution has explicit app UID, Shizuku/ADB-shell, and root modes. An unavailable privilege source fails instead of silently falling back to another identity.
+- Android's Ubuntu tool follows the same selected identity. App and root modes share the private runtime, while ADB mode has a shell-owned runtime under `/data/local/tmp`; PRoot's guest root does not itself grant Android root access.
+- Scheduled tasks execute only while the application process is available, persist their next-run state, and put each run in a separate conversation. Treat their prompts as future agent instructions using the model configured at run time and the same tool-permission, network, and operating-system constraints as an interactive turn.
+- Android's live conversation overlay is shown only while generation continues in the background and requires the operating system's “display over other apps” permission. Closing it does not grant or revoke any tool permission.
 - Local Web apps run in isolated containers and request sensitive capabilities at runtime. Remote sites never receive kcode's local native fallback bridge.
 - Artifact saving requires explicit user confirmation and uses validated, bounded, rollback-aware storage operations.
 - Never commit API keys, `local.properties`, device captures, generated databases, or other private data.
@@ -182,7 +206,7 @@ apps/
     sqliteWasmWorker/  SQLite Wasm worker and OPFS bridge
 shared/
   src/commonMain/      Adaptive UI, domain state, persistence contracts
-  src/agentMain/       Koog runtime, tools, Goals, Skills, and multi-agent orchestration
+  src/agentMain/       Koog runtime, tools, Goals, scheduled tasks, Skills, and multi-agent orchestration
   src/*Main/           Platform storage, networking, tools, and host integrations
   schemas/             Room migration schemas
 extensions/
@@ -209,6 +233,22 @@ Android, iOS, and desktop use the same Room schema with bundled SQLite. Web pres
 ```
 
 Desktop installers are available through `packageMsi`, `packageDmg`, and `packageDeb` tasks under `:shared`. Tagged commits automatically package Android, desktop, and Web release assets.
+
+## Acknowledgements
+
+kcode is possible because of the work shared by the open-source community. Our sincere thanks go to the maintainers and contributors of these projects, especially the foundations and reference implementations below:
+
+| Project | How it helps kcode |
+| --- | --- |
+| [Kotlin](https://github.com/JetBrains/kotlin), [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines), and [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Provide the multiplatform language, structured concurrency, and serialization foundation. |
+| [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform), [Material 3 / AndroidX](https://github.com/androidx/androidx), and [Haze](https://github.com/chrisbanes/haze) | Power the shared adaptive interface, design primitives, and visual effects. |
+| [Koog](https://github.com/JetBrains/koog) and [Ktor](https://github.com/ktorio/ktor) | Form the agent, tool, model-provider, streaming, and networking foundation. |
+| [Room](https://github.com/androidx/androidx/tree/androidx-main/room), [SQLite](https://www.sqlite.org/), and [SQLite Wasm](https://github.com/sqlite/sqlite-wasm) | Back local conversation persistence across native and Web targets. The Web worker protocol was informed by the Apache-2.0 AndroidX Room Web demo. |
+| [MMKV](https://github.com/Tencent/MMKV) and [Shizuku](https://github.com/RikkaApps/Shizuku) | Support mobile settings storage and explicit ADB-shell execution on Android. |
+| [CPF-KMP-CMP](https://gitcode.com/CPF-KMP-CMP) | Makes the isolated Kotlin/Compose HarmonyOS host possible. |
+| [Operit](https://github.com/AAswordman/Operit), [OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore), [PRoot](https://github.com/proot-me/proot), [PRoot-Distro](https://github.com/termux/proot-distro), and [Ubuntu](https://ubuntu.com/) | Operit's runtime design and TerminalCore artifact chain informed the Android Ubuntu implementation. The packaged PRoot binaries, loader, and Ubuntu rootfs provenance are documented precisely in the [runtime guide](docs/android-ubuntu-runtime.md) and [NOTICE](NOTICE). |
+
+This is a selective thank-you, not a complete third-party software inventory, and does not imply endorsement or affiliation. Every project remains governed by its own license and attribution terms; the Gradle dependency declarations and packaged notices are the authoritative implementation records.
 
 ## Contributing
 
