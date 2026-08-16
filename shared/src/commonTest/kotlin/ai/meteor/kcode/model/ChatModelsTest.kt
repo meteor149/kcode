@@ -22,9 +22,9 @@ class ChatModelsTest {
             ),
             "继续",
         )
-        assertTrue("用户：你好" in context)
-        assertTrue("助手：你好，有什么可以帮你？" in context)
+        assertTrue("User: 你好" in context)
+        assertTrue("Assistant: 你好，有什么可以帮你？" in context)
         assertTrue("网络错误" !in context)
-        assertTrue(context.endsWith("用户：继续"))
+        assertTrue(context.endsWith("User: 继续"))
     }
 }

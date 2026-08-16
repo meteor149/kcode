@@ -52,10 +52,10 @@ fun conversationTitle(prompt: String): String {
 }
 
 fun buildContext(messages: List<ChatMessage>, latestPrompt: String): String = buildString {
-    appendLine("下面是当前对话。请延续上下文，直接回答最后一条用户消息。")
+    appendLine("The following is the current conversation. Continue from its context and respond directly to the final user message.")
     messages.filterNot { it.isError }.forEach { message ->
-        val role = if (message.role == MessageRole.User) "用户" else "助手"
-        appendLine("$role：${message.content}")
+        val role = if (message.role == MessageRole.User) "User" else "Assistant"
+        appendLine("$role: ${message.content}")
     }
-    append("用户：$latestPrompt")
+    append("User: $latestPrompt")
 }

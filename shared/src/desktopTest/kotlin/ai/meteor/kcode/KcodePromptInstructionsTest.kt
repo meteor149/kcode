@@ -7,12 +7,13 @@ import kotlin.test.assertFalse
 class KcodePromptInstructionsTest {
     @Test
     fun baseInstructionsStayGeneralAndContainNoWebWorkflow() {
-        assertContains(KcodeBaseInstructions, "你是 kcode")
-        assertContains(KcodeBaseInstructions, "使用工具时遵守")
-        assertFalse(KcodeBaseInstructions.contains("Web 应用"))
+        assertContains(KcodeBaseInstructions, "You are kcode")
+        assertContains(KcodeBaseInstructions, "When using tools")
+        assertFalse(KcodeBaseInstructions.contains("Web app"))
         assertFalse(KcodeBaseInstructions.contains("preview_web_app"))
         assertFalse(KcodeBaseInstructions.contains("inspect_web_container"))
-        assertFalse(KcodeBaseInstructions.contains("HTTP 服务"))
+        assertFalse(KcodeBaseInstructions.contains("HTTP service"))
+        assertFalse(CjkCharacter.containsMatchIn(KcodeBaseInstructions))
     }
 
     @Test
@@ -34,5 +35,9 @@ class KcodePromptInstructionsTest {
         assertContains(prompt, "up to 5 agents can be active at once")
         assertContains(prompt, "Proactive multi-agent delegation is active")
         assertContains(prompt, "<multi_agent_mode>")
+    }
+
+    private companion object {
+        val CjkCharacter = Regex("[\\u3400-\\u9FFF]")
     }
 }
