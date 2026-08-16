@@ -25,6 +25,16 @@ kcode is an open-source native AI agent for Android, iOS, desktop, Web, and Harm
 
 The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
 
+<div align="center">
+  <img src="docs/images/app-home-desktop.png" alt="kcode desktop home screen" width="880" />
+  <br />
+  <sub>Desktop</sub>
+  <br /><br />
+  <img src="docs/images/app-home.png" alt="kcode Android home screen" width="360" />
+  <br />
+  <sub>Android</sub>
+</div>
+
 ## What it can do
 
 ### Work as an agent, not only a chatbot
@@ -77,6 +87,10 @@ kcode currently integrates:
 - Zhipu GLM
 
 Providers, models, endpoints, regions, credentials, and temperature are configured in the app. Ollama can connect to a local endpoint without an API key.
+
+## Core feature examples
+
+This section will collect focused, end-to-end examples of kcode's core workflows, including the prompt, relevant configuration, execution flow, and result.
 
 ## Platform support
 

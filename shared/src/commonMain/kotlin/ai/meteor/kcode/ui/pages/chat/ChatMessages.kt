@@ -194,15 +194,18 @@ internal fun Welcome(
 ) {
     val focusManager = LocalFocusManager.current
     if (compact) {
+        val density = LocalDensity.current
+        var composerHeightPx by remember { mutableStateOf(0) }
+        val composerHeight = with(density) { composerHeightPx.toDp() }
         Box(modifier.fillMaxSize()) {
             Box(Modifier.matchParentSize().kcodeHazeSource(hazeState)) {
                 Box(Modifier.fillMaxSize().background(Paper))
-            }
-            Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
                 Box(
-                    Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
-                        detectTapGestures { focusManager.clearFocus(force = true) }
-                    },
+                    Modifier.fillMaxSize()
+                        .padding(start = 12.dp, end = 12.dp, bottom = composerHeight)
+                        .pointerInput(Unit) {
+                            detectTapGestures { focusManager.clearFocus(force = true) }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -225,8 +228,15 @@ internal fun Welcome(
                         }
                     }
                 }
+            }
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { composerHeightPx = it.height }
+                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+            ) {
                 MobileComposer(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     hazeState = hazeState,
                     configuration = configuration,
                     generating = false,
@@ -246,49 +256,54 @@ internal fun Welcome(
         return
     }
 
-    Column(
-        modifier.fillMaxWidth().padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        KcodeMark(size = 58.dp)
-        Text(
-            text(UiText.WelcomeTitle),
-            Modifier.padding(top = KcodeSpacing.lg),
-            color = Ink,
-            style = MaterialTheme.typography.displaySmall,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            setupMessage ?: text(UiText.WelcomeBody),
-            Modifier.padding(top = KcodeSpacing.xs, bottom = KcodeSpacing.xl),
-            color = SoftInk,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-        )
-        Composer(
-            modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f),
-            hazeState = hazeState,
-            generating = false,
-            focusRequester = focusRequester,
-            onFocus = onFocus,
-            onSend = onSend,
-            onStop = {},
-            toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-            toolPermissionMode = toolPermissionMode,
-            onToolPermissionModeChange = onToolPermissionModeChange,
-        )
-        Row(
-            Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f).padding(top = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Box(modifier.fillMaxSize()) {
+        Box(Modifier.matchParentSize().kcodeHazeSource(hazeState)) {
+            Box(Modifier.fillMaxSize().background(Paper))
+        }
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            val sendSuggestion: (String) -> Unit = {
-                focusManager.clearFocus(force = true)
-                onSend(it)
+            KcodeMark(size = 58.dp)
+            Text(
+                text(UiText.WelcomeTitle),
+                Modifier.padding(top = KcodeSpacing.lg),
+                color = Ink,
+                style = MaterialTheme.typography.displaySmall,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                setupMessage ?: text(UiText.WelcomeBody),
+                Modifier.padding(top = KcodeSpacing.xs, bottom = KcodeSpacing.xl),
+                color = SoftInk,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
+            Composer(
+                modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f),
+                hazeState = hazeState,
+                generating = false,
+                focusRequester = focusRequester,
+                onFocus = onFocus,
+                onSend = onSend,
+                onStop = {},
+                toolPermissionControlsAvailable = toolPermissionControlsAvailable,
+                toolPermissionMode = toolPermissionMode,
+                onToolPermissionModeChange = onToolPermissionModeChange,
+            )
+            Row(
+                Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f).padding(top = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val sendSuggestion: (String) -> Unit = {
+                    focusManager.clearFocus(force = true)
+                    onSend(it)
+                }
+                Suggestion(text(UiText.SuggestionIdea), Modifier.weight(1f), sendSuggestion)
+                Suggestion(text(UiText.SuggestionCode), Modifier.weight(1f), sendSuggestion)
+                Suggestion(text(UiText.SuggestionPlan), Modifier.weight(1f), sendSuggestion)
             }
-            Suggestion(text(UiText.SuggestionIdea), Modifier.weight(1f), sendSuggestion)
-            Suggestion(text(UiText.SuggestionCode), Modifier.weight(1f), sendSuggestion)
-            Suggestion(text(UiText.SuggestionPlan), Modifier.weight(1f), sendSuggestion)
         }
     }
 }

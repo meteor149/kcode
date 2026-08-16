@@ -11,6 +11,12 @@ plugins {
 
 dependencyResolutionManagement {
     repositories {
+        maven("https://maven.aliyun.com/repository/central") {
+            name = "AliyunCentralMirrorForHaze"
+            content {
+                includeGroup("dev.chrisbanes.haze")
+            }
+        }
         mavenCentral()
         google()
     }
