@@ -25,15 +25,20 @@ kcode is an open-source native AI agent for Android, iOS, desktop, Web, and Harm
 
 The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
 
-<div align="center">
-  <img src="docs/images/app-home-desktop.png" alt="kcode desktop home screen" width="880" />
-  <br />
-  <sub>Desktop</sub>
-  <br /><br />
-  <img src="docs/images/app-home.png" alt="kcode Android home screen" width="360" />
-  <br />
-  <sub>Android</sub>
-</div>
+<table>
+  <tr>
+    <td align="center" width="76%">
+      <img src="docs/images/app-home-desktop.png" alt="kcode desktop home screen" width="760" />
+      <br />
+      <sub>Desktop</sub>
+    </td>
+    <td align="center" width="24%">
+      <img src="docs/images/app-home.png" alt="kcode Android home screen" width="210" />
+      <br />
+      <sub>Android</sub>
+    </td>
+  </tr>
+</table>
 
 ## What it can do
 
