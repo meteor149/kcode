@@ -80,6 +80,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ai.meteor.kcode.ui.component.KcodeHazeState
@@ -211,6 +212,7 @@ internal fun Welcome(
                             Modifier.padding(top = KcodeSpacing.lg),
                             color = Ink,
                             style = MaterialTheme.typography.displaySmall,
+                            textAlign = TextAlign.Center,
                         )
                         if (configuration == null || setupMessage != null) {
                             Text(
@@ -218,6 +220,7 @@ internal fun Welcome(
                                 Modifier.padding(top = KcodeSpacing.sm, start = KcodeSpacing.lg, end = KcodeSpacing.lg),
                                 color = SoftInk,
                                 style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }
@@ -254,12 +257,14 @@ internal fun Welcome(
             Modifier.padding(top = KcodeSpacing.lg),
             color = Ink,
             style = MaterialTheme.typography.displaySmall,
+            textAlign = TextAlign.Center,
         )
         Text(
             setupMessage ?: text(UiText.WelcomeBody),
             Modifier.padding(top = KcodeSpacing.xs, bottom = KcodeSpacing.xl),
             color = SoftInk,
             style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
         )
         Composer(
             modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f),
