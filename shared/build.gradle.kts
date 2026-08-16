@@ -90,7 +90,7 @@ kotlin {
         val agentMain by creating {
             dependsOn(commonMain)
             dependencies {
-                implementation("dev.chrisbanes.haze:haze:1.6.0")
+                implementation("dev.chrisbanes.haze:haze:1.6.10")
                 implementation("ai.koog:agents-tools:1.1.1")
                 implementation("ai.koog:koog-agents:1.1.1")
                 implementation("ai.koog:agents-ext:1.1.1-beta")

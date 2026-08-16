@@ -1,22 +1,30 @@
 package ai.meteor.kcode
 
+import ai.meteor.kcode.export.DesktopConversationImageSaver
+import ai.meteor.kcode.history.createDesktopConversationHistoryRepository
+import ai.meteor.kcode.settings.createDesktopAppSettingsStore
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import ai.meteor.kcode.settings.createDesktopAppSettingsStore
-import ai.meteor.kcode.history.createDesktopConversationHistoryRepository
-import ai.meteor.kcode.export.DesktopConversationImageSaver
-import androidx.compose.runtime.remember
 
 fun main() {
     val settingsStore = createDesktopAppSettingsStore()
     val historyRepository = createDesktopConversationHistoryRepository()
     val runtime = createDesktopKoogChatRuntime(settingsStore)
     application {
+        val appIcon = painterResource(
+            if (System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)) {
+                "kcode-icon-macos.png"
+            } else {
+                "kcode-icon.png"
+            },
+        )
         val state = rememberWindowState(
             size = DpSize(1180.dp, 780.dp),
             position = WindowPosition(Alignment.Center),
@@ -25,6 +33,7 @@ fun main() {
             onCloseRequest = ::exitApplication,
             state = state,
             title = "kcode",
+            icon = appIcon,
         ) {
             val scheduledTaskPlatformHost = remember(window) { DesktopScheduledTaskPlatformHost(window) }
             KcodeApp(
