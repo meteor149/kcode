@@ -46,7 +46,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Cross-platform iOS-style sheet that rises from the bottom edge. On phones it
+ * Cross-platform mobile sheet that rises from the bottom edge. On phones it
  * spans the viewport width and leaves a small reveal of the app behind; wider
  * layouts retain the same bottom anchoring while constraining reading width.
  */

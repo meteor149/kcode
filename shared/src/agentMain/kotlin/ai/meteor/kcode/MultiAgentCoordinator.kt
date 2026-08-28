@@ -18,7 +18,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 
-internal data class SubAgentLaunch(
+data class SubAgentLaunch(
     val path: String,
     val parentPath: String,
     val taskName: String,
@@ -26,7 +26,7 @@ internal data class SubAgentLaunch(
     val inheritedContext: String,
 )
 
-internal data class SubAgentSnapshot(
+data class SubAgentSnapshot(
     val path: String,
     val parentPath: String,
     val taskName: String,
@@ -36,13 +36,13 @@ internal data class SubAgentSnapshot(
 
 internal const val MaxAgentConcurrency = 5
 
-internal class MultiAgentCoordinator(
+class MultiAgentCoordinator(
     private val scope: CoroutineScope,
     rootContext: String,
     private val maxConcurrency: Int = MaxAgentConcurrency,
     private val runAgent: suspend (SubAgentLaunch) -> String,
     private val onEvent: suspend (SubAgentEvent) -> Unit = {},
-) {
+) : SubagentCoordinator {
     private val mutex = Mutex()
     private val agents = mutableMapOf(
         RootAgentPath to AgentNode(
@@ -54,7 +54,7 @@ internal class MultiAgentCoordinator(
         ),
     )
 
-    fun toolsFor(agentPath: String): ToolRegistry = ToolRegistry {
+    override fun toolsFor(agentPath: String): ToolRegistry = ToolRegistry {
         tool(SpawnAgentTool(this@MultiAgentCoordinator, agentPath))
         tool(SendMessageTool(this@MultiAgentCoordinator, agentPath))
         tool(FollowupTaskTool(this@MultiAgentCoordinator, agentPath))
@@ -161,12 +161,12 @@ internal class MultiAgentCoordinator(
         }
     }
 
-    suspend fun drainMailbox(agentPath: String): String = mutex.withLock {
+    override suspend fun drainMailbox(agentPath: String): String = mutex.withLock {
         val node = agents[agentPath] ?: return@withLock ""
         node.mailbox.toList().also { node.mailbox.clear() }.joinToString("\n\n") { it.render(agentPath) }
     }
 
-    suspend fun continuationAfterRootResponse(): String? {
+    override suspend fun continuationAfterRootResponse(): String? {
         val hasLiveChildren = mutex.withLock {
             agents.values.any { it.path != RootAgentPath && it.status.isLive() }
         }
@@ -176,7 +176,7 @@ internal class MultiAgentCoordinator(
         }
     }
 
-    suspend fun onToolUse(agentPath: String, event: ToolUseEvent) {
+    override suspend fun onToolUse(agentPath: String, event: ToolUseEvent) {
         if (agentPath == RootAgentPath) return
         when (event) {
             is ToolUseEvent.Started -> updateStatus(agentPath, SubAgentStatus.Running, event.name)
@@ -193,7 +193,7 @@ internal class MultiAgentCoordinator(
             .sortedBy(SubAgentSnapshot::path)
     }
 
-    suspend fun shutdown() {
+    override suspend fun shutdown() {
         val jobs = mutex.withLock { agents.values.mapNotNull(AgentNode::job) }
         jobs.forEach(Job::cancel)
     }
@@ -318,6 +318,14 @@ internal class MultiAgentCoordinator(
     private companion object {
         val TaskNameRegex = Regex("[a-z0-9_]+")
     }
+}
+
+interface SubagentCoordinator {
+    fun toolsFor(agentPath: String): ToolRegistry
+    suspend fun drainMailbox(agentPath: String): String
+    suspend fun continuationAfterRootResponse(): String?
+    suspend fun onToolUse(agentPath: String, event: ToolUseEvent)
+    suspend fun shutdown()
 }
 
 private class SpawnAgentTool(

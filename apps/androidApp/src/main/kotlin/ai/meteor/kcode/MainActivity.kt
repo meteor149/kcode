@@ -31,6 +31,7 @@ import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     private lateinit var scheduledTaskPlatformHost: AndroidScheduledTaskPlatformHost
@@ -114,7 +115,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
         if (::agentRuntime.isInitialized) {
-            agentRuntime.conversationOverlayController?.close()
+            runBlocking { agentRuntime.close() }
         }
         super.onDestroy()
     }

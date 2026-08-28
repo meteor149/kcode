@@ -138,14 +138,14 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.package-version }}
         run: >-
-          ./gradlew :shared:${{ matrix.task }}
+          ./gradlew :apps:desktopApp:${{ matrix.task }}
           -PreleaseVersion="$RELEASE_VERSION"
           --stacktrace
       - name: Upload desktop package
         uses: actions/upload-artifact@v7
         with:
           name: release-desktop-${{ matrix.format }}
-          path: shared/build/compose/binaries/main/${{ matrix.format }}/*.${{ matrix.extension }}
+          path: apps/desktopApp/build/compose/binaries/main/${{ matrix.format }}/*.${{ matrix.extension }}
           if-no-files-found: error
           retention-days: 14
 

@@ -37,7 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-internal class AndroidConversationOverlayController(
+class AndroidConversationOverlayController(
     activity: Activity,
 ) : AgentConversationOverlayController {
     private val context = activity.applicationContext

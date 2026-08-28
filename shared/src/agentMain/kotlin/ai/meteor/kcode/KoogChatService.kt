@@ -26,6 +26,19 @@ import kotlin.time.TimeSource
 class KoogChatService(
     private val httpClientFactory: KoogHttpClient.Factory = KtorKoogHttpClient.Factory(),
     private val additionalTools: ToolRegistry = ToolRegistry { },
+    private val additionalToolsProvider: suspend (AgentToolContext) -> ToolRegistry = { additionalTools },
+    private val modelRuntimeProvider: suspend (ModelConfiguration, KoogHttpClient.Factory) -> AgentModelRuntime =
+        ::createAgentModelRuntime,
+    private val systemPromptProvider: suspend (String?, String) -> String =
+        { skillCatalogInstructions, multiAgentInstructions ->
+            buildKcodeSystemPrompt(skillCatalogInstructions, multiAgentInstructions)
+        },
+    private val lifecycle: AgentLifecycle = AgentLifecycle.None,
+    private val toolLifecycle: ToolExecutionLifecycle = ToolExecutionLifecycle.None,
+    private val continuationProvider: suspend (AgentContinuationContext) -> String? = { context ->
+        context.subagentContinuation() ?: context.goalContinuation()
+    },
+    private val subagentCoordinatorFactory: SubagentCoordinatorFactory = SubagentCoordinatorFactory.Default,
     private val toolPermissionModeProvider: suspend () -> ToolPermissionMode = { ToolPermissionMode.Ask },
     private val toolCallApprover: ToolCallApprover = ToolCallApprover { false },
     private val skillRuntime: SkillRuntime? = null,
@@ -54,13 +67,15 @@ class KoogChatService(
             "请先在设置中添加 API Key。"
         }
 
-        val conversationContext = buildContext(history, prompt)
-        val overlayTranscript = ConversationOverlayTranscript(history, prompt)
+        val admittedPrompt = lifecycle.beforeTurn(prompt)
+        lifecycle.onTurnStarted(admittedPrompt)
+        val conversationContext = buildContext(history, admittedPrompt)
+        val overlayTranscript = ConversationOverlayTranscript(history, admittedPrompt)
         val overlayTurn = conversationOverlayController?.startTurn(overlayTranscript.snapshot())
         val goalTurnStart = TimeSource.Monotonic.markNow()
         var accountedSeconds = 0L
-        lateinit var coordinator: MultiAgentCoordinator
-        coordinator = MultiAgentCoordinator(
+        lateinit var coordinator: SubagentCoordinator
+        coordinator = subagentCoordinatorFactory.create(
             scope = this,
             rootContext = conversationContext,
             runAgent = { launch ->
@@ -97,7 +112,7 @@ class KoogChatService(
             },
         )
         try {
-            val skillTurn = skillRuntime?.prepareTurn(prompt)
+            val skillTurn = skillRuntime?.prepareTurn(admittedPrompt)
             runAgent(
                 configuration = configuration,
                 input = skillTurn?.prependTo(conversationContext) ?: conversationContext,
@@ -117,7 +132,18 @@ class KoogChatService(
                     overlayTurn?.update(overlayTranscript.snapshot())
                     onDelta(delta)
                 },
-                continuationAfterResponse = { nextRootContinuation(coordinator, goalSession) },
+                continuationAfterResponse = {
+                    continuationProvider(
+                        AgentContinuationContext(
+                            subagentContinuation = coordinator::continuationAfterRootResponse,
+                            goalContinuation = {
+                                goalSession?.getGoal()
+                                    ?.takeIf { it.status == ai.meteor.kcode.history.ThreadGoalStatus.Active }
+                                    ?.let(::goalContinuationPrompt)
+                            },
+                        ),
+                    )
+                },
                 onUsage = { tokens ->
                     val elapsed = goalTurnStart.elapsedNow().inWholeSeconds
                     val elapsedDelta = (elapsed - accountedSeconds).coerceAtLeast(0L)
@@ -125,7 +151,10 @@ class KoogChatService(
                     goalSession?.recordUsage(tokens.toLong(), elapsedDelta)
                 },
                 skillCatalogInstructions = skillTurn?.catalogInstructions,
-            )
+            ).also { lifecycle.onTurnFinished(it, null) }
+        } catch (error: Throwable) {
+            lifecycle.onTurnFinished(null, error)
+            throw error
         } finally {
             overlayTurn?.finish()
             coordinator.shutdown()
@@ -137,7 +166,7 @@ class KoogChatService(
         input: String,
         agentPath: String,
         multiAgentInstructions: String,
-        coordinator: MultiAgentCoordinator,
+        coordinator: SubagentCoordinator,
         goalSession: GoalSession?,
         scheduledTaskSession: ScheduledTaskSession?,
         scheduledTaskCompletionSession: ScheduledTaskCompletionSession?,
@@ -147,11 +176,18 @@ class KoogChatService(
         onUsage: suspend (Int) -> Unit = {},
         skillCatalogInstructions: String? = null,
     ): String {
-        val runtime = createAgentModelRuntime(configuration, httpClientFactory)
-        val tools = additionalTools + coordinator.toolsFor(agentPath) +
-            (goalSession?.let(::goalTools) ?: ToolRegistry { }) +
-            (scheduledTaskSession?.let(::scheduledTaskTools) ?: ToolRegistry { }) +
-            (scheduledTaskCompletionSession?.let(::scheduledTaskCompletionTools) ?: ToolRegistry { })
+        val runtime = modelRuntimeProvider(configuration, httpClientFactory)
+        val tools = additionalToolsProvider(
+            AgentToolContext(
+                agentPath = agentPath,
+                subagentTools = coordinator.toolsFor(agentPath),
+                goalTools = goalSession?.let(::goalTools) ?: ToolRegistry { },
+                scheduledTaskTools = scheduledTaskSession?.let(::scheduledTaskTools) ?: ToolRegistry { },
+                scheduledTaskCompletionTools = scheduledTaskCompletionSession
+                    ?.let(::scheduledTaskCompletionTools)
+                    ?: ToolRegistry { },
+            ),
+        )
         val strategy = StreamingToolStrategy(
             tools = tools,
             model = runtime.model,
@@ -162,12 +198,13 @@ class KoogChatService(
             additionalContextProvider = { coordinator.drainMailbox(agentPath) },
             continuationAfterResponse = continuationAfterResponse,
             onUsage = onUsage,
+            toolLifecycle = toolLifecycle,
         ).create()
         val agent = AIAgent(
             promptExecutor = MultiLLMPromptExecutor(runtime.client),
             llmModel = runtime.model,
             strategy = strategy,
-            systemPrompt = buildKcodeSystemPrompt(skillCatalogInstructions, multiAgentInstructions),
+            systemPrompt = systemPromptProvider(skillCatalogInstructions, multiAgentInstructions),
             temperature = configuration.temperature,
             toolRegistry = tools,
         )
@@ -175,8 +212,52 @@ class KoogChatService(
     }
 }
 
+interface AgentLifecycle {
+    suspend fun beforeTurn(prompt: String): String = prompt
+    suspend fun onTurnStarted(prompt: String) = Unit
+    suspend fun onTurnFinished(response: String?, error: Throwable?) = Unit
+
+    object None : AgentLifecycle
+}
+
+data class AgentToolContext(
+    val agentPath: String,
+    val subagentTools: ToolRegistry,
+    val goalTools: ToolRegistry,
+    val scheduledTaskTools: ToolRegistry,
+    val scheduledTaskCompletionTools: ToolRegistry,
+)
+
+data class AgentContinuationContext(
+    val subagentContinuation: suspend () -> String?,
+    val goalContinuation: suspend () -> String?,
+)
+
+fun interface SubagentCoordinatorFactory {
+    fun create(
+        scope: kotlinx.coroutines.CoroutineScope,
+        rootContext: String,
+        runAgent: suspend (SubAgentLaunch) -> String,
+        onEvent: suspend (SubAgentEvent) -> Unit,
+    ): SubagentCoordinator
+
+    object Default : SubagentCoordinatorFactory {
+        override fun create(
+            scope: kotlinx.coroutines.CoroutineScope,
+            rootContext: String,
+            runAgent: suspend (SubAgentLaunch) -> String,
+            onEvent: suspend (SubAgentEvent) -> Unit,
+        ): SubagentCoordinator = MultiAgentCoordinator(
+            scope = scope,
+            rootContext = rootContext,
+            runAgent = runAgent,
+            onEvent = onEvent,
+        )
+    }
+}
+
 internal suspend fun nextRootContinuation(
-    coordinator: MultiAgentCoordinator,
+    coordinator: SubagentCoordinator,
     goalSession: GoalSession?,
 ): String? = coordinator.continuationAfterRootResponse()
     ?: goalSession?.getGoal()?.takeIf { it.status == ai.meteor.kcode.history.ThreadGoalStatus.Active }

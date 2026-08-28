@@ -1,0 +1,20 @@
+package ai.meteor.kcode.plugin
+
+interface AgentPluginManager {
+    suspend fun install(spec: DynamicPluginSpec)
+    suspend fun replace(spec: DynamicPluginSpec)
+    suspend fun uninstall(id: String)
+    suspend fun installed(): List<DynamicPluginSpec>
+}
+
+data class DynamicPluginSpec(
+    val id: String,
+    val version: String,
+    val entryClass: String,
+    val artifactPath: String,
+    val sha256: String,
+    val dependencies: List<String> = emptyList(),
+    val config: Any? = Unit,
+    val packageName: String? = null,
+    val capabilities: Set<String> = emptySet(),
+)

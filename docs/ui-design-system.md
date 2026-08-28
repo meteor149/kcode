@@ -1,6 +1,6 @@
 # kcode UI design system
 
-This document is the sizing contract for shared Compose UI on Android, iOS,
+This document is the sizing contract for shared Compose UI on Android,
 desktop, and web. New components should consume the tokens in
 `ai.meteor.kcode.ui.KcodeDesignSystem` instead of introducing one-off values.
 

@@ -16,15 +16,15 @@ accelerometer.start()
 
 The container leaves an existing browser implementation untouched whenever possible. When the embedded engine lacks Geolocation, Battery Status, Vibration, Accelerometer, Gyroscope, Magnetometer or Orientation Sensor support, the injected compatibility layer exposes the corresponding standard interface backed by native services. Permission denial from a browser implementation is never bypassed by a native fallback.
 
-Camera, microphone, `MediaRecorder`, `MediaStreamTrack` constraints and HTML file input remain browser-owned because their standard objects cannot be accurately recreated from a native file result. Android connects WebView media permission, geolocation permission and file chooser callbacks to the host. iOS delegates media and motion permission decisions back to WebKit. Desktop and browser previews use their browser implementations directly.
+Camera, microphone, `MediaRecorder`, `MediaStreamTrack` constraints and HTML file input remain browser-owned because their standard objects cannot be accurately recreated from a native file result. Android connects WebView media permission, geolocation permission and file chooser callbacks to the host. Desktop and browser previews use their browser implementations directly.
 
 Only the isolated local preview origin may reach the Android bridge. A container opened with a remote URL keeps HTTP(S) navigation inside its WebView, but never receives the local native fallback bridge. Native fallback subscriptions are stopped when the container closes.
 
-Android and iOS load remote websites directly in WebView/WKWebView, and managed desktop Chromium retains screenshot, inspection, interaction, and console tooling for them. The browser build can display remote sites that permit iframe embedding, but browser same-origin and `frame-ancestors` policies may prevent embedding or agent debugging; local `/workspace` previews remain fully controllable there.
+Android loads remote websites directly in WebView, and managed desktop Chromium retains screenshot, inspection, interaction, and console tooling for them. The browser build can display remote sites that permit iframe embedding, but browser same-origin and `frame-ancestors` policies may prevent embedding or agent debugging; local `/workspace` previews remain fully controllable there.
 
 ## Agent lifecycle tools
 
-Every preview receives a stable container ID and reports whether it is in the `foreground` or `background`. The agent uses `manage_web_container` with the `list`, `set_state`, `reload`, and `close` actions to manage lifecycle through one tool. `screenshot_web_container` feeds the current rendered viewport back to a vision-capable model as a PNG tool-result attachment. Android and iOS retain their WebView while returning to kcode; the browser target hides its isolated overlay; desktop minimizes or restores its managed Chromium app window through the DevTools protocol.
+Every preview receives a stable container ID and reports whether it is in the `foreground` or `background`. The agent uses `manage_web_container` with the `list`, `set_state`, `reload`, and `close` actions to manage lifecycle through one tool. `screenshot_web_container` feeds the current rendered viewport back to a vision-capable model as a PNG tool-result attachment. Android retains its WebView while returning to kcode; the browser target hides its isolated overlay; desktop minimizes or restores its managed Chromium app window through the DevTools protocol.
 
 The preview navigation bar also exposes a manual background action. It uses the same lifecycle path as `manage_web_container` with `set_state`, so the page remains running and can later be restored by the agent instead of being closed.
 

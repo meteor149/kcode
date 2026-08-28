@@ -1,5 +1,3 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
@@ -8,19 +6,6 @@ plugins {
     id("androidx.room3")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
-}
-
-val configuredReleaseVersion = providers.gradleProperty("releaseVersion").orElse("1.0.0")
-val configuredMacReleaseVersion = configuredReleaseVersion.map { version ->
-    val components = version.split('.')
-    val major = components.getOrNull(0)?.toIntOrNull() ?: 0
-    if (major > 0) {
-        version
-    } else {
-        val minor = components.getOrNull(1)?.toIntOrNull() ?: 0
-        val patch = components.getOrNull(2)?.toIntOrNull() ?: 0
-        "1.$minor.$patch"
-    }
 }
 
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
@@ -44,17 +29,6 @@ kotlin {
         }
         binaries.executable()
     }
-    listOf(
-        iosArm64(),
-        iosX64(),
-        iosSimulatorArm64(),
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "KcodeShared"
-            isStatic = true
-        }
-    }
-
     sourceSets {
         val commonMain by getting {
             dependencies {
@@ -155,30 +129,12 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-browser:0.3")
             }
         }
-        val iosMain by creating {
-            dependsOn(agentMain)
-            dependsOn(mobileMain)
-            dependencies {
-                implementation("io.ktor:ktor-client-darwin:3.3.3")
-            }
-        }
-        val iosRoomMain by creating {
-            dependsOn(iosMain)
-            dependsOn(roomMain)
-            dependsOn(nativeSqliteMain)
-        }
-        getByName("iosArm64Main").dependsOn(iosRoomMain)
-        getByName("iosX64Main").dependsOn(iosMain)
-        getByName("iosSimulatorArm64Main").dependsOn(iosRoomMain)
     }
 }
 
 dependencies {
     add("kspAndroid", "androidx.room3:room3-compiler:3.0.1")
     add("kspDesktop", "androidx.room3:room3-compiler:3.0.1")
-    add("kspIosArm64", "androidx.room3:room3-compiler:3.0.1")
-    add("kspIosX64", "androidx.room3:room3-compiler:3.0.1")
-    add("kspIosSimulatorArm64", "androidx.room3:room3-compiler:3.0.1")
     add("kspWasmJs", "androidx.room3:room3-compiler:3.0.1")
 }
 
@@ -207,32 +163,5 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-}
-
-compose.desktop {
-    application {
-        mainClass = "ai.meteor.kcode.MainKt"
-
-        nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            modules("jdk.httpserver", "java.net.http")
-            packageName = "kcode"
-            packageVersion = configuredReleaseVersion.get()
-            description = "A calm, cross-platform AI workspace powered by Koog."
-            vendor = "kcode"
-
-            windows {
-                iconFile.set(project.file("src/desktopMain/resources/kcode-icon.ico"))
-            }
-            macOS {
-                iconFile.set(project.file("src/desktopMain/resources/kcode-icon.icns"))
-                packageVersion = configuredMacReleaseVersion.get()
-                dmgPackageVersion = configuredMacReleaseVersion.get()
-            }
-            linux {
-                iconFile.set(project.file("src/desktopMain/resources/kcode-icon.png"))
-            }
-        }
     }
 }

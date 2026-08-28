@@ -1,24 +1,8 @@
 package ai.meteor.kcode
 
-import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.ext.tool.file.EditFileTool
-import ai.koog.agents.ext.tool.file.ListDirectoryTool
-import ai.koog.agents.ext.tool.file.ReadFileTool
-import ai.koog.agents.ext.tool.file.WriteFileTool
 import ai.koog.rag.base.files.FileMetadata
 import ai.koog.rag.base.files.FileSystemProvider
 import ai.koog.rag.base.files.JVMFileSystemProvider
-import ai.meteor.kcode.webcontainer.DesktopWebContainerLauncher
-import ai.meteor.kcode.tools.search.WebSearchTool
-import ai.meteor.kcode.tools.search.WebSearchConfiguration
-import ai.meteor.kcode.tools.search.WebSearchProvider
-import ai.meteor.kcode.settings.AppSettingsStore
-import ai.meteor.kcode.settings.ToolPermissionMode
-import ai.meteor.kcode.tools.permission.ToolApprovalRequest
-import ai.meteor.kcode.tools.permission.ToolCallApprover
-import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
-import ai.meteor.kcode.skill.skillTools
-import ai.meteor.kcode.artifact.createDesktopArtifactRepository
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.io.Sink
@@ -27,55 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.swing.Swing
-import javax.swing.JOptionPane
 
-fun createDesktopKoogChatService(settingsStore: AppSettingsStore): KoogChatService =
-    createDesktopKoogChatRuntime(settingsStore).chatService
-
-fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRuntime {
-    val workspace = Files.createDirectories(
-        Path.of(System.getProperty("user.home"), ".kcode", "workspace"),
-    ).toRealPath()
-    val fileSystem = DesktopAgentWorkspaceFileSystem(workspace)
-    val skillWorkspace = DesktopAgentWorkspace(workspace)
-    val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "desktop-app-data")
-    val artifactRepository = createDesktopArtifactRepository()
-    val webContainerController = DesktopWebContainerLauncher(workspace)
-    return KcodeAgentRuntime(
-        chatService = KoogChatService(
-            additionalTools = ToolRegistry {
-                tool(ReadFileTool(fileSystem))
-                tool(ListDirectoryTool(fileSystem))
-                tool(WriteFileTool(fileSystem))
-                tool(EditFileTool(fileSystem))
-                tool(ReadMediaFileTool(fileSystem))
-                tool(AgentShellTool(DesktopShellCommandExecutor(workspace)))
-                webContainerTools(webContainerController)
-                tool(WebSearchTool(configurationProvider = {
-                    settingsStore.load().let {
-                        WebSearchConfiguration(
-                            provider = WebSearchProvider.fromCode(it.webSearchProvider),
-                            brightDataApiKey = it.webSearchApiKey,
-                            exaApiKey = it.exaSearchApiKey,
-                        )
-                    }
-                }))
-                skillTools(skillRuntime)
-                artifactTools(artifactRepository)
-            },
-            toolPermissionModeProvider = {
-                ToolPermissionMode.fromCode(settingsStore.load().toolPermissionMode)
-            },
-            toolCallApprover = ToolCallApprover { request -> confirmDesktopToolCall(request) },
-            skillRuntime = skillRuntime,
-        ),
-        webContainerController = webContainerController,
-        artifactRepository = artifactRepository,
-    )
-}
-
-internal class DesktopAgentWorkspace(
+class DesktopAgentWorkspace(
     private val root: Path,
 ) : AgentWorkspace {
     private val normalizedRoot = root.toAbsolutePath().normalize()
@@ -142,7 +79,7 @@ internal class DesktopAgentWorkspace(
     }
 }
 
-internal class DesktopShellCommandExecutor(
+class DesktopShellCommandExecutor(
     workspace: Path,
     private val delegate: AgentShellExecutor = JvmAgentShellExecutor(),
 ) : AgentShellExecutor {
@@ -198,19 +135,8 @@ private class JvmAgentShellExecutor : AgentShellExecutor {
         }
 }
 
-private suspend fun confirmDesktopToolCall(request: ToolApprovalRequest): Boolean =
-    withContext(Dispatchers.Swing) {
-        JOptionPane.showConfirmDialog(
-            null,
-            "kcode wants to use ${request.name}.\n\nPurpose\n${request.description.ifBlank { request.name }.take(2_048)}\n\nInput\n${request.input.take(8_192)}",
-            "Allow tool call?",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.WARNING_MESSAGE,
-        ) == JOptionPane.YES_OPTION
-    }
-
 /** Maps the same virtual /workspace contract onto ~/.kcode/workspace on desktop. */
-internal class DesktopAgentWorkspaceFileSystem(
+class DesktopAgentWorkspaceFileSystem(
     private val root: Path,
 ) : FileSystemProvider.ReadWrite<Path> {
     private val delegate = JVMFileSystemProvider.ReadWrite

@@ -29,6 +29,7 @@ internal class StreamingToolStrategy(
     private val additionalContextProvider: suspend () -> String = { "" },
     private val continuationAfterResponse: suspend () -> String? = { null },
     private val onUsage: suspend (Int) -> Unit = {},
+    private val toolLifecycle: ToolExecutionLifecycle = ToolExecutionLifecycle.None,
 ) {
     fun create() = functionalStrategy<String, String>("streaming_single_run") { input ->
         val visibleText = StringBuilder()
@@ -112,7 +113,14 @@ internal class StreamingToolStrategy(
             pendingToolResults = try {
                 calls.map { call ->
                     val descriptor = tools.getToolOrNull(call.tool)?.descriptor
-                    val approved = call.tool in InternalToolNames || authorizeToolCall(
+                    val request = toolLifecycle.beforeExecute(
+                        ToolExecutionRequest(
+                            name = call.tool,
+                            input = call.args.limitToolText(4_096),
+                            description = descriptor?.description.orEmpty(),
+                        ),
+                    )
+                    val approved = request.deniedReason == null && (call.tool in InternalToolNames || authorizeToolCall(
                         mode = permissionModeProvider(),
                         request = ToolApprovalRequest(
                             name = call.tool,
@@ -120,8 +128,13 @@ internal class StreamingToolStrategy(
                             description = descriptor?.description.orEmpty(),
                         ),
                         approver = approver,
-                    )
-                    if (approved) executeTool(call) else deniedToolResult(call)
+                    ))
+                    val result = if (approved) {
+                        executeTool(call)
+                    } else {
+                        deniedToolResult(call, request.deniedReason)
+                    }
+                    toolLifecycle.afterExecute(request, result)
                 }
                     .also { results -> reportResults(results, eventIds, toolRound) }
             } catch (error: Throwable) {
@@ -160,12 +173,15 @@ internal class StreamingToolStrategy(
         }
     }
 
-    private fun deniedToolResult(call: MessagePart.Tool.Call): ReceivedToolResult = ReceivedToolResult(
+    private fun deniedToolResult(
+        call: MessagePart.Tool.Call,
+        reason: String? = null,
+    ): ReceivedToolResult = ReceivedToolResult(
         id = call.id,
         tool = call.tool,
         toolArgs = runCatching { call.argsJson.toKoogJSONObject() }.getOrElse { JSONObject(emptyMap()) },
         toolDescription = null,
-        output = "Tool call denied by the user's permission policy and was not executed.",
+        output = reason ?: "Tool call denied by the user's permission policy and was not executed.",
         resultKind = ToolResultKind.Failure(null),
         result = null,
     )
@@ -342,3 +358,17 @@ private val InternalToolNames = setOf(
     "schedule_task",
     "complete_scheduled_task",
 )
+
+data class ToolExecutionRequest(
+    val name: String,
+    val input: String,
+    val description: String,
+    val deniedReason: String? = null,
+)
+
+interface ToolExecutionLifecycle {
+    suspend fun beforeExecute(request: ToolExecutionRequest): ToolExecutionRequest = request
+    suspend fun afterExecute(request: ToolExecutionRequest, result: ReceivedToolResult): ReceivedToolResult = result
+
+    object None : ToolExecutionLifecycle
+}

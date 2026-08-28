@@ -3,7 +3,7 @@ package ai.meteor.kcode.settings
 import ai.meteor.kcode.model.ModelProvider
 import com.tencent.mmkv.kmp.MMKV
 
-/** Android and iOS settings backed by the same MMKV schema. */
+/** Android settings backed by the stable MMKV schema. */
 class MmkvAppSettingsStore(
     private val mmkv: MMKV,
     override val protection: SettingsProtection,

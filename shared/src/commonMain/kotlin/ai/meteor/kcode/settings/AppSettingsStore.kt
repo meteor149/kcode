@@ -43,8 +43,6 @@ enum class SettingsProtection {
     AndroidKeystore,
     DesktopAppData,
     BrowserLocalStorage,
-    IosKeychain,
-    HarmonySandbox,
     Transient,
 }
 

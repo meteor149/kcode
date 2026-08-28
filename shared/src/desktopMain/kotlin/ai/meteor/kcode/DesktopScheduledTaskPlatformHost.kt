@@ -7,7 +7,7 @@ import java.awt.SystemTray
 import java.awt.Toolkit
 import java.awt.TrayIcon
 
-internal class DesktopScheduledTaskPlatformHost(
+class DesktopScheduledTaskPlatformHost(
     private val window: ComposeWindow,
 ) : ScheduledTaskPlatformHost {
     private val trayIcon: TrayIcon? by lazy {

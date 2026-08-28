@@ -3,6 +3,7 @@
 package ai.meteor.kcode
 
 import ai.koog.agents.core.tools.ToolRegistry
+import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.webcontainer.WebContainerController
 import ai.meteor.kcode.webcontainer.WebContainerInfo
 import ai.meteor.kcode.webcontainer.WebContainerScreenshot
@@ -64,7 +65,7 @@ internal class WebToolPermissionState(
 internal fun createWebKoogChatService(
     settingsStore: AppSettingsStore,
     permissionState: WebToolPermissionState,
-): KoogChatService = createWebKoogChatRuntime(settingsStore, permissionState).chatService
+): ChatService = createWebKoogChatRuntime(settingsStore, permissionState).chatService
 
 internal fun createWebKoogChatRuntime(
     settingsStore: AppSettingsStore,

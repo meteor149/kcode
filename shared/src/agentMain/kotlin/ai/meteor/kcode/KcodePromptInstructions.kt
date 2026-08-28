@@ -9,7 +9,7 @@ internal val KcodeBaseInstructions = """
     When using tools, follow their argument contracts, current permissions, and the user's authorization. Do not switch execution identities on your own or treat a Skill as granting additional permissions.
 """.trimIndent()
 
-internal fun buildKcodeSystemPrompt(
+fun buildKcodeSystemPrompt(
     skillCatalogInstructions: String?,
     multiAgentInstructions: String? = null,
 ): String = buildString {

@@ -23,7 +23,7 @@ import rikka.shizuku.Shizuku
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-internal class AndroidShellExecutors(
+class AndroidShellExecutors(
     private val activity: Activity,
     private val modeProvider: suspend () -> ShellExecutionMode,
 ) : AgentShellExecutor {

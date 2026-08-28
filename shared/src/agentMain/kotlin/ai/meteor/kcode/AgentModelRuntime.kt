@@ -25,12 +25,12 @@ import ai.koog.prompt.llm.LLMProvider
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.model.ModelProvider
 
-internal data class AgentModelRuntime(
+data class AgentModelRuntime(
     val client: LLMClient,
     val model: LLModel,
 )
 
-internal fun createAgentModelRuntime(
+fun createAgentModelRuntime(
     configuration: ModelConfiguration,
     httpClientFactory: KoogHttpClient.Factory,
 ): AgentModelRuntime {

@@ -6,7 +6,7 @@ This Kotlin Multiplatform project uses Compose and Koog. `shared/src/commonMain`
 
 ## Build and Test Commands
 
-- `./gradlew :shared:run` — run the desktop app.
+- `./gradlew :apps:desktopApp:run` — run the desktop app.
 - `./gradlew :apps:androidApp:installDebug` — install Android debug output.
 - `./gradlew :shared:wasmJsBrowserDevelopmentRun` — run the browser build.
 - `./gradlew :shared:allTests` — test the shared module.
@@ -26,7 +26,7 @@ Use four-space indentation, multiline trailing commas, explicit imports, `Pascal
 
 ## Persistence Conventions
 
-Access persistence through common contracts and repositories, never from UI. Use `AppSettingsStore` for settings. Android and iOS use MMKV with identical stable keys and defaults; reserve it for small scalar preferences, and update `StoredAppSettings` and its MMKV keys together.
+Access persistence through common contracts and repositories, never from UI. Use `AppSettingsStore` for settings. Android uses MMKV with stable keys and defaults; reserve it for small scalar preferences, and update `StoredAppSettings` and its MMKV keys together.
 
 Use Room 3/SQLite for structured, queryable data such as conversations. Keep DAO calls suspending, wrap multi-table mutations in transactions, export schemas, and provide an explicit migration when the schema version changes. Platform database builders belong in platform source sets; Wasm SQLite work stays in `apps/web/sqliteWasmWorker`.
 

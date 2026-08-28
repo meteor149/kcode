@@ -65,6 +65,6 @@ interface ChatService {
     ): String = reply(configuration, history, prompt).also { onDelta(it) }
 }
 
-enum class ChatAvailability { BrowserGateway, IosGateway }
+enum class ChatAvailability { BrowserGateway }
 
 class ChatServiceUnavailable(val availability: ChatAvailability) : Exception()
