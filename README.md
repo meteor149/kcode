@@ -25,7 +25,7 @@ kcode is an open-source native AI agent for Android and desktop. It is built aro
 
 The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
 
-On Desktop and Android, the agent is assembled as a [Cordis plugin tree](docs/plugin-architecture.md): model adapters, prompts, permission policy, tools, and the Koog loop are replaceable service providers or consumers with reversible lifecycles. Verified external JAR/APK generations can be loaded and transactionally replaced through cordis-kotlin. The complete design reference derived from DeepSeek Harness is in [the Harness plugin specification](docs/deepseek-harness-plugin-spec.md).
+kcode's architectural goal is a Kotlin implementation of the DeepSeek Harness plugin model: “everything is a plugin.” Android and desktop share a [Cordis plugin tree](docs/plugin-architecture.md), with replaceable agent and application services. This is still a work in progress; the [Harness plugin specification](docs/deepseek-harness-plugin-spec.md) describes the target design, beyond what is implemented today.
 
 <table>
   <tr>
@@ -95,9 +95,13 @@ kcode currently integrates:
 
 Providers, models, endpoints, regions, credentials, and temperature are configured in the app. Ollama can connect to a local endpoint without an API key.
 
-## Core feature examples
+## Plugin architecture and current scope
 
-This section will collect focused, end-to-end examples of kcode's core workflows, including the prompt, relevant configuration, execution flow, and result.
+Only the plugin inventory and loader are pinned bootstrap components. The default composition can disable or replace product plugins, including model adapters, prompts, permissions, tools, the Koog loop, settings, conversation history, Artifact storage, Web containers, and the application renderer. Consumers resolve services through Cordis and rebind when their providers change.
+
+Desktop supports external JAR plugins; Android supports APK/dex plugins. The runtime supports loading, enabling, disabling, replacement, and unloading, with rollback on failed replacement. Actual external package loading is covered by desktop tests and Android device instrumentation tests. Plugin mutations require active agent turns to finish or be cancelled first.
+
+The shipped application starts with built-in plugins compiled into the host. It does not yet restore a separately installed plugin set at startup. Replacing the whole application renderer is supported; individual pages, settings fields, message renderers, and themes do not yet have independent plugin slots. Full Harness API decomposition, persistent plugin installation, ABI version negotiation, and state migration remain unfinished. See the [architecture guide](docs/plugin-architecture.md) for implementation details and boundaries.
 
 ## Platform support
 
@@ -120,6 +124,8 @@ This section will collect focused, end-to-end examples of kcode's core workflows
 | Dynamic Cordis agent plugins | ✅ APK/dex | ✅ JAR |
 
 Availability on each platform also depends on the selected model, device capabilities, and granted permissions.
+
+The browser application target has been removed. Android and desktop retain Web search, embedded Web containers, and runnable Web Artifacts.
 
 ## Get kcode
 
@@ -234,6 +240,7 @@ apps/
 plugins/
   api/                 Stable Cordis service definitions and extension events
   runtime/             Plugin-tree composition and lifecycle ownership
+  application/         Settings, history, Artifacts, Web containers, and Compose renderer providers
   agent-loop/          Koog loop provider
   inventory|tools|...  One Gradle module per core plugin capability
   filesystem|shell|... One Gradle module per platform feature consumer
@@ -258,6 +265,12 @@ Android and desktop use the same Room schema with bundled SQLite.
 
 # Every available multiplatform test suite
 ./gradlew allTests
+
+# Desktop plugin composition and external JAR loading
+./gradlew :plugins:platform-desktop:test
+
+# Android external APK/dex loading (requires an API 35+ device or emulator)
+./gradlew :plugins:platform-android:connectedDebugAndroidTest
 
 # Android debug APK
 ./gradlew :apps:androidApp:assembleDebug

@@ -25,6 +25,8 @@ kcode 是一款面向 Android 和桌面的开源原生 AI Agent。我们相信�
 
 项目将一套自适应 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) 界面与基于 [Koog](https://docs.koog.ai/) 的 Agent 运行时结合起来，并在此基础上提供本地优先存储、真实工具、可复用 Skill、持久化 Goal、定时自动化、多 Agent 编排和可运行的 Web Artifact。一次对话可以自然地从普通问答进入工具执行，再延伸为持续推进的长期目标、周期任务，或沉淀为可以直接打开使用的小应用。
 
+kcode 的架构目标是实现 Kotlin 版本的 DeepSeek Harness 插件模型：“一切皆插件”。Android 和桌面端共用一棵 [Cordis 插件树](plugin-architecture.md)，支持替换 Agent 与应用服务。项目仍在推进中；[Harness 插件规范](deepseek-harness-plugin-spec.md)描述的是目标设计，并不代表所有能力均已实现。
+
 ## kcode 能做什么？
 
 ### 不止对话，真正完成任务
@@ -45,7 +47,7 @@ kcode 是一款面向 Android 和桌面的开源原生 AI Agent。我们相信�
 
 ### 安排单次与周期任务
 
-当用户明确提出要求时，Agent 可以为当前会话创建、查看、暂停、恢复和取消定时 Prompt。任务既可以在延迟一段时间后或指定时间运行一次，也可以按不短于一分钟的间隔重复运行。每次执行都会创建独立会话，在浮层卡片中显示由 Agent 选定的结果，并允许加入普通历史记录或直接丢弃。Android 和桌面 共用同一套持久化任务模型；如果平台支持且用户已授权，任务在后台完成时会发送对应平台的通知。
+当用户明确提出要求时，Agent 可以为当前会话创建、查看、暂停、恢复和取消定时 Prompt。任务既可以在延迟一段时间后或指定时间运行一次，也可以按不短于一分钟的间隔重复运行。每次执行都会创建独立会话，在浮层卡片中显示由 Agent 选定的结果，并允许加入普通历史记录或直接丢弃。Android 和桌面共用同一套持久化任务模型；如果平台支持且用户已授权，任务在后台完成时会发送对应平台的通知。
 
 当前调度器依赖 kcode 应用进程，并非操作系统级闹钟服务。应用重新启动后会恢复已持久化的逾期任务；周期任务会跳过已经错过的时间槽，不会同时启动一批补偿执行。
 
@@ -78,6 +80,14 @@ kcode 当前已集成：
 
 模型供应商、模型、服务地址、区域、凭据与 Temperature 均可在应用内配置。Ollama 可以连接无需 API Key 的本地服务。
 
+## 插件架构与当前边界
+
+只有插件清单与加载器是固定的启动组件。默认组合允许禁用或替换产品插件，包括模型适配、提示词、权限、工具、Koog 循环、设置、会话历史、Artifact 存储、Web 容器与应用渲染器。Consumer 通过 Cordis 获取服务，并在 Provider 变化后重新绑定。
+
+桌面端支持外部 JAR 插件，Android 支持 APK/dex 插件。运行时支持加载、启用、禁用、替换与卸载，替换失败时支持回滚。真实外部插件包加载已由桌面测试与 Android 设备仪器测试覆盖。修改插件组合前，需要先结束或取消正在执行的 Agent 回合。
+
+当前应用默认启动的仍是编译进 Host 的内置插件，尚未实现启动时恢复独立安装的插件集合。整套应用渲染器可以替换，但页面、设置项、消息渲染器与主题尚无各自独立的插件插槽。完整 Harness API 拆分、插件安装持久化、ABI 版本协商和状态迁移仍待完成。实现细节与边界见[插件架构说明](plugin-architecture.md)。
+
 ## 平台支持
 
 | 能力 | Android | 桌面 |
@@ -99,6 +109,8 @@ kcode 当前已集成：
 | 动态 Cordis Agent 插件 | ✅ APK/dex | ✅ JAR |
 
 各平台上的实际能力还取决于所选模型、设备能力以及用户授予的权限。
+
+浏览器应用目标已移除。Android 与桌面端继续支持联网搜索、内嵌 Web 容器和可运行的 Web Artifact。
 
 ## 获取 kcode
 
@@ -213,6 +225,7 @@ apps/
 plugins/
   api/                 稳定的 Cordis 服务定义与扩展事件
   runtime/             插件树组合与生命周期所有权
+  application/         设置、历史、Artifact、Web 容器与 Compose 渲染器 Provider
   agent-loop/          Koog Loop Provider
   inventory|tools|...  每项核心插件能力一个 Gradle 模块
   filesystem|shell|... 每项平台工具 Consumer 一个 Gradle 模块
@@ -238,11 +251,17 @@ Android 与桌面端使用相同的 Room Schema 和 Bundled SQLite。
 # 所有可用的多平台测试套件
 ./gradlew allTests
 
+# 桌面插件组合与外部 JAR 加载
+./gradlew :plugins:platform-desktop:test
+
+# Android 外部 APK/dex 加载（需要 API 35+ 设备或模拟器）
+./gradlew :plugins:platform-android:connectedDebugAndroidTest
+
 # Android Debug APK
 ./gradlew :apps:androidApp:assembleDebug
 ```
 
-桌面安装包可通过 `:apps:desktopApp` 下的 `packageMsi`、`packageDmg` 与 `packageDeb` 任务构建。带 Tag 的提交会自动打包 Android 和桌面 发布产物。
+桌面安装包可通过 `:apps:desktopApp` 下的 `packageMsi`、`packageDmg` 与 `packageDeb` 任务构建。带 Tag 的提交会自动打包 Android 和桌面发布产物。
 
 ## 致谢
 
