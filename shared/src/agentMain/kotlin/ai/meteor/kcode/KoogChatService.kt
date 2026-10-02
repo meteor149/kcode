@@ -1,6 +1,5 @@
 package ai.meteor.kcode
 
-import ai.meteor.kcode.chat.ChatAvailability
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.GoalSession
 import ai.meteor.kcode.chat.ScheduledTaskSession
@@ -44,8 +43,6 @@ class KoogChatService(
     private val skillRuntime: SkillRuntime? = null,
     private val conversationOverlayController: AgentConversationOverlayController? = null,
 ) : ChatService {
-    override val availability: ChatAvailability? = null
-
     override suspend fun reply(
         configuration: ModelConfiguration,
         history: List<ChatMessage>,

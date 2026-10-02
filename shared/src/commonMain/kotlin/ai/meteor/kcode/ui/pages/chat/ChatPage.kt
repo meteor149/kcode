@@ -26,8 +26,6 @@ import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
-import ai.meteor.kcode.localization.availabilityError
-import ai.meteor.kcode.localization.availabilityStatus
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -113,11 +111,9 @@ internal fun ChatPane(
     val streamScrollFollower = remember { StreamScrollFollower() }
     val connectionFailedMessage = text(UiText.ModelConnectionFailed)
     val setupModelMessage = text(UiText.SetupModelFirst)
-    val unavailableMessage = service.availability?.let { availabilityError(it) }
     val failureMessages = ChatFailureMessages(
         setupModel = setupModelMessage,
         connectionFailed = connectionFailedMessage,
-        unavailable = unavailableMessage,
     )
     val goalLabel = text(UiText.Goal)
     val goalStatusLabel = text(UiText.GoalStatus)
@@ -392,7 +388,7 @@ internal fun ChatPane(
                     hazeState = hazeState,
                     configuration = configuration,
                     setupMessage = if (configuration == null) text(UiText.SetupModelFirst)
-                        else service.availability?.let { availabilityStatus(it) },
+                        else null,
                     focusRequester = focusRequester,
                     onFocus = {},
                     onSend = ::send,
@@ -609,7 +605,7 @@ internal fun ChatPane(
                     hazeState = hazeState,
                     configuration = configuration,
                     setupMessage = if (configuration == null) text(UiText.SetupModelFirst)
-                        else service.availability?.let { availabilityStatus(it) },
+                        else null,
                     focusRequester = focusRequester,
                     onFocus = {},
                     onSend = ::send,

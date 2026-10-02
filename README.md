@@ -21,7 +21,7 @@
 
 ## The idea
 
-kcode is an open-source native AI agent for Android, desktop, and Web. It is built around a simple belief: an agent should feel like a thoughtfully designed application—not a terminal transplanted into a chat box, and not a thin web wrapper duplicated for every device.
+kcode is an open-source native AI agent for Android and desktop. It is built around a simple belief: an agent should feel like a thoughtfully designed application—not a terminal transplanted into a chat box, and not a thin web wrapper duplicated for every device.
 
 The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
 
@@ -62,7 +62,7 @@ On Desktop and Android, the agent is assembled as a [Cordis plugin tree](docs/pl
 
 ### Schedule one-shot and recurring work
 
-When explicitly requested, the agent can create, list, pause, resume, and cancel scheduled prompts for the current conversation. A task can run once after a delay or at an absolute time, or repeat on an interval of at least one minute. Each run executes as a separate standalone conversation, presents its selected result in a floating card, and can be promoted into normal history or discarded. Android, desktop, and Web use the same persisted task model and can surface a platform notification, when permission and platform support allow it, after a result finishes in the background.
+When explicitly requested, the agent can create, list, pause, resume, and cancel scheduled prompts for the current conversation. A task can run once after a delay or at an absolute time, or repeat on an interval of at least one minute. Each run executes as a separate standalone conversation, presents its selected result in a floating card, and can be promoted into normal history or discarded. Android and desktop use the same persisted task model and can surface a platform notification, when permission and platform support allow it, after a result finishes in the background.
 
 Scheduling is process-based rather than an operating-system alarm service: tasks run while the kcode process is available. Persisted overdue tasks are recovered after the app starts again, and recurring schedules skip missed intervals instead of launching overlapping catch-up runs.
 
@@ -101,36 +101,35 @@ This section will collect focused, end-to-end examples of kcode's core workflows
 
 ## Platform support
 
-| Capability | Android | Desktop | Web |
-| --- | :---: | :---: | :---: |
-| Adaptive native Compose UI | ✅ | ✅ | ✅ |
-| Model chat and local history | ✅ | ✅ | ✅ |
-| Streaming Koog agent runtime | ✅ | ✅ | ✅ |
-| Persistent Goals | ✅ | ✅ | ✅ |
-| One-shot and recurring scheduled tasks | ✅ | ✅ | ✅ |
-| Multi-agent orchestration and Skills | ✅ | ✅ | ✅ |
-| Agent file workspace and Web search | ✅ | ✅ | ✅ |
-| Web Artifacts and container | ✅ | ✅ | ✅ |
-| Conversation image export | ✅ | ✅ | — |
-| Native mobile Web capability bridge | ✅ | — | Browser APIs |
-| Native system shell tool | App UID / Shizuku / root | `/workspace` | — |
-| Ubuntu 24.04 PRoot tool | App UID / Shizuku / root (ARM64) | — | — |
-| Live conversation system overlay | ✅ | — | — |
-| Amazon Bedrock client | — | ✅ | — |
-| Dynamic Cordis agent plugins | ✅ APK/dex | ✅ JAR | — |
+| Capability | Android | Desktop |
+| --- | :---: | :---: |
+| Adaptive native Compose UI | ✅ | ✅ |
+| Model chat and local history | ✅ | ✅ |
+| Streaming Koog agent runtime | ✅ | ✅ |
+| Persistent Goals | ✅ | ✅ |
+| One-shot and recurring scheduled tasks | ✅ | ✅ |
+| Multi-agent orchestration and Skills | ✅ | ✅ |
+| Agent file workspace and Web search | ✅ | ✅ |
+| Web Artifacts and container | ✅ | ✅ |
+| Conversation image export | ✅ | ✅ |
+| Native mobile Web capability bridge | ✅ | — |
+| Native system shell tool | App UID / Shizuku / root | `/workspace` |
+| Ubuntu 24.04 PRoot tool | App UID / Shizuku / root (ARM64) | — |
+| Live conversation system overlay | ✅ | — |
+| Amazon Bedrock client | — | ✅ |
+| Dynamic Cordis agent plugins | ✅ APK/dex | ✅ JAR |
 
-Availability on every platform also depends on the selected model, device or browser capabilities, and granted permissions; direct browser-to-provider requests are subject to CORS.
+Availability on each platform also depends on the selected model, device capabilities, and granted permissions.
 
 ## Get kcode
 
-Tagged builds publish a signed Android APK, Windows MSI, macOS DMG, Linux DEB, and a Web distribution to [GitHub Releases](https://github.com/meteor149/kcode/releases).
+Tagged builds publish a signed Android APK, Windows MSI, macOS DMG, and Linux DEB to [GitHub Releases](https://github.com/meteor149/kcode/releases).
 
 ### Requirements
 
 - JDK 21; JVM bytecode targets Java 17
 - Android Studio and Android SDK 35 for Android (minimum Android API 35)
 - An ARM64 Android device and at least 384 MiB free in the selected runtime location to use the optional Ubuntu environment
-- A modern browser for the Wasm target
 
 Use the checked-in Gradle wrapper from the repository root. On Windows, replace `./gradlew` with `gradlew.bat`.
 
@@ -197,12 +196,6 @@ The successful broadcast result lists only changed field names and never echoes 
 
 The receiver requires Android's system-protected `DUMP` permission, so normal third-party apps cannot invoke it; the ADB shell on an authorized connection can. Values are validated as one update and then stored through the same Keystore-protected encrypted MMKV used by the UI. Command arguments can still be observed transiently by the host or device, so use only a trusted computer and debugging connection. Environment variables prevent the literal keys from being saved in shell history.
 
-### Web
-
-```bash
-./gradlew :shared:wasmJsBrowserDevelopmentRun
-```
-
 ## First run
 
 1. Open **Settings → Model provider** and select a service.
@@ -215,11 +208,10 @@ Credential storage is platform-specific:
 
 - Android encrypts settings with MMKV and protects its key with Android Keystore.
 - Desktop stores settings in the application data directory; native desktop keychain integration is planned.
-- Web uses browser storage. Use a trusted origin and prefer a server-side model gateway for production.
 
 ## Security model
 
-- Desktop and Web expose a virtual `/workspace` rooted in application-owned storage. Path traversal and symbolic-link escape are rejected. Skill and Artifact resources are also constrained to their packages or managed workspace trees.
+- Desktop exposes a virtual `/workspace` rooted in application-owned storage. Path traversal and symbolic-link escape are rejected. Skill and Artifact resources are also constrained to their packages or managed workspace trees.
 - Android file and media tools may accept real absolute paths in addition to the private workspace, but remain subject to Android/Linux filesystem permissions and the selected execution identity.
 - The global tool permission gate controls whether kcode denies, confirms, or immediately runs a tool. `Bypass` skips only kcode's prompt; it never bypasses operating-system, browser, WebView, Keystore, Shizuku, or root-manager controls.
 - Android shell execution has explicit app UID, Shizuku/ADB-shell, and root modes. An unavailable privilege source fails instead of silently falling back to another identity.
@@ -239,8 +231,6 @@ Please report security-sensitive issues privately to the maintainers instead of 
 apps/
   androidApp/          Android application host
   desktopApp/          Desktop Compose host and distribution
-  web/
-    sqliteWasmWorker/  SQLite Wasm worker and OPFS bridge
 plugins/
   api/                 Stable Cordis service definitions and extension events
   runtime/             Plugin-tree composition and lifecycle ownership
@@ -258,7 +248,7 @@ extensions/
 docs/                  Design and engineering documentation
 ```
 
-Android and desktop use the same Room schema with bundled SQLite. Web preserves that schema through a worker-backed SQLite database in OPFS.
+Android and desktop use the same Room schema with bundled SQLite.
 
 ## Build and test
 
@@ -274,12 +264,9 @@ Android and desktop use the same Room schema with bundled SQLite. Web preserves 
 
 # Desktop application
 ./gradlew :apps:desktopApp:run
-
-# Production Web bundle
-./gradlew :shared:wasmJsBrowserProductionWebpack
 ```
 
-Desktop installers are available through `packageMsi`, `packageDmg`, and `packageDeb` tasks under `:shared`. Tagged commits automatically package Android, desktop, and Web release assets.
+Desktop installers are available through `packageMsi`, `packageDmg`, and `packageDeb` tasks under `:apps:desktopApp`. Tagged commits automatically package Android and desktop release assets.
 
 ## Acknowledgements
 
@@ -290,7 +277,7 @@ kcode is possible because of the work shared by the open-source community. Our s
 | [Kotlin](https://github.com/JetBrains/kotlin), [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines), and [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Provide the multiplatform language, structured concurrency, and serialization foundation. |
 | [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform), [Material 3 / AndroidX](https://github.com/androidx/androidx), and [Haze](https://github.com/chrisbanes/haze) | Power the shared adaptive interface, design primitives, and visual effects. |
 | [Koog](https://github.com/JetBrains/koog) and [Ktor](https://github.com/ktorio/ktor) | Form the agent, tool, model-provider, streaming, and networking foundation. |
-| [Room](https://github.com/androidx/androidx/tree/androidx-main/room), [SQLite](https://www.sqlite.org/), and [SQLite Wasm](https://github.com/sqlite/sqlite-wasm) | Back local conversation persistence across native and Web targets. The Web worker protocol was informed by the Apache-2.0 AndroidX Room Web demo. |
+| [Room](https://github.com/androidx/androidx/tree/androidx-main/room) and [SQLite](https://www.sqlite.org/) | Back local conversation persistence on Android and desktop. |
 | [MMKV](https://github.com/Tencent/MMKV) and [Shizuku](https://github.com/RikkaApps/Shizuku) | Support mobile settings storage and explicit ADB-shell execution on Android. |
 | [Operit](https://github.com/AAswordman/Operit), [OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore), [PRoot](https://github.com/proot-me/proot), [PRoot-Distro](https://github.com/termux/proot-distro), and [Ubuntu](https://ubuntu.com/) | Operit's runtime design and TerminalCore artifact chain informed the Android Ubuntu implementation. The packaged PRoot binaries, loader, and Ubuntu rootfs provenance are documented precisely in the [runtime guide](docs/android-ubuntu-runtime.md) and [NOTICE](NOTICE). |
 

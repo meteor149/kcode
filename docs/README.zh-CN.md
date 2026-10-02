@@ -21,7 +21,7 @@
 
 ## 我们想做什么？
 
-kcode 是一款面向 Android、桌面与 Web 的开源原生 AI Agent。我们相信，Agent 应该是一款经过认真设计的应用：它不应只是塞进聊天框的终端，也不应是为每个平台重复包装的一层网页。
+kcode 是一款面向 Android 和桌面的开源原生 AI Agent。我们相信，Agent 应该是一款经过认真设计的应用：它不应只是塞进聊天框的终端，也不应是为每个平台重复包装的一层网页。
 
 项目将一套自适应 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) 界面与基于 [Koog](https://docs.koog.ai/) 的 Agent 运行时结合起来，并在此基础上提供本地优先存储、真实工具、可复用 Skill、持久化 Goal、定时自动化、多 Agent 编排和可运行的 Web Artifact。一次对话可以自然地从普通问答进入工具执行，再延伸为持续推进的长期目标、周期任务，或沉淀为可以直接打开使用的小应用。
 
@@ -45,7 +45,7 @@ kcode 是一款面向 Android、桌面与 Web 的开源原生 AI Agent。我们�
 
 ### 安排单次与周期任务
 
-当用户明确提出要求时，Agent 可以为当前会话创建、查看、暂停、恢复和取消定时 Prompt。任务既可以在延迟一段时间后或指定时间运行一次，也可以按不短于一分钟的间隔重复运行。每次执行都会创建独立会话，在浮层卡片中显示由 Agent 选定的结果，并允许加入普通历史记录或直接丢弃。Android、桌面与 Web 共用同一套持久化任务模型；如果平台支持且用户已授权，任务在后台完成时会发送对应平台的通知。
+当用户明确提出要求时，Agent 可以为当前会话创建、查看、暂停、恢复和取消定时 Prompt。任务既可以在延迟一段时间后或指定时间运行一次，也可以按不短于一分钟的间隔重复运行。每次执行都会创建独立会话，在浮层卡片中显示由 Agent 选定的结果，并允许加入普通历史记录或直接丢弃。Android 和桌面 共用同一套持久化任务模型；如果平台支持且用户已授权，任务在后台完成时会发送对应平台的通知。
 
 当前调度器依赖 kcode 应用进程，并非操作系统级闹钟服务。应用重新启动后会恢复已持久化的逾期任务；周期任务会跳过已经错过的时间槽，不会同时启动一批补偿执行。
 
@@ -80,36 +80,35 @@ kcode 当前已集成：
 
 ## 平台支持
 
-| 能力 | Android | 桌面 | Web |
-| --- | :---: | :---: | :---: |
-| 自适应原生 Compose UI | ✅ | ✅ | ✅ |
-| 模型对话与本地历史记录 | ✅ | ✅ | ✅ |
-| 流式 Koog Agent 运行时 | ✅ | ✅ | ✅ |
-| 持久化 Goal | ✅ | ✅ | ✅ |
-| 单次与周期定时任务 | ✅ | ✅ | ✅ |
-| 多 Agent 编排与 Skill | ✅ | ✅ | ✅ |
-| Agent 文件工作区与联网搜索 | ✅ | ✅ | ✅ |
-| Web Artifact 与容器 | ✅ | ✅ | ✅ |
-| 会话长图导出 | ✅ | ✅ | — |
-| 移动端原生 Web 能力桥 | ✅ | — | 浏览器 API |
-| 原生系统 Shell 工具 | 应用 UID / Shizuku / root | `/workspace` | — |
-| Ubuntu 24.04 PRoot 工具 | 应用 UID / Shizuku / root（ARM64） | — | — |
-| 实时会话系统浮窗 | ✅ | — | — |
-| Amazon Bedrock 客户端 | — | ✅ | — |
-| 动态 Cordis Agent 插件 | ✅ APK/dex | ✅ JAR | — |
+| 能力 | Android | 桌面 |
+| --- | :---: | :---: |
+| 自适应原生 Compose UI | ✅ | ✅ |
+| 模型对话与本地历史记录 | ✅ | ✅ |
+| 流式 Koog Agent 运行时 | ✅ | ✅ |
+| 持久化 Goal | ✅ | ✅ |
+| 单次与周期定时任务 | ✅ | ✅ |
+| 多 Agent 编排与 Skill | ✅ | ✅ |
+| Agent 文件工作区与联网搜索 | ✅ | ✅ |
+| Web Artifact 与容器 | ✅ | ✅ |
+| 会话长图导出 | ✅ | ✅ |
+| 移动端原生 Web 能力桥 | ✅ | — |
+| 原生系统 Shell 工具 | 应用 UID / Shizuku / root | `/workspace` |
+| Ubuntu 24.04 PRoot 工具 | 应用 UID / Shizuku / root（ARM64） | — |
+| 实时会话系统浮窗 | ✅ | — |
+| Amazon Bedrock 客户端 | — | ✅ |
+| 动态 Cordis Agent 插件 | ✅ APK/dex | ✅ JAR |
 
-各平台上的实际能力还取决于所选模型、设备或浏览器能力以及用户授予的权限；浏览器直连模型服务也会受到 CORS 策略限制。
+各平台上的实际能力还取决于所选模型、设备能力以及用户授予的权限。
 
 ## 获取 kcode
 
-带 Tag 的版本会自动将签名 Android APK、Windows MSI、macOS DMG、Linux DEB 与 Web 分发包发布到 [GitHub Releases](https://github.com/meteor149/kcode/releases)。
+带 Tag 的版本会自动将签名 Android APK、Windows MSI、macOS DMG 与 Linux DEB 发布到 [GitHub Releases](https://github.com/meteor149/kcode/releases)。
 
 ### 环境要求
 
 - JDK 21；JVM 字节码目标为 Java 17
 - Android 端需要 Android Studio 与 Android SDK 35（最低 Android API 35）
 - 使用可选 Ubuntu 环境时，需要 ARM64 Android 设备，并在所选运行时位置保留至少 384 MiB 可用空间
-- Web 端需要现代浏览器
 
 请从项目根目录使用仓库自带的 Gradle Wrapper。Windows 用户请将 `./gradlew` 替换为 `gradlew.bat`。
 
@@ -176,12 +175,6 @@ Remove-Item Env:KCODE_MODEL_API_KEY, Env:KCODE_SEARCH_API_KEY
 
 该 Receiver 要求调用方持有 Android 系统保护的 `DUMP` 权限，普通第三方应用无法调用，已授权连接中的 ADB shell 可以调用。全部字段会作为一个整体完成校验，再通过与设置页相同的 Keystore 加密 MMKV 保存。命令参数在执行期间仍可能被电脑或设备短暂观察到，因此只能使用可信电脑和调试连接；环境变量可避免 Key 明文进入 Shell 历史。
 
-### Web
-
-```bash
-./gradlew :shared:wasmJsBrowserDevelopmentRun
-```
-
 ## 首次使用
 
 1. 打开**设置 → 大模型供应商**并选择服务。
@@ -194,11 +187,10 @@ Remove-Item Env:KCODE_MODEL_API_KEY, Env:KCODE_SEARCH_API_KEY
 
 - Android 使用加密 MMKV，并通过 Android Keystore 保护其密钥。
 - 桌面端将设置保存在应用数据目录；原生桌面密钥链支持仍在规划中。
-- Web 使用浏览器存储。请仅在可信站点使用，生产环境推荐通过服务端模型网关访问。
 
 ## 安全模型
 
-- 桌面与 Web 提供位于应用私有存储中的虚拟 `/workspace`，拒绝路径穿越和符号链接逃逸。Skill 与 Artifact 资源同样受 Skill 包或托管工作区边界约束。
+- 桌面提供位于应用私有存储中的虚拟 `/workspace`，拒绝路径穿越和符号链接逃逸。Skill 与 Artifact 资源同样受 Skill 包或托管工作区边界约束。
 - Android 文件与媒体工具除了私有工作区外，还可以接受真实绝对路径，但仍受到 Android/Linux 文件权限与所选执行身份的限制。
 - 全局工具权限门决定 kcode 是拒绝、询问还是直接执行工具。`Bypass` 只会跳过 kcode 自身的确认，不会绕过操作系统、浏览器、WebView、Keystore、Shizuku 或 root 管理器的权限控制。
 - Android Shell 明确区分应用 UID、Shizuku/ADB shell 与 root 模式；权限来源不可用时会直接失败，不会静默切换到另一身份。
@@ -218,8 +210,6 @@ Remove-Item Env:KCODE_MODEL_API_KEY, Env:KCODE_SEARCH_API_KEY
 apps/
   androidApp/          Android 应用 Host
   desktopApp/          桌面 Compose Host 与分发配置
-  web/
-    sqliteWasmWorker/  SQLite Wasm Worker 与 OPFS 桥接
 plugins/
   api/                 稳定的 Cordis 服务定义与扩展事件
   runtime/             插件树组合与生命周期所有权
@@ -237,7 +227,7 @@ extensions/
 docs/                  设计与工程文档
 ```
 
-Android 与桌面端使用相同的 Room Schema 和 Bundled SQLite；Web 通过 Worker 将同一 Schema 的 SQLite 数据库保存到 OPFS。
+Android 与桌面端使用相同的 Room Schema 和 Bundled SQLite。
 
 ## 构建与测试
 
@@ -250,12 +240,9 @@ Android 与桌面端使用相同的 Room Schema 和 Bundled SQLite；Web 通过 
 
 # Android Debug APK
 ./gradlew :apps:androidApp:assembleDebug
-
-# Web 生产包
-./gradlew :shared:wasmJsBrowserProductionWebpack
 ```
 
-桌面安装包可通过 `:shared` 下的 `packageMsi`、`packageDmg` 与 `packageDeb` 任务构建。带 Tag 的提交会自动打包 Android、桌面和 Web 发布产物。
+桌面安装包可通过 `:apps:desktopApp` 下的 `packageMsi`、`packageDmg` 与 `packageDeb` 任务构建。带 Tag 的提交会自动打包 Android 和桌面 发布产物。
 
 ## 致谢
 
@@ -266,7 +253,7 @@ kcode 的实现离不开开源社区长期共享的成果。谨向以下项目�
 | [Kotlin](https://github.com/JetBrains/kotlin)、[kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) 与 [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | 提供跨平台语言、结构化并发与序列化基础。 |
 | [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform)、[Material 3 / AndroidX](https://github.com/androidx/androidx) 与 [Haze](https://github.com/chrisbanes/haze) | 支撑共享的自适应界面、设计基础与视觉效果。 |
 | [Koog](https://github.com/JetBrains/koog) 与 [Ktor](https://github.com/ktorio/ktor) | 构成 Agent、工具、模型供应商、流式响应与网络访问的核心基础。 |
-| [Room](https://github.com/androidx/androidx/tree/androidx-main/room)、[SQLite](https://www.sqlite.org/) 与 [SQLite Wasm](https://github.com/sqlite/sqlite-wasm) | 支撑原生端与 Web 端的本地会话持久化；Web Worker 协议参考了采用 Apache-2.0 协议的 AndroidX Room Web Demo。 |
+| [Room](https://github.com/androidx/androidx/tree/androidx-main/room) 与 [SQLite](https://www.sqlite.org/) | 支撑 Android 与桌面端的本地会话持久化。 |
 | [MMKV](https://github.com/Tencent/MMKV) 与 [Shizuku](https://github.com/RikkaApps/Shizuku) | 分别支持移动端设置存储，以及 Android 上边界明确的 ADB shell 执行。 |
 | [Operit](https://github.com/AAswordman/Operit)、[OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore)、[PRoot](https://github.com/proot-me/proot)、[PRoot-Distro](https://github.com/termux/proot-distro) 与 [Ubuntu](https://ubuntu.com/) | Operit 的运行时设计与 TerminalCore 的产物链路为 Android Ubuntu 实现提供了参考；随包 PRoot 二进制、Loader 和 Ubuntu 根文件系统的准确来源见[运行时说明](android-ubuntu-runtime.md)与 [NOTICE](../NOTICE)。 |
 

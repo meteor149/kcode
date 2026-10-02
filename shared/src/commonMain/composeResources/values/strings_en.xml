@@ -41,7 +41,6 @@
     <string name="tool_permission_bypass_desc_en">Run tool calls without confirmation</string>
     <string name="protection_android_en">Settings use encrypted MMKV storage; its key is protected by Android Keystore.</string>
     <string name="protection_desktop_en">Settings are stored in your app data folder; desktop keychain support is planned.</string>
-    <string name="protection_web_en">Settings use browser storage. Prefer a server-side model gateway.</string>
     <string name="protection_transient_en">This platform currently uses temporary settings.</string>
     <string name="provider_en">Provider</string>
     <string name="api_key_en">API Key</string>
@@ -91,8 +90,6 @@
     <string name="send_shortcut_en">Ctrl ↵ to send</string>
     <string name="send_message_en">Send message</string>
     <string name="stop_generation_en">Stop generating</string>
-    <string name="browser_gateway_status_en">The browser app needs a secure model gateway.</string>
-    <string name="browser_gateway_error_en">Configure a server-side model gateway to keep provider keys out of the browser.</string>
     <string name="provider_openai_en">OpenAI</string>
     <string name="provider_azure_openai_en">Azure OpenAI</string>
     <string name="provider_anthropic_en">Anthropic</string>
@@ -176,7 +173,7 @@
     <string name="not_configured_en">Not configured</string>
     <string name="exa_search_desc_en">Neural and keyword web search with concise highlighted evidence through the Exa Search API.</string>
     <string name="google_search_desc_en">No-key Google page search with automatic Google News RSS fallback when static web results are unavailable.</string>
-    <string name="google_no_key_notice_en">No API key is needed. Google may require consent or CAPTCHA; fallback results can be news-only, and browser builds may be blocked by CORS.</string>
+    <string name="google_no_key_notice_en">No API key is needed. Google may require consent or CAPTCHA; fallback results can be news-only.</string>
     <string name="api_key_required_en">API Key required</string>
     <string name="no_api_key_required_en">No API Key</string>
     <string name="web_background_containers_en">Background Web containers</string>

@@ -45,7 +45,6 @@ sealed interface SubAgentEvent {
 }
 
 interface ChatService {
-    val availability: ChatAvailability?
     suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String
 
     /**
@@ -64,7 +63,3 @@ interface ChatService {
         onDelta: suspend (String) -> Unit,
     ): String = reply(configuration, history, prompt).also { onDelta(it) }
 }
-
-enum class ChatAvailability { BrowserGateway }
-
-class ChatServiceUnavailable(val availability: ChatAvailability) : Exception()

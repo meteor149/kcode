@@ -21,7 +21,6 @@ import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.LocalAppLanguage
 import ai.meteor.kcode.localization.UiText
-import ai.meteor.kcode.localization.availabilityError
 import ai.meteor.kcode.localization.text
 import ai.meteor.kcode.localization.resolveText
 import androidx.compose.foundation.background
@@ -136,7 +135,6 @@ internal fun KcodeMain(
         val scheduledTaskFailureMessages = ChatFailureMessages(
             setupModel = text(UiText.SetupModelFirst),
             connectionFailed = text(UiText.ModelConnectionFailed),
-            unavailable = chatService.availability?.let { availabilityError(it) },
         )
         val scheduledTaskNotificationTitle = text(UiText.ScheduledTaskTriggered)
         LaunchedEffect(scheduledTaskCoordinator, configuration, appLanguage, conversationSession.isLoaded) {

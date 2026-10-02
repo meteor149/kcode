@@ -4,7 +4,6 @@ plugins {
     id("com.android.library")
 }
 
-@OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
     androidTarget {
         compilerOptions {
@@ -15,9 +14,6 @@ kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
-    }
-    wasmJs {
-        browser()
     }
     sourceSets {
         commonMain.dependencies {

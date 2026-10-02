@@ -10,7 +10,6 @@ import ai.meteor.kcode.chat.GoalSession
 import ai.meteor.kcode.chat.GoalCommand
 import ai.meteor.kcode.chat.goalContinuationPrompt
 import ai.meteor.kcode.chat.parseGoalCommand
-import ai.meteor.kcode.chat.ChatServiceUnavailable
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.SubAgentStatus
 import ai.meteor.kcode.chat.ScheduledTaskSession
@@ -38,7 +37,6 @@ import kotlinx.coroutines.withContext
 internal data class ChatFailureMessages(
     val setupModel: String,
     val connectionFailed: String,
-    val unavailable: String?,
 )
 
 internal data class GoalCommandMessages(
@@ -591,11 +589,7 @@ private fun launchStreamingResponse(
             val errorMessage = ChatMessage(
                 id = nextMessageId(target),
                 role = MessageRole.Assistant,
-                content = if (error is ChatServiceUnavailable) {
-                    failureMessages.unavailable ?: failureMessages.connectionFailed
-                } else {
-                    safeDetail ?: failureMessages.connectionFailed
-                },
+                content = safeDetail ?: failureMessages.connectionFailed,
                 isError = true,
             )
             target.messages += errorMessage

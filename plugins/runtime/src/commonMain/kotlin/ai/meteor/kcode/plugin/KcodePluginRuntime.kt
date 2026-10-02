@@ -5,7 +5,6 @@ import ai.meteor.kcode.ApplicationContent
 import ai.meteor.kcode.ApplicationHostOptions
 import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.artifact.EmptyArtifactRepository
-import ai.meteor.kcode.chat.ChatAvailability
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.GoalSession
 import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
@@ -120,8 +119,6 @@ class KcodePluginRuntime private constructor(
 
     /** Stable host facade: resolve the active agents provider at every new turn. */
     val chatService: ChatService = object : ChatService {
-        override val availability: ChatAvailability? get() = context[KcodeAgents.Key]?.chatService?.availability
-
         override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String =
             useAgent { it.reply(configuration, history, prompt) }
 

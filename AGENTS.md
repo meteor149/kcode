@@ -2,13 +2,12 @@
 
 ## Project Structure
 
-This Kotlin Multiplatform project uses Compose and Koog. `shared/src/commonMain` contains cross-platform UI, domain code, and persistence contracts; shared agent code lives in `agentMain`. Keep platform implementations in the narrowest source set. Application hosts are under `apps`, the browser SQLite worker is at `apps/web/sqliteWasmWorker`, and the Web runtime is under `extensions/webContainer`.
+This Kotlin Multiplatform project uses Compose, Koog, and Cordis for Android and desktop. `shared/src/commonMain` contains cross-platform UI, domain code, and persistence contracts; shared agent code lives in `agentMain`. Keep platform implementations in the narrowest source set. Application hosts are under `apps`; the embedded Web container for native hosts is under `extensions/webContainer`.
 
 ## Build and Test Commands
 
 - `./gradlew :apps:desktopApp:run` — run the desktop app.
 - `./gradlew :apps:androidApp:installDebug` — install Android debug output.
-- `./gradlew :shared:wasmJsBrowserDevelopmentRun` — run the browser build.
 - `./gradlew :shared:allTests` — test the shared module.
 - `./gradlew allTests` — run all available multiplatform tests.
 
@@ -28,7 +27,7 @@ Use four-space indentation, multiline trailing commas, explicit imports, `Pascal
 
 Access persistence through common contracts and repositories, never from UI. Use `AppSettingsStore` for settings. Android uses MMKV with stable keys and defaults; reserve it for small scalar preferences, and update `StoredAppSettings` and its MMKV keys together.
 
-Use Room 3/SQLite for structured, queryable data such as conversations. Keep DAO calls suspending, wrap multi-table mutations in transactions, export schemas, and provide an explicit migration when the schema version changes. Platform database builders belong in platform source sets; Wasm SQLite work stays in `apps/web/sqliteWasmWorker`.
+Use Room 3/SQLite for structured, queryable data such as conversations. Keep DAO calls suspending, wrap multi-table mutations in transactions, export schemas, and provide an explicit migration when the schema version changes. Platform database builders belong in platform source sets.
 
 ## Tests and Contributions
 

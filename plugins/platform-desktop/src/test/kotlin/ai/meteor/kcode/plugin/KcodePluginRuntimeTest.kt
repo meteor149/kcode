@@ -310,7 +310,6 @@ class DynamicFixtureAgentPlugin : Plugin<String> {
     }
     override suspend fun apply(ctx: Context, config: String, effect: EffectScope) {
         KcodeAgents(ctx, object : ChatService {
-            override val availability = null
             override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = config
         })
     }

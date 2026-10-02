@@ -32,7 +32,6 @@ rootProject.name = "kcode"
 include(":shared")
 include(":apps:androidApp")
 include(":apps:desktopApp")
-include(":apps:web:sqliteWasmWorker")
 include(":extensions:webContainer")
 include(":plugins:api")
 include(":plugins:application")

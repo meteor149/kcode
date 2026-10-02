@@ -42,7 +42,6 @@ enum class ToolPermissionMode(val code: String) {
 enum class SettingsProtection {
     AndroidKeystore,
     DesktopAppData,
-    BrowserLocalStorage,
     Transient,
 }
 

@@ -5,7 +5,6 @@ import androidx.compose.runtime.compositionLocalOf
 import ai.meteor.kcode.model.ModelOption
 import ai.meteor.kcode.model.ModelProvider
 import ai.meteor.kcode.settings.SettingsProtection
-import ai.meteor.kcode.chat.ChatAvailability
 import kcode.shared.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -194,8 +193,6 @@ object UiText {
     val SendShortcut = LocalizedText(Res.string.send_shortcut_en, Res.string.send_shortcut_zh)
     val SendMessage = LocalizedText(Res.string.send_message_en, Res.string.send_message_zh)
     val StopGeneration = LocalizedText(Res.string.stop_generation_en, Res.string.stop_generation_zh)
-    val BrowserGatewayStatus = LocalizedText(Res.string.browser_gateway_status_en, Res.string.browser_gateway_status_zh)
-    val BrowserGatewayError = LocalizedText(Res.string.browser_gateway_error_en, Res.string.browser_gateway_error_zh)
     val WebBackgroundContainers = LocalizedText(Res.string.web_background_containers_en, Res.string.web_background_containers_zh)
     val WebBackgroundCount = LocalizedText(Res.string.web_background_count_en, Res.string.web_background_count_zh)
     val WebExpandBackground = LocalizedText(Res.string.web_expand_background_en, Res.string.web_expand_background_zh)
@@ -223,20 +220,6 @@ object UiText {
         Res.string.scheduled_task_process_available_zh,
     )
 }
-
-@Composable
-fun availabilityStatus(value: ChatAvailability): String = text(
-    when (value) {
-        ChatAvailability.BrowserGateway -> UiText.BrowserGatewayStatus
-    },
-)
-
-@Composable
-fun availabilityError(value: ChatAvailability): String = text(
-    when (value) {
-        ChatAvailability.BrowserGateway -> UiText.BrowserGatewayError
-    },
-)
 
 @Composable
 fun providerName(provider: ModelProvider): String = text(
@@ -299,7 +282,6 @@ fun protectionDescription(protection: SettingsProtection): String = text(
     when (protection) {
         SettingsProtection.AndroidKeystore -> LocalizedText(Res.string.protection_android_en, Res.string.protection_android_zh)
         SettingsProtection.DesktopAppData -> LocalizedText(Res.string.protection_desktop_en, Res.string.protection_desktop_zh)
-        SettingsProtection.BrowserLocalStorage -> LocalizedText(Res.string.protection_web_en, Res.string.protection_web_zh)
         SettingsProtection.Transient -> LocalizedText(Res.string.protection_transient_en, Res.string.protection_transient_zh)
     },
 )

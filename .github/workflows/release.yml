@@ -149,52 +149,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  web:
-    name: Web ZIP
-    needs: metadata
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v6
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-      - name: Build web distribution
-        env:
-          RELEASE_VERSION: ${{ needs.metadata.outputs.package-version }}
-        run: >-
-          ./gradlew :shared:wasmJsBrowserDistribution
-          -PreleaseVersion="$RELEASE_VERSION"
-          --stacktrace
-      - name: Package web distribution
-        shell: bash
-        env:
-          SAFE_TAG: ${{ needs.metadata.outputs.safe-tag }}
-        run: |
-          distribution="shared/build/dist/wasmJs/productionExecutable"
-          test -f "$distribution/index.html"
-          mkdir -p release-assets
-          cd "$distribution"
-          zip -r "$GITHUB_WORKSPACE/release-assets/kcode-${SAFE_TAG}-web.zip" .
-      - name: Upload web package
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-web
-          path: release-assets/*.zip
-          if-no-files-found: error
-          retention-days: 14
-
   release:
     name: Publish GitHub Release
     needs:
       - metadata
       - android
       - desktop
-      - web
     runs-on: ubuntu-latest
     permissions:
       contents: write

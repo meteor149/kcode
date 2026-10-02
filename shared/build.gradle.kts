@@ -8,7 +8,6 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-@OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
     jvm("desktop") {
         compilerOptions {
@@ -19,15 +18,6 @@ kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
-    }
-    wasmJs {
-        useEsModules()
-        browser {
-            commonWebpackConfig {
-                outputFileName = "kcode.js"
-            }
-        }
-        binaries.executable()
     }
     sourceSets {
         val commonMain by getting {
@@ -120,22 +110,12 @@ kotlin {
                 implementation("org.tukaani:xz:1.10")
             }
         }
-        val wasmJsMain by getting {
-            dependsOn(agentMain)
-            dependsOn(roomMain)
-            dependencies {
-                implementation(project(":apps:web:sqliteWasmWorker"))
-                implementation("io.ktor:ktor-client-js:3.3.3")
-                implementation("org.jetbrains.kotlinx:kotlinx-browser:0.3")
-            }
-        }
     }
 }
 
 dependencies {
     add("kspAndroid", "androidx.room3:room3-compiler:3.0.1")
     add("kspDesktop", "androidx.room3:room3-compiler:3.0.1")
-    add("kspWasmJs", "androidx.room3:room3-compiler:3.0.1")
 }
 
 room3 {

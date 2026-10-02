@@ -216,7 +216,6 @@ private fun agentMount(answer: String, beforeReply: suspend () -> Unit = {}): Kc
         override val name = "fixture-agent-$answer"
         override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
             KcodeAgents(ctx, object : ChatService {
-                override val availability = null
                 override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String {
                     beforeReply()
                     return answer

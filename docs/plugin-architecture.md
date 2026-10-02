@@ -1,6 +1,6 @@
 # kcode Cordis 插件架构
 
-Desktop JVM 与 Android 的 agent runtime 通过 Maven 依赖使用 Cordis，不要求本地检出 cordis-kotlin。Web 继续使用原 Koog 组装路径，不伪装成支持动态插件。此边界与 cordis-kotlin 当前动态 JAR/APK loader 的平台能力一致。
+项目只提供 Desktop JVM 与 Android 应用，agent runtime 通过 Maven 依赖使用 Cordis，不要求本地检出 cordis-kotlin。浏览器应用目标已移除，使应用平台统一使用当前支持动态 JAR/APK 加载的 Cordis 组装路径。原生应用中的 Web 搜索、Web 容器和 Web Artifact 能力继续保留。
 
 ## 服务定义
 
