@@ -7,26 +7,25 @@ import ai.koog.agents.ext.tool.file.ReadFileTool
 import ai.koog.agents.ext.tool.file.WriteFileTool
 import ai.meteor.kcode.artifact.createDesktopArtifactRepository
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.history.TransientConversationHistoryRepository
+import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.DesktopDynamicPluginController
 import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
-import ai.meteor.kcode.plugin.KcodePluginRuntime
-import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
-import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.feature.artifactToolPlugin
 import ai.meteor.kcode.plugin.feature.desktopShellToolPlugin
 import ai.meteor.kcode.plugin.feature.filesystemToolPlugin
 import ai.meteor.kcode.plugin.feature.skillToolPlugin
 import ai.meteor.kcode.plugin.feature.webContainerToolPlugin
 import ai.meteor.kcode.plugin.feature.webSearchToolPlugin
+import ai.meteor.kcode.plugin.KcodePluginProfile
+import ai.meteor.kcode.plugin.KcodePluginRuntime
+import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
-import ai.meteor.kcode.skill.skillTools
 import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
-import ai.meteor.kcode.tools.search.WebSearchConfiguration
-import ai.meteor.kcode.tools.search.WebSearchProvider
-import ai.meteor.kcode.tools.search.WebSearchTool
 import ai.meteor.kcode.webcontainer.DesktopWebContainerLauncher
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,7 +38,11 @@ import kotlinx.coroutines.withContext
 fun createDesktopKoogChatService(settingsStore: AppSettingsStore): ChatService =
     createDesktopKoogChatRuntime(settingsStore).chatService
 
-fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRuntime {
+fun createDesktopKoogChatRuntime(
+    settingsStore: AppSettingsStore,
+    historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
+    profile: KcodePluginProfile = KcodePluginProfile(),
+): KcodeAgentRuntime {
     val workspace = Files.createDirectories(
         Path.of(System.getProperty("user.home"), ".kcode", "workspace"),
     ).toRealPath()
@@ -64,30 +67,10 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
         desktopShellToolPlugin(
             ToolRegistry { tool(AgentShellTool(DesktopShellCommandExecutor(workspace))) },
         ),
-        webContainerToolPlugin(
-            ToolRegistry { webContainerTools(webContainerController) },
-        ),
-        webSearchToolPlugin(
-            ToolRegistry {
-                tool(
-                    WebSearchTool(configurationProvider = {
-                        settingsStore.load().let {
-                            WebSearchConfiguration(
-                                provider = WebSearchProvider.fromCode(it.webSearchProvider),
-                                brightDataApiKey = it.webSearchApiKey,
-                                exaApiKey = it.exaSearchApiKey,
-                            )
-                        }
-                    }),
-                )
-            },
-        ),
-        skillToolPlugin(
-            ToolRegistry { skillTools(skillRuntime) },
-        ),
-        artifactToolPlugin(
-            ToolRegistry { artifactTools(artifactRepository) },
-        ),
+        webContainerToolPlugin(),
+        webSearchToolPlugin(),
+        skillToolPlugin(),
+        artifactToolPlugin(),
     )
     val pluginRuntime = runBlocking {
         KcodePluginRuntime.create(
@@ -99,6 +82,11 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
                     approver = ToolCallApprover { request -> confirmDesktopToolCall(request) },
                 ),
                 skillRuntime = skillRuntime,
+                profile = profile,
+                settingsStore = settingsStore,
+                historyRepository = historyRepository,
+                artifactRepository = artifactRepository,
+                webContainerController = webContainerController,
                 featurePlugins = featurePlugins,
                 dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
                     DesktopDynamicPluginController(context, loader, inventory, pluginDirectory)
@@ -110,8 +98,9 @@ fun createDesktopKoogChatRuntime(settingsStore: AppSettingsStore): KcodeAgentRun
         chatService = pluginRuntime.chatService,
         webContainerController = webContainerController,
         artifactRepository = artifactRepository,
-        pluginManager = pluginRuntime.dynamicPlugins,
+        pluginManager = pluginRuntime.pluginManager,
         owner = pluginRuntime,
+        applicationContent = pluginRuntime,
     )
 }
 

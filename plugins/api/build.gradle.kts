@@ -1,6 +1,8 @@
 plugins {
     kotlin("multiplatform")
     id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -17,6 +19,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+                api(compose.runtime)
                 api(project(":shared"))
                 api(libs.cordis.core)
                 api("ai.koog:agents-tools:1.1.1")

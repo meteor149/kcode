@@ -7,11 +7,11 @@ import ai.koog.agents.ext.tool.file.ReadFileTool
 import ai.koog.agents.ext.tool.file.WriteFileTool
 import ai.meteor.kcode.artifact.createAndroidArtifactRepository
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.history.ConversationHistoryRepository
+import ai.meteor.kcode.history.TransientConversationHistoryRepository
 import ai.meteor.kcode.plugin.AndroidDynamicPluginController
-import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
-import ai.meteor.kcode.plugin.KcodePluginRuntime
-import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.api.InteractionPolicy
+import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
 import ai.meteor.kcode.plugin.feature.androidShellToolPlugin
 import ai.meteor.kcode.plugin.feature.artifactToolPlugin
 import ai.meteor.kcode.plugin.feature.filesystemToolPlugin
@@ -19,13 +19,15 @@ import ai.meteor.kcode.plugin.feature.skillToolPlugin
 import ai.meteor.kcode.plugin.feature.ubuntuShellToolPlugin
 import ai.meteor.kcode.plugin.feature.webContainerToolPlugin
 import ai.meteor.kcode.plugin.feature.webSearchToolPlugin
+import ai.meteor.kcode.plugin.KcodePluginProfile
+import ai.meteor.kcode.plugin.KcodePluginRuntime
+import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
+import ai.meteor.kcode.settings.TransientAppSettingsStore
 import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
-import ai.meteor.kcode.skill.skillTools
 import ai.meteor.kcode.tools.permission.ToolCallApprover
-import ai.meteor.kcode.tools.search.WebSearchConfiguration
-import ai.meteor.kcode.tools.search.WebSearchTool
 import ai.meteor.kcode.webcontainer.AndroidWebContainerLauncher
 import android.app.Activity
 import java.nio.file.Files
@@ -36,22 +38,24 @@ fun createAndroidKoogChatService(
     activity: Activity,
     modeProvider: suspend () -> ShellExecutionMode,
     permissionModeProvider: suspend () -> ToolPermissionMode,
-    webSearchConfigurationProvider: suspend () -> WebSearchConfiguration,
     toolCallApprover: ToolCallApprover,
+    settingsStore: AppSettingsStore = TransientAppSettingsStore,
 ): ChatService = createAndroidKoogChatRuntime(
     activity,
     modeProvider,
     permissionModeProvider,
-    webSearchConfigurationProvider,
     toolCallApprover,
+    settingsStore,
 ).chatService
 
 fun createAndroidKoogChatRuntime(
     activity: Activity,
     modeProvider: suspend () -> ShellExecutionMode,
     permissionModeProvider: suspend () -> ToolPermissionMode,
-    webSearchConfigurationProvider: suspend () -> WebSearchConfiguration,
     toolCallApprover: ToolCallApprover,
+    settingsStore: AppSettingsStore = TransientAppSettingsStore,
+    historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
+    profile: KcodePluginProfile = KcodePluginProfile(),
 ): KcodeAgentRuntime {
     val workspaceRoot = Files.createDirectories(activity.filesDir.toPath().resolve("agent_workspace")).toRealPath()
     val fileSystem = AndroidAgentFileSystem(workspaceRoot)
@@ -78,12 +82,8 @@ fun createAndroidKoogChatRuntime(
                 tool(ReadMediaFileTool(fileSystem))
             },
         ),
-        webContainerToolPlugin(
-            ToolRegistry { webContainerTools(webContainerController) },
-        ),
-        webSearchToolPlugin(
-            ToolRegistry { tool(WebSearchTool(webSearchConfigurationProvider)) },
-        ),
+        webContainerToolPlugin(),
+        webSearchToolPlugin(),
         androidShellToolPlugin(
             ToolRegistry {
                 tool(AgentShellTool(executor = shellExecutor, description = AndroidShellToolDescription))
@@ -100,12 +100,8 @@ fun createAndroidKoogChatRuntime(
                 )
             },
         ),
-        skillToolPlugin(
-            ToolRegistry { skillTools(skillRuntime) },
-        ),
-        artifactToolPlugin(
-            ToolRegistry { artifactTools(artifactRepository) },
-        ),
+        skillToolPlugin(),
+        artifactToolPlugin(),
     )
     val pluginDirectory = Files.createDirectories(activity.filesDir.toPath().resolve("cordis_plugins")).toFile()
     val pluginRuntime = runBlocking {
@@ -113,6 +109,11 @@ fun createAndroidKoogChatRuntime(
             KcodePluginRuntimeConfig(
                 interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover),
                 skillRuntime = skillRuntime,
+                profile = profile,
+                settingsStore = settingsStore,
+                historyRepository = historyRepository,
+                artifactRepository = artifactRepository,
+                webContainerController = webContainerController,
                 conversationOverlayController = conversationOverlayController,
                 featurePlugins = featurePlugins,
                 dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
@@ -132,8 +133,9 @@ fun createAndroidKoogChatRuntime(
         webContainerController = webContainerController,
         artifactRepository = artifactRepository,
         conversationOverlayController = conversationOverlayController,
-        pluginManager = pluginRuntime.dynamicPlugins,
+        pluginManager = pluginRuntime.pluginManager,
         owner = pluginRuntime,
+        applicationContent = pluginRuntime,
     )
 }
 

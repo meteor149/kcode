@@ -5,6 +5,9 @@ interface AgentPluginManager {
     suspend fun replace(spec: DynamicPluginSpec)
     suspend fun uninstall(id: String)
     suspend fun installed(): List<DynamicPluginSpec>
+
+    /** Enables or disables a configured plugin, including built-in providers and consumers. */
+    suspend fun setEnabled(id: String, enabled: Boolean)
 }
 
 data class DynamicPluginSpec(

@@ -2,15 +2,19 @@ package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.plugin.api.KcodePluginInventory
 import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.plugin.api.PluginState
 import android.content.Context as AndroidContext
 import java.io.File
 import org.cordis.Context
-import org.cordis.loader.AndroidModuleDescriptor
-import org.cordis.loader.AndroidModuleLoader
-import org.cordis.loader.EntryOptions
-import org.cordis.loader.Loader
+import org.cordis.FiberState
 import org.cordis.hmr.Hmr
 import org.cordis.hmr.HmrConfig
+import org.cordis.loader.AndroidModuleDescriptor
+import org.cordis.loader.AndroidModuleLoader
+import org.cordis.loader.changeTo
+import org.cordis.loader.EntryOptions
+import org.cordis.loader.EntryPatch
+import org.cordis.loader.Loader
 
 internal class AndroidDynamicPluginController(
     context: Context,
@@ -20,11 +24,12 @@ internal class AndroidDynamicPluginController(
     trustedDirectory: File,
 ) : DynamicPluginController {
     private val modules = AndroidModuleLoader(androidContext, trustedRoot = trustedDirectory)
+    private val configuredModules = ConfiguredPluginModuleLoader(modules)
     private val hmr: Hmr
     private val specs = linkedMapOf<String, DynamicPluginSpec>()
 
     init {
-        loader.internal = modules
+        loader.internal = configuredModules
         hmr = Hmr(context, HmrConfig(base = trustedDirectory.path))
     }
 
@@ -43,8 +48,31 @@ internal class AndroidDynamicPluginController(
             ),
         )
         val url = modules.moduleUrl(spec.id)
+        configuredModules.configure(url, spec.config)
         hmr.stash(url)
-        check(hmr.partialReload()) { "plugin '${spec.id}' replacement failed; previous generation remains active" }
+        val entry = loader.resolve(entryId(spec.id))
+        val previousConfig = entry.options.config
+        entry.options.config = spec.config
+        try {
+            check(hmr.partialReload()) { "plugin '${spec.id}' replacement failed; previous generation remains active" }
+        } catch (error: Throwable) {
+            entry.options.config = previousConfig
+            configuredModules.configure(url, previousConfig)
+            val previous = specs.getValue(spec.id)
+            modules.register(
+                AndroidModuleDescriptor(
+                    id = previous.id,
+                    version = previous.version,
+                    entryClass = previous.entryClass,
+                    file = File(previous.artifactPath),
+                    expectedSha256 = previous.sha256,
+                    dependencies = previous.dependencies,
+                    sharedHostPackages = SharedPluginApiPackages,
+                    packageName = previous.packageName,
+                ),
+            )
+            throw error
+        }
         specs[spec.id] = spec
         inventory.replace(PluginDescriptor(spec.id, spec.version, spec.artifactPath, spec.capabilities))
     }
@@ -66,6 +94,7 @@ internal class AndroidDynamicPluginController(
         )
         modules.register(descriptor)
         val url = modules.moduleUrl(spec.id)
+        configuredModules.configure(url, spec.config)
         try {
             modules.import(url, null)
             loader.create(EntryOptions(id = entryId(spec.id), name = url, config = spec.config))
@@ -80,6 +109,7 @@ internal class AndroidDynamicPluginController(
             }
             runCatching { modules.release(spec.id) }
             runCatching { modules.unregister(spec.id) }
+            configuredModules.forget(url)
             throw error
         }
     }
@@ -89,11 +119,37 @@ internal class AndroidDynamicPluginController(
         loader.remove(entryId(id))
         modules.release(id)
         modules.unregister(id)
+        configuredModules.forget(modules.moduleUrl(id))
         specs.remove(id)
         inventory.remove(id)
     }
 
     override suspend fun installed(): List<DynamicPluginSpec> = specs.values.toList()
+
+    override suspend fun settle() {
+        specs.values.forEach { spec ->
+            val entry = loader.resolve(entryId(spec.id))
+            entry.fiber?.await()
+            val state = when {
+                entry.disabled -> PluginState.Disabled
+                entry.fiber?.state == FiberState.ACTIVE -> PluginState.Active
+                entry.fiber?.state == FiberState.FAILED -> PluginState.Failed
+                else -> PluginState.Pending
+            }
+            inventory.replace(PluginDescriptor(spec.id, spec.version, spec.artifactPath, spec.capabilities, state = state))
+        }
+    }
+
+    override suspend fun setEnabled(id: String, enabled: Boolean) {
+        val spec = specs[id] ?: error("plugin '$id' is not installed")
+        loader.resolve(entryId(id)).update(EntryPatch(disabled = changeTo(!enabled)))
+        inventory.replace(
+            PluginDescriptor(
+                id, spec.version, spec.artifactPath, spec.capabilities,
+                state = if (enabled) PluginState.Active else PluginState.Disabled,
+            ),
+        )
+    }
 
     override suspend fun close() {
         var failure: Throwable? = null
@@ -114,11 +170,3 @@ internal class AndroidDynamicPluginController(
 }
 
 private fun entryId(id: String): String = "external-$id"
-
-private val SharedPluginApiPackages = setOf(
-    "ai.meteor.kcode.plugin.api",
-    "ai.meteor.kcode.model",
-    "ai.meteor.kcode.settings",
-    "ai.meteor.kcode.tools.permission",
-    "ai.koog",
-)

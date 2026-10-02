@@ -9,6 +9,7 @@ android {
 
     defaultConfig {
         minSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -36,4 +37,8 @@ dependencies {
     implementation(project(":plugins:artifact-tools"))
     implementation(libs.cordis.hmr)
     implementation("ai.koog:agents-ext:1.1.1-beta")
+    androidTestImplementation(kotlin("test"))
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

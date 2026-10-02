@@ -1,6 +1,8 @@
 plugins {
     kotlin("multiplatform")
     id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -17,6 +19,8 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+                implementation(compose.runtime)
+                implementation(project(":plugins:application"))
                 api(project(":plugins:api"))
                 implementation(project(":plugins:inventory"))
                 implementation(project(":plugins:tools"))

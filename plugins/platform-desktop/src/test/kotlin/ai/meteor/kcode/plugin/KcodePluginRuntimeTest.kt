@@ -1,9 +1,15 @@
 package ai.meteor.kcode.plugin
 
 import ai.koog.agents.core.tools.ToolRegistry
+import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.model.ChatMessage
+import ai.meteor.kcode.model.ModelConfiguration
+import ai.meteor.kcode.model.ModelProvider
 import ai.meteor.kcode.plugin.api.InteractionPolicy
+import ai.meteor.kcode.plugin.api.KcodeAgents
 import ai.meteor.kcode.plugin.api.KcodeTools
 import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.nio.file.Files
@@ -13,19 +19,91 @@ import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.Test
 import kotlinx.coroutines.test.runTest
+import org.cordis.ConfigValidator
 import org.cordis.Context
-import org.cordis.EffectScope
-import org.cordis.Plugin
 import org.cordis.Dependencies
 import org.cordis.dependencies
+import org.cordis.EffectScope
+import org.cordis.Plugin
 
 class KcodePluginRuntimeTest {
+    @Test
+    fun externalArtifactCanReplaceBuiltInAndOriginalCanBeRestored() = runTest {
+        val directory = createTempDirectory("kcode-builtin-hmr-test")
+        val first = fixtureJar(directory.resolve("first.jar"))
+        val failed = fixtureJar(directory.resolve("failed.jar"))
+        val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
+            interactionPolicy = testInteractionPolicy(),
+            dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
+                DesktopDynamicPluginController(context, loader, inventory, directory.toFile())
+            },
+        ))
+        val id = "consumer.tools.goal"
+        try {
+            assertFailsWith<IllegalStateException> {
+                runtime.pluginManager.replace(spec(failed, FailingDynamicFixturePlugin::class.qualifiedName!!, "failed").copy(id = id))
+            }
+            assertTrue("core/goal" in runtime.diagnostics().toolContributions)
+            runtime.pluginManager.replace(spec(first, DynamicFixturePluginV1::class.qualifiedName!!, "1").copy(id = id))
+            assertFalse("core/goal" in runtime.diagnostics().toolContributions)
+            assertTrue("external/fixture-v1" in runtime.diagnostics().toolContributions)
+            runtime.pluginManager.setEnabled(id, false)
+            assertFalse("external/fixture-v1" in runtime.diagnostics().toolContributions)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == id }.state)
+            runtime.pluginManager.setEnabled(id, true)
+            assertTrue("external/fixture-v1" in runtime.diagnostics().toolContributions)
+            runtime.pluginManager.setEnabled("core.tools", false)
+            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == id }.state)
+            runtime.pluginManager.setEnabled("core.tools", true)
+            assertTrue("external/fixture-v1" in runtime.diagnostics().toolContributions)
+            runtime.pluginManager.uninstall(id)
+            runtime.pluginManager.setEnabled(id, true)
+            assertTrue("core/goal" in runtime.diagnostics().toolContributions)
+        } finally {
+            runtime.close()
+            listOf(first, failed).forEach { it.toFile().setWritable(true); Files.deleteIfExists(it) }
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun externalAgentProviderUsesHostAbiAndReplacementConfiguration() = runTest {
+        val directory = createTempDirectory("kcode-agent-hmr-test")
+        val first = fixtureJar(directory.resolve("first.jar"))
+        val second = fixtureJar(directory.resolve("second.jar"))
+        val failed = fixtureJar(directory.resolve("failed.jar"))
+        val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
+            interactionPolicy = testInteractionPolicy(),
+            dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
+                DesktopDynamicPluginController(context, loader, inventory, directory.toFile())
+            },
+        ))
+        val id = "provider.agent-loop.koog"
+        val model = ModelConfiguration(ModelProvider.Ollama, "fixture", "")
+        fun generation(path: Path, answer: String) = spec(path, DynamicFixtureAgentPlugin::class.qualifiedName!!, answer).copy(id = id, config = answer)
+        try {
+            runtime.pluginManager.replace(generation(first, "first"))
+            assertEquals("first", runtime.chatService.reply(model, emptyList(), "hello"))
+            runtime.pluginManager.replace(generation(second, "second"))
+            assertEquals("second", runtime.chatService.reply(model, emptyList(), "hello"))
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.replace(generation(failed, "reject")) }
+            assertEquals("second", runtime.chatService.reply(model, emptyList(), "hello"))
+            assertFailsWith<IllegalStateException> {
+                runtime.pluginManager.replace(spec(failed, FailingDynamicFixturePlugin::class.qualifiedName!!, "failed").copy(id = id))
+            }
+            assertEquals("second", runtime.chatService.reply(model, emptyList(), "hello"))
+        } finally {
+            runtime.close()
+            listOf(first, second, failed).forEach { it.toFile().setWritable(true); Files.deleteIfExists(it) }
+            Files.deleteIfExists(directory)
+        }
+    }
     @Test
     fun assembledRuntimePublishesServiceProvidersAndFeatureConsumers() = runTest {
         val feature = kcodePlugin(
@@ -184,7 +262,7 @@ private fun fixtureJar(path: Path): Path {
         Files.list(classesRoot.resolve(packagePath)).use { files ->
             files.filter { file ->
                 val name = file.fileName.toString()
-                name.startsWith("DynamicFixturePlugin") || name.startsWith("FailingDynamicFixturePlugin")
+                name.startsWith("DynamicFixturePlugin") || name.startsWith("FailingDynamicFixturePlugin") || name.startsWith("DynamicFixtureAgentPlugin")
             }.forEach { file ->
                 val entryName = classesRoot.relativize(file).toString().replace('\\', '/')
                 jar.putNextEntry(JarEntry(entryName))
@@ -221,5 +299,19 @@ class FailingDynamicFixturePlugin : Plugin<Unit> {
     override val name = "dynamic-fixture-failing"
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         error("fixture replacement failure")
+    }
+}
+
+class DynamicFixtureAgentPlugin : Plugin<String> {
+    override val name = "dynamic-fixture-agent"
+    override val config = ConfigValidator<String> {
+        require(it != "reject") { "invalid fixture configuration" }
+        it
+    }
+    override suspend fun apply(ctx: Context, config: String, effect: EffectScope) {
+        KcodeAgents(ctx, object : ChatService {
+            override val availability = null
+            override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = config
+        })
     }
 }

@@ -1,18 +1,18 @@
 package ai.meteor.kcode.plugin.api
 
+import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.http.client.KoogHttpClient
+import ai.meteor.kcode.AgentContinuationContext
 import ai.meteor.kcode.AgentModelRuntime
 import ai.meteor.kcode.AgentToolContext
-import ai.meteor.kcode.AgentContinuationContext
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.settings.ToolPermissionMode
-import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.skill.SkillRuntime
 import ai.meteor.kcode.SubagentCoordinatorFactory
 import ai.meteor.kcode.ToolExecutionRequest
-import ai.koog.agents.core.environment.ReceivedToolResult
+import ai.meteor.kcode.tools.permission.ToolCallApprover
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.cordis.Context
@@ -224,7 +224,7 @@ object KcodeToolEvents {
     val PostExecute = EventKey<ToolExecutionFinished, ReceivedToolResult>("tools/post-execute")
 }
 
-enum class PluginState { Active, Failed }
+enum class PluginState { Active, Pending, Disabled, Failed }
 
 data class PluginDescriptor(
     val id: String,

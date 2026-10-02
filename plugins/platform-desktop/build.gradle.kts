@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -28,6 +29,7 @@ dependencies {
     implementation("ai.koog:agents-ext:1.1.1-beta")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
     testImplementation(kotlin("test"))
+    testImplementation(project(":plugins:application"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 

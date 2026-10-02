@@ -6,18 +6,18 @@ import ai.meteor.kcode.settings.createDesktopAppSettingsStore
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import kotlinx.coroutines.runBlocking
 
 fun main() {
     val settingsStore = createDesktopAppSettingsStore()
     val historyRepository = createDesktopConversationHistoryRepository()
-    val runtime = createDesktopKoogChatRuntime(settingsStore)
+    val runtime = createDesktopKoogChatRuntime(settingsStore, historyRepository)
     application {
         val appIcon = painterResource(
             if (System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)) {
@@ -40,15 +40,12 @@ fun main() {
             icon = appIcon,
         ) {
             val scheduledTaskPlatformHost = remember(window) { DesktopScheduledTaskPlatformHost(window) }
-            KcodeApp(
-                chatService = runtime.chatService,
-                webContainerController = runtime.webContainerController,
-                artifactRepository = runtime.artifactRepository,
-                settingsStore = settingsStore,
-                historyRepository = historyRepository,
-                imageSaver = DesktopConversationImageSaver(),
-                toolPermissionControlsAvailable = true,
-                scheduledTaskPlatformHost = scheduledTaskPlatformHost,
+            checkNotNull(runtime.applicationContent).Render(
+                ApplicationHostOptions(
+                    imageSaver = DesktopConversationImageSaver(),
+                    toolPermissionControlsAvailable = true,
+                    scheduledTaskPlatformHost = scheduledTaskPlatformHost,
+                ),
             )
         }
     }
