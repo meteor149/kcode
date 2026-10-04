@@ -1,75 +1,80 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.ApplicationHostOptions
-import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.KcodeApp
+import ai.meteor.kcode.plugin.application.ui.KcodeApp
+import ai.meteor.kcode.plugin.application.ui.defaultApplicationServices
 import ai.meteor.kcode.plugin.api.ApplicationRenderer
-import ai.meteor.kcode.plugin.api.ApplicationViewServices
+import ai.meteor.kcode.plugin.api.ApplicationFrame
+import ai.meteor.kcode.plugin.ui.api.DefaultUiRenderer
+import ai.meteor.kcode.plugin.ui.api.ApplicationViewServices
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
+import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
-import ai.meteor.kcode.plugin.api.KcodeWebContainers
-import ai.meteor.kcode.settings.AppSettingsStore
-import ai.meteor.kcode.webcontainer.WebContainerController
+import ai.meteor.kcode.plugin.api.KcodeLocalization
+import ai.meteor.kcode.plugin.api.KcodeModelSettings
+import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import ai.meteor.kcode.plugin.api.KcodeSessions
+import org.cordis.dependencies
+import ai.meteor.kcode.plugin.api.PluginOperationOwner
+import org.cordis.Disposable
 import org.cordis.Context
 import org.cordis.EffectScope
 import org.cordis.Plugin
+import org.cordis.ConfigValidator
 
-object SettingsProviderPlugin : Plugin<AppSettingsStore> {
-    override val name = "kcode-settings-platform"
-    override suspend fun apply(ctx: Context, config: AppSettingsStore, effect: EffectScope) {
-        KcodeSettings(ctx, config)
-    }
-}
-
-object HistoryProviderPlugin : Plugin<ConversationHistoryRepository> {
-    override val name = "kcode-history-platform"
-    override suspend fun apply(ctx: Context, config: ConversationHistoryRepository, effect: EffectScope) {
-        KcodeHistory(ctx, config)
-    }
-}
-
-object ArtifactsProviderPlugin : Plugin<ArtifactRepository> {
-    override val name = "kcode-artifacts-platform"
-    override suspend fun apply(ctx: Context, config: ArtifactRepository, effect: EffectScope) {
-        KcodeArtifacts(ctx, config)
-    }
-}
-
-object WebContainersProviderPlugin : Plugin<WebContainerController?> {
-    override val name = "kcode-web-containers-platform"
-    override suspend fun apply(ctx: Context, config: WebContainerController?, effect: EffectScope) {
-        KcodeWebContainers(ctx, config)
-    }
-}
 
 /** Default application UI is a provider; profiles may replace it with a different renderer. */
-object ApplicationUiPlugin : Plugin<ApplicationRenderer> {
+object ApplicationUiPlugin : Plugin<DefaultUiRenderer> {
     override val name = "kcode-application-ui"
-    override suspend fun apply(ctx: Context, config: ApplicationRenderer, effect: EffectScope) {
-        KcodeApplicationUi(ctx, config)
+    override suspend fun apply(ctx: Context, config: DefaultUiRenderer, effect: EffectScope) {
+        val owner = PluginOperationOwner("Application settings")
+        val available = MutableStateFlow(true)
+        effect.collect(Disposable { available.value = false; owner.close() })
+        KcodeApplicationUi(ctx, ApplicationRenderer { servicesLookup ->
+            if (!available.value) return@ApplicationRenderer null
+            val services = defaultApplicationServices(servicesLookup) ?: return@ApplicationRenderer null
+            ApplicationFrame { options ->
+                key(config, services.settingsStore, services.historyRepository, services.artifactRepository) {
+                    if (available.collectAsState().value) {
+                        if (config === DefaultApplicationRenderer) DefaultApplicationRenderer.Render(services, options, owner)
+                        else config.Render(services, options)
+                    }
+                }
+            }
+        })
     }
 }
 
-object DefaultApplicationRenderer : ApplicationRenderer {
+object DefaultApplicationUiPlugin : Plugin<Unit> {
+    override val config = ConfigValidator<Unit> { it }
+    override val name = "kcode-default-application-ui"
+    override val inject = dependencies(KcodeSettings.Key, KcodeHistory.Key, KcodeArtifacts.Key, KcodeSessions.Key, KcodeGeneration.Key, KcodeModelSettings.Key, KcodeLocalization.Key)
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        ApplicationUiPlugin.apply(ctx, DefaultApplicationRenderer, effect)
+    }
+}
+
+object DefaultApplicationRenderer : DefaultUiRenderer {
     @Composable
     override fun Render(services: ApplicationViewServices, options: ApplicationHostOptions) {
-        KcodeApp(
-            chatService = services.chatService,
-            generationRunner = options.generationRunner,
-            webContainerController = services.webContainerController,
-            artifactRepository = services.artifactRepository,
-            settingsStore = services.settingsStore,
-            historyRepository = services.historyRepository,
-            imageSaver = options.imageSaver,
-            shellSettingsAvailable = options.shellSettingsAvailable,
-            toolPermissionControlsAvailable = options.toolPermissionControlsAvailable,
-            scheduledTaskPlatformHost = options.scheduledTaskPlatformHost,
-            onShellExecutionModeChanged = options.onShellExecutionModeChanged,
-            onToolPermissionModeChanged = options.onToolPermissionModeChanged,
-        )
+        val owner = remember { PluginOperationOwner("Application settings") }
+        val scope = rememberCoroutineScope()
+        DisposableEffect(owner) { onDispose { scope.launch(NonCancellable) { owner.close() } } }
+        Render(services, options, owner)
+    }
+
+    @Composable
+    internal fun Render(services: ApplicationViewServices, options: ApplicationHostOptions, owner: PluginOperationOwner) {
+        KcodeApp(services, options, owner)
     }
 }

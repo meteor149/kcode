@@ -1,17 +1,28 @@
 package ai.meteor.kcode
 
-import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.ext.tool.file.EditFileTool
-import ai.koog.agents.ext.tool.file.ListDirectoryTool
-import ai.koog.agents.ext.tool.file.ReadFileTool
-import ai.koog.agents.ext.tool.file.WriteFileTool
-import ai.meteor.kcode.artifact.createAndroidArtifactRepository
+import ai.meteor.kcode.plugin.nativeexecution.AndroidNativeShellPlugin
+import ai.meteor.kcode.plugin.nativeexecution.AndroidNativeSettingsShellPlugin
+import ai.meteor.kcode.plugin.nativeexecution.AndroidNativeUbuntuShellPlugin
+import ai.meteor.kcode.plugin.nativeexecution.AndroidNativeSettingsUbuntuShellPlugin
+import ai.meteor.kcode.plugin.notifications.LocalizedAndroidNativeNotificationsPlugin
+import ai.meteor.kcode.plugin.notifications.AndroidNotificationPermissionPlugin
+import ai.meteor.kcode.plugin.notifications.LocalizedAndroidGenerationForegroundPlugin
+import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.plugin.kcodePlugin
+import ai.meteor.kcode.plugin.export.AndroidNativeImageSavingPlugin
+import ai.meteor.kcode.plugin.artifacts.AndroidNativeArtifactsPlugin
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.history.TransientConversationHistoryRepository
 import ai.meteor.kcode.plugin.AndroidDynamicPluginController
-import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
+import ai.meteor.kcode.plugin.FilePluginCompositionStore
+import ai.meteor.kcode.plugin.KcodePluginProfile
+import ai.meteor.kcode.plugin.KcodePluginRuntime
+import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
+import ai.meteor.kcode.plugin.api.AndroidPermissionHost
+import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.feature.androidShellToolPlugin
 import ai.meteor.kcode.plugin.feature.artifactToolPlugin
 import ai.meteor.kcode.plugin.feature.filesystemToolPlugin
@@ -19,27 +30,30 @@ import ai.meteor.kcode.plugin.feature.skillToolPlugin
 import ai.meteor.kcode.plugin.feature.ubuntuShellToolPlugin
 import ai.meteor.kcode.plugin.feature.webContainerToolPlugin
 import ai.meteor.kcode.plugin.feature.webSearchToolPlugin
-import ai.meteor.kcode.plugin.KcodePluginProfile
-import ai.meteor.kcode.plugin.KcodePluginRuntime
-import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.plugin.provider.webSearchProviderPlugin
+import ai.meteor.kcode.plugin.settingsstorage.AndroidNativeSettingsPlugin
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
-import ai.meteor.kcode.settings.TransientAppSettingsStore
-import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
 import ai.meteor.kcode.tools.permission.ToolCallApprover
-import ai.meteor.kcode.webcontainer.AndroidWebContainerLauncher
+import ai.meteor.kcode.plugin.webcontainer.native.AndroidNativeWebContainerPlugin
+import ai.meteor.kcode.plugin.overlay.AndroidNativeConversationOverlayPlugin
+import ai.meteor.kcode.plugin.LocalizedNativeToolApprovalPlugin
+import ai.meteor.kcode.plugin.SettingsToolInteractionPlugin
+import ai.meteor.kcode.plugin.HostModeToolInteractionPlugin
+import ai.meteor.kcode.plugin.api.ConfirmationDialogHost
 import android.app.Activity
+import ai.meteor.kcode.plugin.nativefilesystem.AndroidNativeFileSystemPlugin
+import ai.meteor.kcode.plugin.skills.WorkspaceSkillsPlugin
 import java.nio.file.Files
-import kotlinx.coroutines.runBlocking
 
 /** Creates an Android agent whose file tools use real absolute paths allowed by the OS. */
-fun createAndroidKoogChatService(
+suspend fun createAndroidKoogChatService(
     activity: Activity,
-    modeProvider: suspend () -> ShellExecutionMode,
+    modeProvider: suspend () -> ShellExecutionMode = { ShellExecutionMode.App },
     permissionModeProvider: suspend () -> ToolPermissionMode,
-    toolCallApprover: ToolCallApprover,
-    settingsStore: AppSettingsStore = TransientAppSettingsStore,
+    toolCallApprover: ToolCallApprover? = null,
+    settingsStore: AppSettingsStore? = null,
 ): ChatService = createAndroidKoogChatRuntime(
     activity,
     modeProvider,
@@ -48,113 +62,134 @@ fun createAndroidKoogChatService(
     settingsStore,
 ).chatService
 
-fun createAndroidKoogChatRuntime(
+suspend fun createAndroidKoogChatRuntime(
     activity: Activity,
-    modeProvider: suspend () -> ShellExecutionMode,
-    permissionModeProvider: suspend () -> ToolPermissionMode,
-    toolCallApprover: ToolCallApprover,
-    settingsStore: AppSettingsStore = TransientAppSettingsStore,
-    historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
+    modeProvider: suspend () -> ShellExecutionMode = { ShellExecutionMode.App },
+    permissionModeProvider: suspend () -> ToolPermissionMode = { ToolPermissionMode.Ask },
+    toolCallApprover: ToolCallApprover? = null,
+    settingsStore: AppSettingsStore? = null,
+    historyRepository: ConversationHistoryRepository? = null,
     profile: KcodePluginProfile = KcodePluginProfile(),
+    settingsBackedInteraction: Boolean = false,
+    settingsBackedShell: Boolean = false,
+    permissionHost: AndroidPermissionHost? = null,
+    confirmationDialogs: ConfirmationDialogHost? = null,
 ): KcodeAgentRuntime {
-    val workspaceRoot = Files.createDirectories(activity.filesDir.toPath().resolve("agent_workspace")).toRealPath()
-    val fileSystem = AndroidAgentFileSystem(workspaceRoot)
-    val shellExecutor = AndroidShellExecutors(
-        activity = activity,
-        modeProvider = modeProvider,
-    )
-    val ubuntuShellExecutor = AndroidUbuntuShellExecutor(
-        context = activity.applicationContext,
-        modeProvider = modeProvider,
-    )
-    val skillWorkspace = AndroidPrivateAgentWorkspace(workspaceRoot)
-    val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "android-app-data")
-    val artifactRepository = createAndroidArtifactRepository(activity.applicationContext)
-    val webContainerController = AndroidWebContainerLauncher(activity.applicationContext)
-    val conversationOverlayController = AndroidConversationOverlayController(activity)
-    val featurePlugins = listOf(
-        filesystemToolPlugin(
-            ToolRegistry {
-                tool(ReadFileTool(fileSystem))
-                tool(ListDirectoryTool(fileSystem))
-                tool(WriteFileTool(fileSystem))
-                tool(EditFileTool(fileSystem))
-                tool(ReadMediaFileTool(fileSystem))
-            },
+    val nativeOverrides = if (profile.includeDefaults) buildList {
+        if (historyRepository == null && profile.overrides.none { it.descriptor.id == "provider.history.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.history.platform", "builtin", "native", setOf("history")),
+            AndroidNativeHistoryPlugin(), Unit,
+        ))
+        if (settingsStore == null && profile.overrides.none { it.descriptor.id == "provider.settings.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.settings.platform", "builtin", "native", setOf("settings")),
+            AndroidNativeSettingsPlugin(), Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.artifacts.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.artifacts.platform", "builtin", "native", setOf("artifacts")),
+            AndroidNativeArtifactsPlugin(), Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.skills.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.skills.platform", "builtin", "native", setOf("skills")),
+            WorkspaceSkillsPlugin(), Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.web-containers.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.web-containers.platform", "builtin", "native", setOf("webContainers")),
+            AndroidNativeWebContainerPlugin(), Unit,
+        ))
+        if (toolCallApprover == null && profile.overrides.none { it.descriptor.id == "provider.interaction.platform" }) {
+            val descriptor = PluginDescriptor("provider.interaction.platform", "builtin", "native", setOf("interaction"))
+            add(if (settingsBackedInteraction) kcodePlugin(descriptor, SettingsToolInteractionPlugin(), Unit)
+                else kcodePlugin(descriptor, HostModeToolInteractionPlugin(), permissionModeProvider))
+        }
+
+        if (profile.overrides.none { it.descriptor.id == "provider.notifications.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.notifications.platform", "builtin", "native", setOf("notifications")),
+            LocalizedAndroidNativeNotificationsPlugin(),
+            Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.export.image-saving" }) add(kcodePlugin(
+            PluginDescriptor("provider.export.image-saving", "builtin", "native", setOf("conversationImageSaving")),
+            AndroidNativeImageSavingPlugin(), Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.conversation-overlay.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.conversation-overlay.platform", "builtin", "native", setOf("conversationOverlays")),
+            AndroidNativeConversationOverlayPlugin(), Unit,
+        ))
+    } else emptyList()
+    val nativeProfile = profile.copy(overrides = profile.overrides + nativeOverrides)
+    val featurePlugins = listOfNotNull(if (toolCallApprover == null) kcodePlugin(
+        PluginDescriptor("provider.tool-approvals.native", "builtin", "native", setOf("toolApprovals")),
+        LocalizedNativeToolApprovalPlugin(), Unit,
+    ) else null) + listOfNotNull(permissionHost?.let {
+        kcodePlugin(
+            PluginDescriptor("policy.notifications.permission.android", "builtin", "native", setOf("uiSlots")),
+            AndroidNotificationPermissionPlugin(), Unit,
+        )
+    }) + listOf(
+        kcodePlugin(
+            PluginDescriptor("provider.generation.foreground.android", "builtin", "native", setOf("generation")),
+            LocalizedAndroidGenerationForegroundPlugin(), Unit,
         ),
+        kcodePlugin(
+            PluginDescriptor("provider.fs.platform", "builtin", "native", setOf("fs", "skillWorkspace")),
+            AndroidNativeFileSystemPlugin(), Unit,
+        ),
+        filesystemToolPlugin(),
         webContainerToolPlugin(),
+        webSearchProviderPlugin(),
         webSearchToolPlugin(),
-        androidShellToolPlugin(
-            ToolRegistry {
-                tool(AgentShellTool(executor = shellExecutor, description = AndroidShellToolDescription))
-            },
+        if (settingsBackedShell) kcodePlugin(
+            PluginDescriptor("provider.shell.platform", "builtin", "native", setOf("shell")),
+            AndroidNativeSettingsShellPlugin(), Unit,
+        ) else kcodePlugin(
+            PluginDescriptor("provider.shell.platform", "builtin", "native", setOf("shell")),
+            AndroidNativeShellPlugin(), modeProvider,
         ),
-        ubuntuShellToolPlugin(
-            ToolRegistry {
-                tool(
-                    AgentShellTool(
-                        executor = ubuntuShellExecutor,
-                        toolName = "execute_ubuntu_command",
-                        description = AndroidUbuntuShellToolDescription,
-                    ),
-                )
-            },
+        androidShellToolPlugin(),
+        if (settingsBackedShell) kcodePlugin(
+            PluginDescriptor("provider.shell.ubuntu", "builtin", "native", setOf("ubuntuShell")),
+            AndroidNativeSettingsUbuntuShellPlugin(), Unit,
+        ) else kcodePlugin(
+            PluginDescriptor("provider.shell.ubuntu", "builtin", "native", setOf("ubuntuShell")),
+            AndroidNativeUbuntuShellPlugin(), modeProvider,
         ),
+        ubuntuShellToolPlugin(),
         skillToolPlugin(),
         artifactToolPlugin(),
     )
     val pluginDirectory = Files.createDirectories(activity.filesDir.toPath().resolve("cordis_plugins")).toFile()
-    val pluginRuntime = runBlocking {
-        KcodePluginRuntime.create(
-            KcodePluginRuntimeConfig(
-                interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover),
-                skillRuntime = skillRuntime,
-                profile = profile,
-                settingsStore = settingsStore,
-                historyRepository = historyRepository,
-                artifactRepository = artifactRepository,
-                webContainerController = webContainerController,
-                conversationOverlayController = conversationOverlayController,
-                featurePlugins = featurePlugins,
-                dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
-                    AndroidDynamicPluginController(
-                        context,
-                        activity.applicationContext,
-                        loader,
-                        inventory,
-                        pluginDirectory,
-                    )
-                },
-            ),
-        )
-    }
+    val pluginRuntime = KcodePluginRuntime.create(
+        KcodePluginRuntimeConfig(
+            interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover ?: ToolCallApprover { false }),
+            hostInputs = when {
+                confirmationDialogs != null -> AndroidPluginHostInputs(activity, permissionHost, confirmationDialogs)
+                permissionHost != null -> AndroidPluginHostInputs(activity, permissionHost)
+                else -> AndroidPluginHostInputs(activity)
+            },
+            settingsBackedInteraction = settingsBackedInteraction,
+            profile = nativeProfile,
+            settingsStore = settingsStore,
+            historyRepository = historyRepository,
+            featurePlugins = featurePlugins,
+            pluginCompositionStore = FilePluginCompositionStore(pluginDirectory),
+            dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
+                AndroidDynamicPluginController(
+                    context,
+                    activity.applicationContext,
+                    loader,
+                    inventory,
+                    pluginDirectory,
+                )
+            },
+        ),
+    )
     return KcodeAgentRuntime(
         chatService = pluginRuntime.chatService,
-        webContainerController = webContainerController,
-        artifactRepository = artifactRepository,
-        conversationOverlayController = conversationOverlayController,
+        webContainerController = pluginRuntime.webContainerController,
+        artifactRepository = pluginRuntime.artifactRepository,
+        conversationOverlayController = pluginRuntime.conversationOverlayController,
         pluginManager = pluginRuntime.pluginManager,
         owner = pluginRuntime,
         applicationContent = pluginRuntime,
     )
 }
-
-private val AndroidShellToolDescription = """
-    Executes a shell command in an Android OS environment and returns its complete combined output and exit code.
-    Commands run through /system/bin/sh, not a desktop Linux shell. Do not assume that bash, GNU utilities, apt,
-    systemd, or other desktop Linux programs are installed; prefer Android/toybox-compatible commands and Android
-    absolute paths. The user-selected execution identity may be the app UID, adb shell through Shizuku, or root.
-    /workspace maps to the app's private agent workspace when the app identity is selected. If workingDirectory is
-    omitted, the platform chooses the default directory for the selected identity.
-""".trimIndent()
-
-private val AndroidUbuntuShellToolDescription = """
-    Executes a command inside kcode's complete Ubuntu 24.04 ARM64 user space powered by PRoot. This is a regular
-    GNU/Linux environment with bash, apt, Python, and standard Linux paths; it is separate from Android's system
-    shell. It uses the same user-selected Android execution identity as the system shell tool: app UID, adb shell
-    through Shizuku, or root. /workspace is the default working directory; app and root modes share kcode's private
-    agent workspace, while adb mode uses a UID-2000 workspace under /data/local/tmp. Each identity-specific Ubuntu
-    environment is installed atomically on first use, which can make the first call take longer. The guest reports
-    PRoot's emulated root user, while Android filesystem and device access follow the selected real Android UID.
-    systemd, kernel modules, real mounts, and other kernel operations remain unavailable under PRoot.
-""".trimIndent()

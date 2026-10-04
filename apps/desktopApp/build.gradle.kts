@@ -32,7 +32,7 @@ java {
 }
 
 dependencies {
-    implementation(project(":shared"))
+    implementation(project(":plugins:api"))
     implementation(project(":plugins:platform-desktop"))
     implementation(compose.desktop.currentOs)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")

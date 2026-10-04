@@ -7,17 +7,28 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.kcodePlugin
 import ai.meteor.kcode.plugin.KcodePluginMount
 import ai.meteor.kcode.plugin.toolContributionPlugin
-import ai.meteor.kcode.skill.skillTools
+import ai.meteor.kcode.plugin.skilltools.skillTools
 import org.cordis.dependencies
-import org.cordis.plugin
+import org.cordis.ConfigValidator
+import org.cordis.Context
+import org.cordis.EffectScope
+import org.cordis.Plugin
+
+object SkillToolConsumerPlugin : Plugin<Unit> {
+    override val config = ConfigValidator<Unit> { it }
+    override val name = "kcode-skill-consumer"
+    override val inject = dependencies(KcodeTools.Key, KcodeSkills.Key)
+
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        val runtime = ctx.require(KcodeSkills.Key).runtime
+        val tools = ToolRegistry { if (runtime != null) skillTools(runtime) }
+        effect.collect(ctx.require(KcodeTools.Key).register("consumer.tools.skill", tools))
+    }
+}
 
 fun skillToolPlugin(): KcodePluginMount = kcodePlugin(
     PluginDescriptor("consumer.tools.skill", "builtin", "built-in", setOf("skill", "tools")),
-    plugin<Unit>(name = "kcode-skill-consumer", inject = dependencies(KcodeTools.Key, KcodeSkills.Key)) { ctx, _ ->
-        val runtime = ctx.require(KcodeSkills.Key).runtime
-        val tools = ToolRegistry { if (runtime != null) skillTools(runtime) }
-        collect(ctx.require(KcodeTools.Key).register("consumer.tools.skill", tools))
-    },
+    SkillToolConsumerPlugin,
     Unit,
 )
 

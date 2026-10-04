@@ -19,8 +19,12 @@ kotlin {
         commonMain.dependencies {
                 api(project(":plugins:api"))
         }
+        getByName("desktopTest").dependencies {
+            implementation(project(":plugins:skill-tools"))
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
     }
 }

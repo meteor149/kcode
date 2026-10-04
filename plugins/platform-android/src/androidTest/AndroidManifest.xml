@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <application>
+        <service
+            android:name="ai.meteor.kcode.plugin.CrossProcessPluginBridgeService"
+            android:exported="true"
+            android:process=":plugin_bridge_probe" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/plugin_test_share_paths" />
+        </provider>
+    </application>
+</manifest>

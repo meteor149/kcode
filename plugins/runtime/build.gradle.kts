@@ -19,22 +19,12 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-                implementation(compose.runtime)
-                implementation(project(":plugins:application"))
-                api(project(":plugins:api"))
-                implementation(project(":plugins:inventory"))
-                implementation(project(":plugins:tools"))
-                implementation(project(":plugins:system-prompt"))
-                implementation(project(":plugins:llm"))
-                implementation(project(":plugins:continuations"))
-                implementation(project(":plugins:interaction"))
-                implementation(project(":plugins:skills"))
-                implementation(project(":plugins:subagents"))
-                implementation(project(":plugins:goal"))
-                implementation(project(":plugins:schedule"))
-                implementation(project(":plugins:agent-loop"))
-                api(libs.cordis.loader)
-                implementation(libs.cordis.hmr)
+            implementation(compose.runtime)
+            api(project(":plugins:api"))
+            implementation(project(":plugins:bundle-native"))
+            implementation(project(":plugins:inventory"))
+            api(libs.cordis.loader)
+            implementation(libs.cordis.hmr)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

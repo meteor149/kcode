@@ -1,5 +1,6 @@
 package ai.meteor.kcode
 
+import ai.meteor.kcode.plugin.nativeexecution.AndroidUbuntuShellExecutor
 import ai.meteor.kcode.settings.ShellExecutionMode
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -24,40 +25,44 @@ class AndroidUbuntuShellExecutorTest {
                 sharedFile.delete()
                 val executor = AndroidUbuntuShellExecutor(context) { ShellExecutionMode.App }
 
-                val result = executor.execute(
-                    command = """
-                        set -eu
-                        . /etc/os-release
-                        printf 'ubuntu=%s\n' "${'$'}PRETTY_NAME"
-                        printf 'arch=%s\n' "${'$'}(uname -m)"
-                        printf 'apt=%s\n' "${'$'}(apt --version | head -n 1)"
-                        python3 -c 'import platform; print("python=" + platform.python_version())'
-                        mkdir -p /workspace/reused-runtime
-                        printf 'workspace-ok\n' > /workspace/ubuntu-runtime-smoke.txt
-                        cat /workspace/ubuntu-runtime-smoke.txt
-                    """.trimIndent(),
-                    workingDirectory = "/workspace",
-                )
+                try {
+                    val result = executor.execute(
+                        command = """
+                            set -eu
+                            . /etc/os-release
+                            printf 'ubuntu=%s\n' "${'$'}PRETTY_NAME"
+                            printf 'arch=%s\n' "${'$'}(uname -m)"
+                            printf 'apt=%s\n' "${'$'}(apt --version | head -n 1)"
+                            python3 -c 'import platform; print("python=" + platform.python_version())'
+                            mkdir -p /workspace/reused-runtime
+                            printf 'workspace-ok\n' > /workspace/ubuntu-runtime-smoke.txt
+                            cat /workspace/ubuntu-runtime-smoke.txt
+                        """.trimIndent(),
+                        workingDirectory = "/workspace",
+                    )
 
-                assertEquals(result.output, 0, result.exitCode)
-                assertTrue(result.output, "Ubuntu 24.04" in result.output)
-                assertTrue(result.output, "arch=aarch64" in result.output)
-                assertTrue(result.output, "apt=apt " in result.output)
-                assertTrue(result.output, "python=" in result.output)
-                assertTrue(result.output, "workspace-ok" in result.output)
-                assertEquals("workspace-ok\n", sharedFile.readText())
+                    assertEquals(result.output, 0, result.exitCode)
+                    assertTrue(result.output, "Ubuntu 24.04" in result.output)
+                    assertTrue(result.output, "arch=aarch64" in result.output)
+                    assertTrue(result.output, "apt=apt " in result.output)
+                    assertTrue(result.output, "python=" in result.output)
+                    assertTrue(result.output, "workspace-ok" in result.output)
+                    assertEquals("workspace-ok\n", sharedFile.readText())
 
-                val reusedResult = executor.execute(
-                    command = "pwd && python3 -c 'print(\"reused-ok\")'",
-                    workingDirectory = "/workspace/reused-runtime",
-                )
-                assertEquals(reusedResult.output, 0, reusedResult.exitCode)
-                assertTrue(reusedResult.output, "/workspace/reused-runtime" in reusedResult.output)
-                assertTrue(reusedResult.output, "reused-ok" in reusedResult.output)
+                    val reusedResult = executor.execute(
+                        command = "pwd && python3 -c 'print(\"reused-ok\")'",
+                        workingDirectory = "/workspace/reused-runtime",
+                    )
+                    assertEquals(reusedResult.output, 0, reusedResult.exitCode)
+                    assertTrue(reusedResult.output, "/workspace/reused-runtime" in reusedResult.output)
+                    assertTrue(reusedResult.output, "reused-ok" in reusedResult.output)
 
-                File(workspace, "reused-runtime").delete()
-                sharedFile.delete()
-                Unit
+                    File(workspace, "reused-runtime").delete()
+                    sharedFile.delete()
+                    Unit
+                } finally {
+                    executor.close()
+                }
             }
         }
     }

@@ -1,10 +1,25 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.plugin.api.PluginHostInputs
+import ai.meteor.kcode.plugin.api.SettingsStoreFactory
+
+import ai.meteor.kcode.plugin.api.HistoryRepositoryFactory
+
+import ai.meteor.kcode.model.ModelCatalogSnapshot
+import ai.meteor.kcode.AgentConversationOverlayController
+import ai.meteor.kcode.AgentConversationOverlayTurn
+import ai.meteor.kcode.plugin.api.ConversationOverlayHostState
+import ai.meteor.kcode.plugin.api.KcodeConversationOverlays
+import ai.meteor.kcode.plugin.api.ConversationOverlayFactory
 import ai.meteor.kcode.AgentRuntimeOwner
 import ai.meteor.kcode.ApplicationContent
 import ai.meteor.kcode.ApplicationHostOptions
 import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.artifact.EmptyArtifactRepository
+import ai.meteor.kcode.plugin.api.ScheduledTaskNotificationsFactory
+import ai.meteor.kcode.plugin.api.ConversationImageSaverFactory
+import ai.meteor.kcode.plugin.api.ArtifactFileStoreFactory
+import ai.meteor.kcode.artifact.ArtifactFileStore
+import ai.meteor.kcode.artifact.Artifact
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.GoalSession
 import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
@@ -12,48 +27,79 @@ import ai.meteor.kcode.chat.ScheduledTaskSession
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.history.TransientConversationHistoryRepository
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.plugin.api.ApplicationRenderer
-import ai.meteor.kcode.plugin.api.ApplicationViewServices
+import ai.meteor.kcode.plugin.api.KcodeConversationCommands
+import ai.meteor.kcode.chat.ConversationCommandSnapshot
+import ai.meteor.kcode.plugin.api.ApplicationFrame
+import ai.meteor.kcode.plugin.api.ApplicationServices
+import org.cordis.ServiceKey
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeAgents
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
+import ai.meteor.kcode.plugin.api.KcodeGeneration
+import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.plugin.api.KcodeArtifacts
+import ai.meteor.kcode.chat.UnavailableScheduledTasks
+import ai.meteor.kcode.plugin.api.KcodeConversationExport
+import ai.meteor.kcode.plugin.api.KcodeConversationExecution
+import ai.meteor.kcode.plugin.api.KcodeSessions
+import ai.meteor.kcode.plugin.api.KcodeSchedules
+import ai.meteor.kcode.chat.UnavailableGoalSessions
+import ai.meteor.kcode.plugin.api.KcodeGoals
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeLlm
+import ai.meteor.kcode.plugin.api.KcodePluginInstallations
+import ai.meteor.kcode.plugin.api.PluginCompositionStore
+import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
+import ai.meteor.kcode.plugin.api.StoredDynamicPlugin
+import ai.meteor.kcode.plugin.api.validatePluginApi
 import ai.meteor.kcode.plugin.api.KcodePluginInventory
+import ai.meteor.kcode.settings.SettingsUpdate
+import ai.meteor.kcode.settings.AppliedSettingsUpdate
+import ai.meteor.kcode.plugin.api.KcodeSettingsCommands
 import ai.meteor.kcode.plugin.api.KcodeSettings
+import ai.meteor.kcode.plugin.api.KcodeModelSettings
 import ai.meteor.kcode.plugin.api.KcodeSystemPrompt
 import ai.meteor.kcode.plugin.api.KcodeTools
+import ai.meteor.kcode.plugin.api.KcodeUiContributions
 import ai.meteor.kcode.plugin.api.KcodeWebContainers
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.settings.AppSettingsStore
-import ai.meteor.kcode.settings.TransientAppSettingsStore
 import ai.meteor.kcode.skill.SkillRuntime
+import ai.meteor.kcode.plugin.api.UiContributionsSnapshot
 import ai.meteor.kcode.webcontainer.WebContainerController
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import ai.meteor.kcode.plugin.api.PluginOperationOwner
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.cordis.Context
 import org.cordis.Fiber
 import org.cordis.FiberState
+import org.cordis.Plugin
 import org.cordis.loader.Loader
 import org.cordis.loader.LoaderConfig
 import org.cordis.loader.LoaderPlugin
-import org.cordis.Plugin
 
 interface DynamicPluginController : AgentPluginManager {
+    /** Imports and validates a not-yet-installed artifact without applying or publishing it. */
+    suspend fun validateCandidate(spec: DynamicPluginSpec): Unit =
+        error("This controller does not support candidate validation")
     suspend fun close()
     suspend fun settle()
 }
@@ -62,44 +108,41 @@ fun interface DynamicPluginControllerFactory {
     fun create(context: Context, loader: Loader, inventory: KcodePluginInventory): DynamicPluginController
 }
 
-interface KcodePluginMount {
-    val descriptor: PluginDescriptor
-    suspend fun mount(context: Context): Fiber<*>
-}
-
-fun <C> kcodePlugin(descriptor: PluginDescriptor, plugin: Plugin<C>, config: C): KcodePluginMount =
-    object : KcodePluginMount {
-        override val descriptor = descriptor
-        override suspend fun mount(context: Context): Fiber<*> = context.plugin(plugin, config)
-    }
-
-/** A declarative patch over the default bundle; ids are checked before mounting. */
-data class KcodePluginProfile(
-    val includeDefaults: Boolean = true,
-    val disabled: Set<String> = emptySet(),
-    val overrides: List<KcodePluginMount> = emptyList(),
-)
-
 data class KcodePluginRuntimeConfig(
     val interactionPolicy: InteractionPolicy,
+    val hostInputs: PluginHostInputs? = null,
+    val settingsBackedInteraction: Boolean = false,
     val skillRuntime: SkillRuntime? = null,
-    val conversationOverlayController: ai.meteor.kcode.AgentConversationOverlayController? = null,
     val featurePlugins: List<KcodePluginMount> = emptyList(),
     val dynamicPluginControllerFactory: DynamicPluginControllerFactory? = null,
     val profile: KcodePluginProfile = KcodePluginProfile(),
-    val settingsStore: AppSettingsStore = TransientAppSettingsStore,
-    val historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
-    val artifactRepository: ArtifactRepository = EmptyArtifactRepository,
+    val settingsStore: AppSettingsStore? = null,
+    val settingsStoreFactory: SettingsStoreFactory? = null,
+    val historyRepositoryFactory: HistoryRepositoryFactory? = null,
+    val historyRepository: ConversationHistoryRepository? = null,
+    val artifactRepository: ArtifactRepository? = null,
     val webContainerController: WebContainerController? = null,
+    val bundle: List<KcodePluginMount>? = null,
+    val pluginCompositionStore: PluginCompositionStore? = null,
+    val builtinAliases: Map<String, Set<String>>? = null,
+    val artifactFileStore: ArtifactFileStore? = null,
+    val artifactFileStoreFactory: ArtifactFileStoreFactory? = null,
+    val conversationImageSaverFactory: ConversationImageSaverFactory? = null,
+    val scheduledTaskNotificationsFactory: ScheduledTaskNotificationsFactory? = null,
+    val conversationOverlayFactory: (suspend (StateFlow<UiContributionsSnapshot>) -> AgentConversationOverlayController?)? = null,
 )
 
 /** Only inventory and the loader bridge are bootstrap infrastructure. Product providers are managed. */
 class KcodePluginRuntime private constructor(
     private val context: Context,
+    private val hostInputs: PluginHostInputs?,
     private val bootstrap: List<Fiber<*>>,
     private val records: LinkedHashMap<String, ManagedPlugin>,
     val inventory: KcodePluginInventory,
     private val external: DynamicPluginController?,
+    private val builtinAliases: Map<String, Set<String>>,
+    private val overlayHostState: ConversationOverlayHostState,
+    private val overlayUiSlots: MutableStateFlow<UiContributionsSnapshot>,
 ) : AgentRuntimeOwner, ApplicationContent {
     private class ManagedPlugin(
         var mount: KcodePluginMount,
@@ -109,13 +152,87 @@ class KcodePluginRuntime private constructor(
 
     private data class ApplicationView(
         val renderer: ApplicationRenderer,
-        val services: ApplicationViewServices,
+        val frame: ApplicationFrame,
     )
 
+    private data class PreparedApplicationView(
+        val view: ApplicationView?,
+        val uiSlots: UiContributionsSnapshot,
+        val modelCatalog: ModelCatalogSnapshot,
+    )
+
+    private class ClosingRuntime(val runtime: KcodePluginRuntime) : AbstractCoroutineContextElement(Key) {
+        companion object Key : CoroutineContext.Key<ClosingRuntime>
+    }
+
+    private data class ClosePlan(val turns: List<Job>, val fibers: List<Fiber<*>>)
+
+    private val closeCompletion = CompletableDeferred<Unit>()
     private val lock = Mutex()
     private val turns = mutableMapOf<Job, Int>()
     private var closed = false
+    private var restoring = false
+    private var committedModelCatalog = ModelCatalogSnapshot()
+    override suspend fun updateSettings(update: SettingsUpdate): AppliedSettingsUpdate {
+        val (handler, catalog) = lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            val commands = checkNotNull(context[KcodeSettingsCommands.Key]) { "Enable settings and settings commands before configuring settings" }
+            commands.handler to committedModelCatalog
+        }
+        return handler.apply(update, catalog)
+    }
+
+    override suspend fun modelCatalog(): ModelCatalogSnapshot = lock.withLock {
+        check(!closed) { "plugin runtime is closed" }
+        committedModelCatalog
+    }
+
     private val applicationView = MutableStateFlow<ApplicationView?>(null)
+
+    /** Legacy host projection follows the current plugin; it never retains a native repository. */
+    val artifactRepository: ArtifactRepository = object : ArtifactRepository {
+        override suspend fun list(): List<Artifact> {
+            val repository = lock.withLock {
+                check(!closed) { "plugin runtime is closed" }
+                context.require(KcodeArtifacts.Key).repository
+            }
+            return repository.list()
+        }
+    }
+
+    /** Host operations use the current Web provider and reject absence or runtime closure. */
+    val webContainerController: WebContainerController = CurrentWebContainerController {
+        lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            requireNotNull(context.require(KcodeWebContainers.Key).controller) { "Web containers are unavailable" }
+        }
+    }
+
+    val conversationOverlayController: AgentConversationOverlayController =
+        object : AgentConversationOverlayController {
+            override suspend fun startTurn(initialMessages: List<ChatMessage>): AgentConversationOverlayTurn {
+                val service = lock.withLock {
+                    check(!closed) { "plugin runtime is closed" }
+                    context.require(KcodeConversationOverlays.Key)
+                }
+                return requireNotNull(service.startTurn(initialMessages)) { "Conversation overlays are unavailable" }
+            }
+            override suspend fun setHostForeground(isForeground: Boolean) {
+                val registry = lock.withLock {
+                    check(!closed) { "plugin runtime is closed" }
+                    overlayHostState.setForeground(isForeground)
+                    context[KcodeConversationOverlays.Key]
+                }
+                registry?.setHostForeground(isForeground)
+            }
+            override suspend fun close() {
+                val controller = lock.withLock {
+                    check(!closed) { "plugin runtime is closed" }
+                    context[KcodeConversationOverlays.Key]
+                }?.current()
+                controller?.close()
+            }
+        }
 
     /** Stable host facade: resolve the active agents provider at every new turn. */
     val chatService: ChatService = object : ChatService {
@@ -143,15 +260,18 @@ class KcodePluginRuntime private constructor(
     /** Manages built-ins as well as external artifacts. */
     val pluginManager: DynamicPluginController = object : DynamicPluginController {
         override suspend fun install(spec: DynamicPluginSpec) = mutate {
+            validateInstallation(spec)
             require(spec.id !in records) { "plugin '${spec.id}' is configured; use replace()" }
             dynamic().install(spec)
         }
 
         override suspend fun replace(spec: DynamicPluginSpec) = mutate {
+            validateInstallation(spec)
             val record = records[spec.id]
             if (record == null || dynamic().installed().any { it.id == spec.id }) {
                 dynamic().replace(spec)
             } else {
+                dynamic().validateCandidate(spec)
                 val wasEnabled = record.enabled
                 detach(record)
                 inventory.remove(spec.id)
@@ -199,7 +319,10 @@ class KcodePluginRuntime private constructor(
 
         override suspend fun installed(): List<DynamicPluginSpec> = lock.withLock { external?.installed().orEmpty() }
         override suspend fun close() = this@KcodePluginRuntime.close()
-        override suspend fun settle() = lock.withLock { this@KcodePluginRuntime.settle() }
+        override suspend fun settle() = lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            this@KcodePluginRuntime.settle()
+        }
     }
 
     val dynamicPlugins: DynamicPluginController? get() = if (external == null) null else pluginManager
@@ -228,7 +351,7 @@ class KcodePluginRuntime private constructor(
     }
 
     suspend fun diagnostics(): KcodePluginDiagnostics = lock.withLock {
-        settle()
+        if (!closed) settle()
         KcodePluginDiagnostics(
             plugins = inventory.snapshot(),
             toolContributions = context[KcodeTools.Key]?.contributionIds().orEmpty(),
@@ -241,9 +364,8 @@ class KcodePluginRuntime private constructor(
     override fun Render(options: ApplicationHostOptions) {
         val view by applicationView.collectAsState()
         val active = view ?: return
-        val services = active.services
-        key(active.renderer, services.settingsStore, services.historyRepository, services.artifactRepository, services.webContainerController) {
-            active.renderer.Render(services, options)
+        key(active.renderer) {
+            active.frame.Render(options)
         }
     }
 
@@ -268,15 +390,106 @@ class KcodePluginRuntime private constructor(
         }
     }
 
-    private suspend fun mutate(block: suspend () -> Unit) = lock.withLock {
-        check(!closed) { "plugin runtime is closed" }
-        check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
-        withContext(NonCancellable) {
-            try {
-                block()
-            } finally {
-                settle()
+    private data class RuntimeCheckpoint(
+        val mounts: Map<String, Pair<KcodePluginMount, Boolean>>,
+        val external: List<DynamicPluginSpec>,
+    )
+
+    private fun validateInstallation(spec: DynamicPluginSpec) {
+        spec.validatePluginApi()
+        if (context[KcodePluginInstallations.Key]?.store != null) StoredDynamicPlugin.from(spec)
+    }
+
+    private suspend fun checkpoint(): RuntimeCheckpoint = RuntimeCheckpoint(
+        records.mapValues { (_, record) -> record.mount to record.enabled },
+        external?.installed().orEmpty(),
+    )
+
+    private suspend fun compositionSnapshot(): PluginCompositionSnapshot = PluginCompositionSnapshot(
+        builtinsEnabled = records.mapValues { it.value.enabled },
+        external = external?.installed().orEmpty().map(StoredDynamicPlugin::from),
+    )
+
+    /** Restore interfaces and registrations, not arbitrary provider instance state. */
+    private suspend fun rollback(checkpoint: RuntimeCheckpoint) {
+        external?.installed().orEmpty().asReversed().forEach { external?.uninstall(it.id) }
+        records.values.toList().asReversed().forEach { detach(it) }
+        checkpoint.mounts.forEach { (id, previous) ->
+            val record = records.getValue(id)
+            record.mount = previous.first
+            record.enabled = previous.second
+            if (record.enabled) {
+                record.fiber = record.mount.mount(context)
+                record.fiber?.await()
             }
+        }
+        // Recorded insertion order is dependency order: install refuses missing loader dependencies.
+        checkpoint.external.forEach { spec ->
+            inventory.remove(spec.id)
+            dynamic().install(spec)
+        }
+        settle(publishView = false)
+    }
+
+    private suspend fun mutate(block: suspend () -> Unit) {
+        PluginOperationOwner.requireOutsideCall()
+        ChatGenerationRunner.requireOutsideCall()
+        lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
+            withContext(NonCancellable) {
+                val storeBefore = context[KcodePluginInstallations.Key]?.store
+                val before = if (!restoring) checkpoint() else null
+                try {
+                    block()
+                    settle(publishView = false)
+                    if (!restoring) {
+                        val prepared = try {
+                            prepareApplicationView()
+                        } catch (error: Throwable) {
+                            if (before != null) runCatching { rollback(before) }.exceptionOrNull()?.let(error::addSuppressed)
+                            throw error
+                        }
+                        val store = context[KcodePluginInstallations.Key]?.store ?: storeBefore
+                        if (store != null) {
+                            try {
+                                store.save(compositionSnapshot())
+                            } catch (error: Throwable) {
+                                if (before != null) runCatching { rollback(before) }.exceptionOrNull()?.let(error::addSuppressed)
+                                throw error
+                            }
+                        }
+                        commitApplicationView(prepared)
+                    }
+                } catch (error: Throwable) {
+                    runCatching { settle(publishView = !restoring) }.exceptionOrNull()?.let(error::addSuppressed)
+                    throw error
+                }
+            }
+        }
+    }
+
+    private suspend fun restoreInstalledComposition() {
+        val store = context[KcodePluginInstallations.Key]?.store ?: return
+        val loaded = store.load().also { it.validate() }
+        val enabled = loaded.builtinsEnabled.toMutableMap()
+        builtinAliases.forEach { (previous, replacements) ->
+            enabled.remove(previous)?.let { oldState ->
+                require(replacements.all { it in records }) { "Builtin alias targets unknown plugins" }
+                replacements.forEach { enabled.putIfAbsent(it, oldState) }
+            }
+        }
+        val snapshot = loaded.copy(builtinsEnabled = enabled)
+        require(snapshot.builtinsEnabled.keys.all { it in records }) { "Plugin manifest references unknown builtins" }
+        restoring = true
+        try {
+            snapshot.builtinsEnabled.forEach { (id, enabled) -> pluginManager.setEnabled(id, enabled) }
+            snapshot.orderedExternal().forEach { stored ->
+                val spec = stored.toSpec()
+                if (spec.id in records) pluginManager.replace(spec) else pluginManager.install(spec)
+            }
+        } finally {
+            restoring = false
         }
     }
 
@@ -310,7 +523,7 @@ class KcodePluginRuntime private constructor(
         if (inventory.snapshot().any { it.id == id }) inventory.replace(descriptor) else inventory.publish(descriptor)
     }
 
-    private suspend fun settle() {
+    private suspend fun settle(publishView: Boolean = true) {
         repeat(records.size + 1) {
             val before = records.values.map { it.fiber?.state }
             external?.settle()
@@ -318,38 +531,68 @@ class KcodePluginRuntime private constructor(
             if (before == records.values.map { it.fiber?.state }) {
                 val externalIds = external?.installed().orEmpty().map { it.id }.toSet()
                 records.forEach { (id, record) -> if (id !in externalIds) publish(id, record) }
-                publishApplicationView()
+                if (publishView) publishApplicationView()
                 return
             }
         }
         error("plugin tree did not settle")
     }
 
-    private fun publishApplicationView() {
+    private suspend fun publishApplicationView() {
+        commitApplicationView(prepareApplicationView())
+    }
+
+    private fun commitApplicationView(prepared: PreparedApplicationView) {
+        overlayUiSlots.value = prepared.uiSlots
+        committedModelCatalog = prepared.modelCatalog
+        applicationView.value = prepared.view
+    }
+
+    private suspend fun prepareApplicationView(): PreparedApplicationView {
+        val uiSlots = context[KcodeUiContributions.Key]?.snapshot() ?: UiContributionsSnapshot()
+        context[KcodeConversationCommands.Key]?.commitSnapshot()
+        val catalog = context[KcodeLlm.Key]?.catalog() ?: ModelCatalogSnapshot()
         val renderer = context[KcodeApplicationUi.Key]?.renderer
-        val settings = context[KcodeSettings.Key]?.store
-        val history = context[KcodeHistory.Key]?.repository
-        val artifacts = context[KcodeArtifacts.Key]?.repository
-        val webContainers = context[KcodeWebContainers.Key]
-        applicationView.value = if (closed || renderer == null || settings == null || history == null || artifacts == null || webContainers == null) {
-            null
-        } else {
-            ApplicationView(renderer, ApplicationViewServices(chatService, settings, history, artifacts, webContainers.controller))
+        val view = if (closed || renderer == null) null else {
+            val preparing = MutableStateFlow(true)
+            val services = object : ApplicationServices {
+                override fun <T> get(key: ServiceKey<T>): T? {
+                    check(preparing.value) { "Application service lookup is no longer preparing a frame" }
+                    return context[key]
+                }
+            }
+            try { renderer.snapshot(services)?.let { ApplicationView(renderer, it) } }
+            finally { preparing.value = false }
         }
+        return PreparedApplicationView(view, if (closed) UiContributionsSnapshot() else uiSlots, catalog)
     }
 
     override suspend fun close() {
-        val currentJob = currentCoroutineContext()[Job]
-        val jobs = lock.withLock {
-            if (closed) return
+        PluginOperationOwner.requireOutsideCall()
+        ChatGenerationRunner.requireOutsideCall()
+        val callerContext = currentCoroutineContext()
+        check(callerContext[ClosingRuntime]?.runtime !== this) { "runtime cleanup cannot close its own runtime" }
+        val currentJob = callerContext[Job]
+        val plan = lock.withLock {
             check(currentJob !in turns) { "an active agent turn cannot close its own runtime" }
-            closed = true
-            turns.keys.toList()
+            if (closed) null else {
+                closed = true
+                overlayUiSlots.value = UiContributionsSnapshot()
+                ClosePlan(
+                    turns.keys.toList(),
+                    records.values.toList().asReversed().mapNotNull { it.fiber } +
+                        bootstrap.asReversed() + context.fiber,
+                )
+            }
         }
-        withContext(NonCancellable) {
-            jobs.forEach { it.cancel() }
-            jobs.forEach { it.join() }
-            lock.withLock {
+        if (plan == null) {
+            withContext(NonCancellable) { closeCompletion.await() }
+            return
+        }
+        withContext(NonCancellable + ClosingRuntime(this)) {
+            try {
+                plan.turns.forEach { it.cancel() }
+                plan.turns.forEach { it.join() }
                 var failure: Throwable? = null
                 suspend fun dispose(action: suspend () -> Unit) {
                     try {
@@ -358,25 +601,63 @@ class KcodePluginRuntime private constructor(
                         if (failure == null) failure = error else failure.addSuppressed(error)
                     }
                 }
+                // Admission is closed; no mutation can race these snapshots. Keep the runtime lock
+                // free so cleanup callbacks can inspect diagnostics or receive closed-service errors.
                 dispose { external?.close() }
-                records.values.toList().asReversed().forEach { record -> dispose { record.fiber?.dispose() } }
-                bootstrap.asReversed().forEach { fiber -> dispose { fiber.dispose() } }
-                dispose { context.fiber.dispose() }
-                applicationView.value = null
+                plan.fibers.forEach { fiber -> dispose { fiber.dispose() } }
+                dispose { hostInputs?.close() }
                 failure?.let { throw it }
+                applicationView.value = null
+                closeCompletion.complete(Unit)
+            } catch (error: Throwable) {
+                applicationView.value = null
+                closeCompletion.completeExceptionally(error)
+                throw error
             }
         }
     }
 
     companion object {
         suspend fun create(config: KcodePluginRuntimeConfig): KcodePluginRuntime {
+            try {
+                return createOwned(config)
+            } catch (error: Throwable) {
+                withContext(NonCancellable) {
+                    runCatching { config.hostInputs?.close() }.exceptionOrNull()?.let(error::addSuppressed)
+                }
+                throw error
+            }
+        }
+
+        private suspend fun createOwned(config: KcodePluginRuntimeConfig): KcodePluginRuntime {
+            val overlayUiSlots = MutableStateFlow(UiContributionsSnapshot())
+            val overlayHostState = ConversationOverlayHostState(overlayUiSlots.asStateFlow())
             val mounts = linkedMapOf<String, KcodePluginMount>()
             fun add(mount: KcodePluginMount) {
                 val id = mount.descriptor.id
                 require(id.isNotBlank() && id !in BootstrapIds) { "invalid product plugin id '$id'" }
                 require(mounts.put(id, mount) == null) { "duplicate plugin id '$id'" }
             }
-            if (config.profile.includeDefaults) defaultPlugins(config).forEach(::add)
+            if (config.profile.includeDefaults) (config.bundle ?: nativePluginBundle(NativePluginServices(
+                interactionPolicy = config.interactionPolicy,
+                settingsBackedInteraction = config.settingsBackedInteraction,
+                skillRuntime = config.skillRuntime,
+                conversationOverlayFactory = ConversationOverlayFactory {
+                    config.conversationOverlayFactory?.invoke(overlayUiSlots)
+                },
+                settingsStore = config.settingsStore,
+                settingsStoreFactory = config.settingsStoreFactory,
+                historyRepository = config.historyRepository,
+                historyRepositoryFactory = config.historyRepositoryFactory,
+                artifactRepository = config.artifactRepository,
+                artifactFileStore = config.artifactFileStore,
+                artifactFileStoreFactory = config.artifactFileStoreFactory,
+                conversationImageSaverFactory = config.conversationImageSaverFactory,
+                scheduledTaskNotificationsFactory = config.scheduledTaskNotificationsFactory,
+                webContainerController = config.webContainerController,
+                pluginCompositionStore = config.pluginCompositionStore,
+                conversationOverlayHostState = overlayHostState,
+            ))).forEach(::add)
             config.featurePlugins.forEach(::add)
             val overrideIds = mutableSetOf<String>()
             config.profile.overrides.forEach { mount ->
@@ -386,7 +667,7 @@ class KcodePluginRuntime private constructor(
                 mounts[id] = mount
             }
             require(config.profile.disabled.all { it in mounts }) { "profile disables unknown plugin ids" }
-            val context = Context()
+            val context = Context().let { config.hostInputs?.bind(it) ?: it }
             val bootstrap = mutableListOf<Fiber<*>>()
             val records = linkedMapOf<String, ManagedPlugin>()
             var external: DynamicPluginController? = null
@@ -405,7 +686,12 @@ class KcodePluginRuntime private constructor(
                     }
                 }
                 external = config.dynamicPluginControllerFactory?.create(context, context.require(Loader.Key), inventory)
-                return KcodePluginRuntime(context, bootstrap, records, inventory, external).also { it.settle() }
+                val aliases = config.builtinAliases
+                    ?: if (config.bundle == null && config.profile.includeDefaults) NativeBuiltinAliases else emptyMap()
+                return KcodePluginRuntime(context, config.hostInputs, bootstrap, records, inventory, external, aliases, overlayHostState, overlayUiSlots).also {
+                    it.restoreInstalledComposition()
+                    it.settle()
+                }
             } catch (error: Throwable) {
                 withContext(NonCancellable) {
                     runCatching { external?.close() }.exceptionOrNull()?.let(error::addSuppressed)
@@ -422,31 +708,6 @@ private val BootstrapIds = setOf("core.plugin-inventory", "core.loader")
 private fun builtinDescriptor(id: String, vararg capabilities: String) =
     PluginDescriptor(id, "builtin", "built-in", capabilities.toSet())
 
-private fun <C> builtin(id: String, plugin: Plugin<C>, config: C, vararg capabilities: String) =
-    kcodePlugin(builtinDescriptor(id, *capabilities), plugin, config)
-
-private fun defaultPlugins(config: KcodePluginRuntimeConfig): List<KcodePluginMount> = listOf(
-    builtin("core.tools", ToolsServicePlugin, Unit, "tools"),
-    builtin("core.system-prompt", SystemPromptServicePlugin, Unit, "systemPrompt"),
-    builtin("core.llm", LlmServicePlugin, Unit, "llm"),
-    builtin("core.continuations", ContinuationServicePlugin, Unit, "continuations"),
-    builtin("provider.subagents.in-process", InProcessSubagentProviderPlugin, Unit, "subagents"),
-    builtin("provider.llm.koog", DefaultModelAdaptersPlugin, Unit, "llm"),
-    builtin("provider.prompt.default", DefaultSystemPromptPlugin, Unit, "systemPrompt"),
-    builtin("provider.skills.platform", SkillServicePlugin, SkillServicePluginConfig(config.skillRuntime), "skills"),
-    builtin("consumer.tools.subagent", SubagentToolConsumerPlugin, Unit, "subagent", "tools"),
-    builtin("consumer.tools.goal", GoalToolConsumerPlugin, Unit, "goal", "tools"),
-    builtin("consumer.tools.schedule", ScheduledTaskToolConsumerPlugin, Unit, "schedule", "tools"),
-    builtin("provider.continuation.subagent", SubagentContinuationPlugin, Unit, "subagent", "continuations"),
-    builtin("provider.continuation.goal", GoalContinuationPlugin, Unit, "goal", "continuations"),
-    builtin("provider.interaction.platform", InteractionServicePlugin, InteractionPluginConfig(config.interactionPolicy), "interaction"),
-    builtin("provider.settings.platform", SettingsProviderPlugin, config.settingsStore, "settings"),
-    builtin("provider.history.platform", HistoryProviderPlugin, config.historyRepository, "history"),
-    builtin("provider.artifacts.platform", ArtifactsProviderPlugin, config.artifactRepository, "artifacts"),
-    builtin("provider.web-containers.platform", WebContainersProviderPlugin, config.webContainerController, "webContainers"),
-    builtin("provider.agent-loop.koog", KoogAgentLoopPlugin, AgentLoopPluginConfig(config.conversationOverlayController), "agents", "agentLoop"),
-    builtin("provider.ui.compose", ApplicationUiPlugin, DefaultApplicationRenderer, "applicationUi"),
-)
 
 data class KcodePluginDiagnostics(
     val plugins: List<PluginDescriptor>,

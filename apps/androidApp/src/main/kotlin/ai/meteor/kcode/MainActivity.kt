@@ -1,51 +1,60 @@
 package ai.meteor.kcode
 
-import ai.meteor.kcode.activeAndroidWebContainerActivity
+import androidx.core.content.ContextCompat
+import android.content.IntentFilter
+import android.content.Intent
+import android.content.Context
+import android.content.BroadcastReceiver
 import ai.meteor.kcode.createAndroidKoogChatRuntime
-import ai.meteor.kcode.export.AndroidConversationImageSaver
-import ai.meteor.kcode.history.createAndroidConversationHistoryRepository
-import ai.meteor.kcode.settings.createAndroidAppSettingsStore
-import ai.meteor.kcode.settings.ShellExecutionMode
-import ai.meteor.kcode.settings.ToolPermissionMode
-import ai.meteor.kcode.shared.R
-import ai.meteor.kcode.tools.permission.ToolApprovalRequest
-import ai.meteor.kcode.tools.permission.ToolCallApprover
-import android.app.AlertDialog
-import android.content.pm.PackageManager
+import ai.meteor.kcode.plugin.api.AndroidPermissionRequestBroker
+import ai.meteor.kcode.plugin.api.AndroidConfirmationDialogHost
 import android.graphics.Color
-import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.SystemBarStyle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.coroutines.resume
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
-    private lateinit var scheduledTaskPlatformHost: AndroidScheduledTaskPlatformHost
+    private val settingsChanged = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == SettingsChangedAction) recreate()
+        }
+    }
+
+    private val confirmationDialogs = AndroidConfirmationDialogHost {
+        (application as KcodeApplication).hostActivities.current() ?: this
+    }
     private lateinit var agentRuntime: KcodeAgentRuntime
-    private val notificationPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) {}
+    private val permissionBroker: AndroidPermissionRequestBroker = AndroidPermissionRequestBroker(
+        context = { this },
+        launch = { permission -> permissionLauncher.launch(arrayOf(permission)) },
+    )
+    private val permissionLauncher: ActivityResultLauncher<Array<String>> = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results -> permissionBroker.onResult(results) }
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             if (::agentRuntime.isInitialized) {
-                agentRuntime.conversationOverlayController?.setHostForeground(true)
+                lifecycleScope.launch { agentRuntime.conversationOverlayController?.setHostForeground(true) }
             }
         }
 
         override fun onStop(owner: LifecycleOwner) {
             if (::agentRuntime.isInitialized) {
-                agentRuntime.conversationOverlayController?.setHostForeground(false)
+                lifecycleScope.launch { agentRuntime.conversationOverlayController?.setHostForeground(false) }
             }
         }
     }
@@ -56,83 +65,54 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        scheduledTaskPlatformHost = AndroidScheduledTaskPlatformHost(applicationContext)
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        val settingsStore = createAndroidAppSettingsStore(applicationContext)
-        val historyRepository = createAndroidConversationHistoryRepository(applicationContext)
-        val imageSaver = AndroidConversationImageSaver(this)
-        val shellExecutionMode = AtomicReference(ShellExecutionMode.App)
-        val toolPermissionMode = AtomicReference(ToolPermissionMode.Ask)
-        agentRuntime = createAndroidKoogChatRuntime(
-            activity = this,
-            modeProvider = { shellExecutionMode.get() },
-            permissionModeProvider = { toolPermissionMode.get() },
-            toolCallApprover = ToolCallApprover(::confirmToolCall),
-            settingsStore = settingsStore,
-            historyRepository = historyRepository,
+        ContextCompat.registerReceiver(
+            this, settingsChanged, IntentFilter(SettingsChangedAction),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
-        setContent {
-            checkNotNull(agentRuntime.applicationContent).Render(
-                ApplicationHostOptions(
-                    generationRunner = (application as KcodeApplication).generationRunner,
-                    imageSaver = imageSaver,
-                    shellSettingsAvailable = true,
-                    toolPermissionControlsAvailable = true,
-                    scheduledTaskPlatformHost = scheduledTaskPlatformHost,
-                    onShellExecutionModeChanged = shellExecutionMode::set,
-                    onToolPermissionModeChanged = toolPermissionMode::set,
-                ),
-            )
+        lifecycleScope.launch {
+            var pendingRuntime: KcodeAgentRuntime? = null
+            var adopted = false
+            try {
+                val runtime = createAndroidKoogChatRuntime(
+                    activity = this@MainActivity,
+                    settingsBackedShell = true,
+                    permissionHost = permissionBroker,
+                    settingsBackedInteraction = true,
+                    confirmationDialogs = confirmationDialogs,
+                )
+                pendingRuntime = runtime
+                currentCoroutineContext().ensureActive()
+                runtime.conversationOverlayController?.setHostForeground(
+                    ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+                )
+                agentRuntime = runtime
+                (application as KcodeApplication).attachContent(checkNotNull(agentRuntime.applicationContent))
+                adopted = true
+                ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+                setContent {
+                    checkNotNull(agentRuntime.applicationContent).Render(
+                        ApplicationHostOptions(
+                            shellSettingsAvailable = true,
+                            toolPermissionControlsAvailable = true,
+                        ),
+                    )
+                }
+            } finally {
+                if (!adopted) withContext(NonCancellable) { pendingRuntime?.close() }
+            }
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        scheduledTaskPlatformHost.setForeground(true)
-    }
-
-    override fun onStop() {
-        scheduledTaskPlatformHost.setForeground(false)
-        super.onStop()
     }
 
     override fun onDestroy() {
+        confirmationDialogs.close()
+        permissionBroker.close()
+        unregisterReceiver(settingsChanged)
         ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
         if (::agentRuntime.isInitialized) {
-            runBlocking { agentRuntime.close() }
+            agentRuntime.applicationContent?.let { (application as KcodeApplication).detachContent(it) }
+            (application as KcodeApplication).retireRuntime(agentRuntime)
         }
         super.onDestroy()
     }
 
-    private suspend fun confirmToolCall(request: ToolApprovalRequest): Boolean =
-        withContext(Dispatchers.Main.immediate) {
-            if (isFinishing || isDestroyed) return@withContext false
-            val dialogActivity = activeAndroidWebContainerActivity() ?: this@MainActivity
-            suspendCancellableCoroutine { continuation ->
-                var dialog: AlertDialog? = null
-                dialog = AlertDialog.Builder(dialogActivity)
-                    .setTitle(getString(R.string.tool_confirmation_title, request.name))
-                    .setMessage(
-                        getString(
-                            R.string.tool_confirmation_message,
-                            request.description.ifBlank { request.name }.take(2_048),
-                            request.input.take(8_192),
-                        ),
-                    )
-                    .setPositiveButton(R.string.tool_confirmation_allow) { _, _ ->
-                        if (continuation.isActive) continuation.resume(true)
-                    }
-                    .setNegativeButton(R.string.tool_confirmation_deny) { _, _ ->
-                        if (continuation.isActive) continuation.resume(false)
-                    }
-                    .setOnCancelListener {
-                        if (continuation.isActive) continuation.resume(false)
-                    }
-                    .show()
-                continuation.invokeOnCancellation { runOnUiThread { dialog?.dismiss() } }
-            }
-        }
 }

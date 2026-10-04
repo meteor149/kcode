@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import ai.meteor.kcode.settings.createAndroidAppSettingsStore
+import ai.meteor.kcode.settings.SettingsUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,10 +16,9 @@ class AdbSettingsReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching {
                 require(intent.action == ConfigureSettingsAction) { "Unsupported action" }
-                val update = intent.toAdbSettingsUpdate()
-                val settingsStore = createAndroidAppSettingsStore(context)
-                val applied = settingsStore.load().applyAdbSettingsUpdate(update)
-                settingsStore.save(applied.settings)
+                val update = intent.toSettingsUpdate()
+                val applied = (context.applicationContext as KcodeApplication).updateSettings(update)
+                context.sendBroadcast(Intent(SettingsChangedAction).setPackage(context.packageName))
                 applied.changedFields.joinToString(
                     prefix = "Updated kcode settings: ",
                     separator = ", ",
@@ -40,7 +39,7 @@ class AdbSettingsReceiver : BroadcastReceiver() {
 
 private const val ConfigureSettingsAction = "ai.meteor.kcode.action.CONFIGURE_SETTINGS"
 
-private fun Intent.toAdbSettingsUpdate(): AdbSettingsUpdate {
+private fun Intent.toSettingsUpdate(): SettingsUpdate {
     val unknownExtras = extras?.keySet().orEmpty() - AdbSettingExtra.entries.mapTo(mutableSetOf()) { it.key }
     require(unknownExtras.isEmpty()) { "Unknown setting: ${unknownExtras.sorted().joinToString()}" }
     fun stringExtra(extra: AdbSettingExtra): String? = if (hasExtra(extra.key)) {
@@ -48,7 +47,7 @@ private fun Intent.toAdbSettingsUpdate(): AdbSettingsUpdate {
     } else {
         null
     }
-    return AdbSettingsUpdate(
+    return SettingsUpdate(
         modelProvider = stringExtra(AdbSettingExtra.ModelProvider),
         model = stringExtra(AdbSettingExtra.Model),
         modelApiKey = stringExtra(AdbSettingExtra.ModelApiKey),
@@ -76,3 +75,5 @@ private enum class AdbSettingExtra(val key: String) {
     SearchProvider("search-provider"),
     SearchApiKey("search-api-key"),
 }
+
+internal const val SettingsChangedAction = "ai.meteor.kcode.action.SETTINGS_CHANGED"

@@ -13,9 +13,17 @@ kotlin {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
     }
     sourceSets {
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+        }
         commonMain.dependencies {
             api(project(":plugins:api"))
+            implementation(project(":libraries:ui"))
+            api(project(":plugins:default-ui-api"))
             implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
         }
     }
 }

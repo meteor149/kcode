@@ -1,5 +1,6 @@
 plugins {
     kotlin("multiplatform")
+    kotlin("plugin.serialization")
     id("com.android.library")
 }
 
@@ -16,8 +17,13 @@ kotlin {
     }
     sourceSets {
         commonMain.dependencies {
-            api(project(":plugins:runtime"))
-            implementation(project(":plugins:tools"))
+            api(project(":plugins:api"))
+            implementation("ai.koog:agents-ext:1.1.1-beta")
+        }
+        androidUnitTest.dependencies { implementation(project(":plugins:native-filesystem")) }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
     }
 }

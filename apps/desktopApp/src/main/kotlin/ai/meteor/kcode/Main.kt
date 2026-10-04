@@ -1,9 +1,11 @@
 package ai.meteor.kcode
 
-import ai.meteor.kcode.export.DesktopConversationImageSaver
-import ai.meteor.kcode.history.createDesktopConversationHistoryRepository
-import ai.meteor.kcode.settings.createDesktopAppSettingsStore
+import androidx.compose.runtime.DisposableEffect
+import java.util.concurrent.atomic.AtomicReference
+import java.awt.Frame
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -12,13 +14,14 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 fun main() {
-    val settingsStore = createDesktopAppSettingsStore()
-    val historyRepository = createDesktopConversationHistoryRepository()
-    val runtime = createDesktopKoogChatRuntime(settingsStore, historyRepository)
+    val applicationWindow = AtomicReference<Frame?>()
+    val runtime = createDesktopKoogChatRuntime(applicationWindow = applicationWindow::get)
     application {
+        val retirementScope = rememberCoroutineScope()
+        val closing = remember { mutableStateOf(false) }
         val appIcon = painterResource(
             if (System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)) {
                 "kcode-icon-macos.png"
@@ -32,19 +35,29 @@ fun main() {
         )
         Window(
             onCloseRequest = {
-                runBlocking { runtime.close() }
-                exitApplication()
+                if (!closing.value) {
+                    closing.value = true
+                    retirementScope.launch {
+                        try {
+                            runtime.close()
+                            exitApplication()
+                        } finally {
+                            closing.value = false
+                        }
+                    }
+                }
             },
             state = state,
             title = "kcode",
             icon = appIcon,
         ) {
-            val scheduledTaskPlatformHost = remember(window) { DesktopScheduledTaskPlatformHost(window) }
+            DisposableEffect(window) {
+                applicationWindow.set(window)
+                onDispose { applicationWindow.compareAndSet(window, null) }
+            }
             checkNotNull(runtime.applicationContent).Render(
                 ApplicationHostOptions(
-                    imageSaver = DesktopConversationImageSaver(),
                     toolPermissionControlsAvailable = true,
-                    scheduledTaskPlatformHost = scheduledTaskPlatformHost,
                 ),
             )
         }

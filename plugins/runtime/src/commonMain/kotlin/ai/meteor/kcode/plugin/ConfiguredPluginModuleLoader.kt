@@ -1,16 +1,22 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.plugin.api.PluginCodeOrigin
 import org.cordis.asDynamicPlugin
 import org.cordis.ConfigValidator
 import org.cordis.loader.ModuleLoader
 import org.cordis.loader.ReloadTransaction
 import org.cordis.Plugin
+import org.cordis.Context
+import org.cordis.EffectScope
 
 /**
  * Cordis HMR replays fiber configs. Bind each artifact generation to its installation config so
- * code and config change in the same transaction, with the original validator still enforced.
+ * code, config and origin change in the same transaction, with the original validator enforced.
  */
-class ConfiguredPluginModuleLoader(private val delegate: ModuleLoader) : ModuleLoader by delegate {
+class ConfiguredPluginModuleLoader(
+    private val delegate: ModuleLoader,
+    private val codeOrigin: (String) -> PluginCodeOrigin? = { null },
+) : ModuleLoader by delegate {
     private data class Export(val original: Any?, val wrapped: Any?)
     private val configs = mutableMapOf<String, Any?>()
     private val active = mutableMapOf<String, Export>()
@@ -49,9 +55,16 @@ class ConfiguredPluginModuleLoader(private val delegate: ModuleLoader) : ModuleL
         cache[url]?.takeIf { it.original === value }?.let { return it.wrapped }
         val plugin = value.asDynamicPlugin() ?: return value
         if (url !in configs) return value
+        // HMR imports the candidate graph before retiring any active fibers. Reject invalid
+        // deployment data here, including disabled entries, rather than during replacement apply.
         val configured = configs[url]
+        val validated = plugin.config?.validate(configured) ?: configured
+        val origin = codeOrigin(url)
         val wrapped = object : Plugin<Any?> by plugin {
-            override val config = ConfigValidator<Any?> { plugin.config?.validate(configured) ?: configured }
+            override val config = ConfigValidator<Any?> { validated }
+            override suspend fun apply(ctx: Context, config: Any?, effect: EffectScope) {
+                plugin.apply(origin?.bind(ctx) ?: ctx, config, effect)
+            }
         }
         cache[url] = Export(value, wrapped)
         return wrapped

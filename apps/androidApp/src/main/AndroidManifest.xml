@@ -26,15 +26,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service
-            android:name=".LlmGenerationService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
         <receiver
             android:name=".AdbSettingsReceiver"
             android:enabled="true"
             android:exported="true"
-            android:permission="android.permission.DUMP" />
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="ai.meteor.kcode.action.CONFIGURE_SETTINGS" />
+            </intent-filter>
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

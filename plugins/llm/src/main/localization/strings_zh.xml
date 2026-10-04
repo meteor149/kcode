@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="provider_openai_zh">OpenAI</string>
+    <string name="provider_azure_openai_zh">Azure OpenAI</string>
+    <string name="provider_anthropic_zh">Anthropic</string>
+    <string name="provider_google_zh">Google Gemini</string>
+    <string name="provider_deepseek_zh">DeepSeek</string>
+    <string name="provider_openrouter_zh">OpenRouter</string>
+    <string name="provider_bedrock_zh">Amazon Bedrock</string>
+    <string name="provider_mistral_zh">Mistral AI</string>
+    <string name="provider_alibaba_zh">阿里云 DashScope</string>
+    <string name="provider_ollama_zh">Ollama</string>
+    <string name="provider_glm_zh">智谱 GLM</string>
+    <string name="provider_openai_note_zh">稳定、通用</string>
+    <string name="provider_azure_openai_note_zh">企业级 Azure 部署</string>
+    <string name="provider_anthropic_note_zh">长上下文与智能体</string>
+    <string name="provider_google_note_zh">Gemini 多模态模型</string>
+    <string name="provider_deepseek_note_zh">推理与代码</string>
+    <string name="provider_openrouter_note_zh">统一接入多家模型</string>
+    <string name="provider_bedrock_note_zh">AWS 托管基础模型</string>
+    <string name="provider_mistral_note_zh">欧洲模型与代码能力</string>
+    <string name="provider_alibaba_note_zh">通过 DashScope 使用通义千问</string>
+    <string name="provider_ollama_note_zh">私有本地模型</string>
+    <string name="provider_glm_note_zh">中文与智能体</string>
+    <string name="model_gpt4o_mini_zh">GPT-4o mini</string>
+    <string name="model_gpt4o_mini_desc_zh">快速且经济，适合日常任务</string>
+    <string name="model_gpt4o_zh">GPT-4o</string>
+    <string name="model_gpt4o_desc_zh">更强的综合理解与生成能力</string>
+    <string name="model_deepseek_flash_zh">DeepSeek V4 Flash</string>
+    <string name="model_deepseek_flash_desc_zh">高速推理，适合日常编码</string>
+    <string name="model_deepseek_pro_zh">DeepSeek V4 Pro</string>
+    <string name="model_deepseek_pro_desc_zh">复杂推理与长程任务</string>
+    <string name="model_glm_51_zh">GLM-5.1</string>
+    <string name="model_glm_51_desc_zh">通用推理、代码与长程任务</string>
+    <string name="model_glm_flash_zh">GLM-4.7 FlashX</string>
+    <string name="model_glm_flash_desc_zh">快速中文对话与写作</string>
+</resources>

@@ -16,8 +16,7 @@ kotlin {
     }
     sourceSets {
         commonMain.dependencies {
-            api(project(":plugins:runtime"))
-            implementation(project(":plugins:tools"))
+            api(project(":plugins:api"))
         }
     }
 }

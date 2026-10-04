@@ -1,9 +1,12 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.plugin.api.PluginCodeArtifact
+import ai.meteor.kcode.plugin.api.validatePluginApi
 import ai.meteor.kcode.plugin.api.KcodePluginInventory
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import java.io.File
+import org.cordis.asDynamicPlugin
 import org.cordis.Context
 import org.cordis.FiberState
 import org.cordis.hmr.Hmr
@@ -22,16 +25,72 @@ internal class DesktopDynamicPluginController(
     trustedDirectory: File,
 ) : DynamicPluginController {
     private val modules = JvmModuleLoader(trustedDirectory)
-    private val configuredModules = ConfiguredPluginModuleLoader(modules)
+    private val configuredModules = ConfiguredPluginModuleLoader(modules) { url ->
+        val descriptors = modules.registered()
+        val root = descriptors.firstOrNull { modules.moduleUrl(it.id) == url }
+        root?.let { rootDescriptor ->
+            pluginCodeOrigin(
+                rootId = rootDescriptor.id,
+                nodes = descriptors.map { descriptor ->
+                    PluginCodeNode(
+                        artifact = PluginCodeArtifact(
+                            id = descriptor.id,
+                            version = descriptor.version,
+                            artifactPath = descriptor.file.path,
+                            sha256 = descriptor.expectedSha256,
+                            entryClass = descriptor.entryClass,
+                        ),
+                        dependencies = descriptor.dependencies,
+                    )
+                },
+            )
+        }
+    }
     private val hmr: Hmr
     private val specs = linkedMapOf<String, DynamicPluginSpec>()
+    private var manualReloadOnly = false
+
+    private suspend fun ensureManualReloadOnly() {
+        if (!manualReloadOnly) {
+            // stash schedules a debounce job even without a filesystem watcher. Package changes
+            // belong to the manager transaction; stop the background scope before using explicit HMR.
+            hmr.stop()
+            manualReloadOnly = true
+        }
+    }
 
     init {
         loader.internal = configuredModules
         hmr = Hmr(context, HmrConfig(base = trustedDirectory.path))
     }
 
+    override suspend fun validateCandidate(spec: DynamicPluginSpec) {
+        spec.validatePluginApi()
+        require(spec.id !in specs) { "Candidate '${spec.id}' is already installed" }
+        modules.register(
+            JvmModuleDescriptor(
+                id = spec.id,
+                version = spec.version,
+                entryClass = spec.entryClass,
+                file = File(spec.artifactPath),
+                expectedSha256 = spec.sha256,
+                dependencies = spec.dependencies,
+                sharedHostPackages = SharedPluginApiPackages,
+            ),
+        )
+        val transaction = modules.beginReload(setOf(modules.moduleUrl(spec.id)))
+        try {
+            val candidate = transaction.import(modules.moduleUrl(spec.id)).asDynamicPlugin()
+                ?: error("plugin '${spec.id}' has no valid entry")
+            candidate.config?.validate(spec.config)
+        } finally {
+            try { transaction.rollback() } finally { modules.unregister(spec.id) }
+        }
+    }
+
     override suspend fun replace(spec: DynamicPluginSpec) {
+        spec.validatePluginApi()
+        ensureManualReloadOnly()
         require(spec.id in specs) { "plugin '${spec.id}' is not installed" }
         modules.register(
             JvmModuleDescriptor(
@@ -69,11 +128,13 @@ internal class DesktopDynamicPluginController(
             )
             throw error
         }
-        specs[spec.id] = spec
-        inventory.replace(PluginDescriptor(spec.id, spec.version, spec.artifactPath, spec.capabilities))
+        specs[spec.id] = spec.copy(enabled = !entry.disabled)
+        inventory.replace(PluginDescriptor(spec.id, spec.version, spec.artifactPath, spec.capabilities, state = if (entry.disabled) PluginState.Disabled else PluginState.Active))
     }
 
     override suspend fun install(spec: DynamicPluginSpec) {
+        spec.validatePluginApi()
+        ensureManualReloadOnly()
         require(spec.id !in specs) { "plugin '${spec.id}' is already installed" }
         require(inventory.snapshot().none { it.id == spec.id }) {
             "plugin id '${spec.id}' is reserved by an existing plugin"
@@ -91,9 +152,11 @@ internal class DesktopDynamicPluginController(
         val url = modules.moduleUrl(spec.id)
         configuredModules.configure(url, spec.config)
         try {
-            modules.import(url, null)
-            loader.create(EntryOptions(id = entryId(spec.id), name = url, config = spec.config))
-            checkNotNull(loader.resolve(entryId(spec.id)).fiber) { "plugin '${spec.id}' did not activate" }
+            val imported = modules.import(url, null).asDynamicPlugin()
+                ?: error("plugin '${spec.id}' has no valid entry")
+            if (!spec.enabled) imported.config?.validate(spec.config)
+            loader.create(EntryOptions(id = entryId(spec.id), name = url, config = spec.config, disabled = !spec.enabled))
+            if (spec.enabled) checkNotNull(loader.resolve(entryId(spec.id)).fiber) { "plugin '${spec.id}' did not activate" }
             specs[spec.id] = spec
             inventory.publish(
                 PluginDescriptor(spec.id, spec.version, spec.artifactPath, spec.capabilities),
@@ -138,6 +201,7 @@ internal class DesktopDynamicPluginController(
     override suspend fun setEnabled(id: String, enabled: Boolean) {
         val spec = specs[id] ?: error("plugin '$id' is not installed")
         loader.resolve(entryId(id)).update(EntryPatch(disabled = changeTo(!enabled)))
+        specs[id] = spec.copy(enabled = enabled)
         inventory.replace(
             PluginDescriptor(
                 id, spec.version, spec.artifactPath, spec.capabilities,

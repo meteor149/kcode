@@ -1,73 +1,110 @@
 package ai.meteor.kcode
 
-import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.ext.tool.file.EditFileTool
-import ai.koog.agents.ext.tool.file.ListDirectoryTool
-import ai.koog.agents.ext.tool.file.ReadFileTool
-import ai.koog.agents.ext.tool.file.WriteFileTool
-import ai.meteor.kcode.artifact.createDesktopArtifactRepository
+import ai.meteor.kcode.plugin.nativeexecution.DesktopNativeShellPlugin
+import ai.meteor.kcode.plugin.notifications.DesktopNativeNotificationsPlugin
+import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.plugin.kcodePlugin
+import ai.meteor.kcode.plugin.LocalizedNativeToolApprovalPlugin
+import ai.meteor.kcode.plugin.SettingsToolInteractionPlugin
+import java.awt.Frame
+import ai.meteor.kcode.plugin.export.DesktopNativeImageSavingPlugin
+import ai.meteor.kcode.plugin.artifacts.DesktopNativeArtifactsPlugin
 import ai.meteor.kcode.chat.ChatService
+import ai.meteor.kcode.plugin.history.DesktopNativeHistoryPlugin
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.history.TransientConversationHistoryRepository
-import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.DesktopDynamicPluginController
 import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
+import ai.meteor.kcode.plugin.FilePluginCompositionStore
+import ai.meteor.kcode.plugin.KcodePluginProfile
+import ai.meteor.kcode.plugin.KcodePluginRuntime
+import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.plugin.api.DesktopPluginHostInputs
+import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.feature.artifactToolPlugin
 import ai.meteor.kcode.plugin.feature.desktopShellToolPlugin
 import ai.meteor.kcode.plugin.feature.filesystemToolPlugin
 import ai.meteor.kcode.plugin.feature.skillToolPlugin
 import ai.meteor.kcode.plugin.feature.webContainerToolPlugin
 import ai.meteor.kcode.plugin.feature.webSearchToolPlugin
-import ai.meteor.kcode.plugin.KcodePluginProfile
-import ai.meteor.kcode.plugin.KcodePluginRuntime
-import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.plugin.provider.webSearchProviderPlugin
+import ai.meteor.kcode.plugin.settingsstorage.DesktopNativeSettingsPlugin
 import ai.meteor.kcode.settings.AppSettingsStore
-import ai.meteor.kcode.settings.ToolPermissionMode
-import ai.meteor.kcode.skill.createWorkspaceSkillRuntime
-import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
-import ai.meteor.kcode.webcontainer.DesktopWebContainerLauncher
+import ai.meteor.kcode.plugin.webcontainer.native.DesktopNativeWebContainerPlugin
+import ai.meteor.kcode.plugin.nativefilesystem.DesktopNativeFileSystemPlugin
+import ai.meteor.kcode.plugin.skills.WorkspaceSkillsPlugin
 import java.nio.file.Files
 import java.nio.file.Path
-import javax.swing.JOptionPane
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.swing.Swing
-import kotlinx.coroutines.withContext
 
-fun createDesktopKoogChatService(settingsStore: AppSettingsStore): ChatService =
+fun createDesktopKoogChatService(settingsStore: AppSettingsStore? = null): ChatService =
     createDesktopKoogChatRuntime(settingsStore).chatService
 
 fun createDesktopKoogChatRuntime(
-    settingsStore: AppSettingsStore,
-    historyRepository: ConversationHistoryRepository = TransientConversationHistoryRepository,
+    settingsStore: AppSettingsStore? = null,
+    historyRepository: ConversationHistoryRepository? = null,
     profile: KcodePluginProfile = KcodePluginProfile(),
+    applicationWindow: () -> Frame? = { null },
 ): KcodeAgentRuntime {
     val workspace = Files.createDirectories(
         Path.of(System.getProperty("user.home"), ".kcode", "workspace"),
     ).toRealPath()
-    val fileSystem = DesktopAgentWorkspaceFileSystem(workspace)
-    val skillWorkspace = DesktopAgentWorkspace(workspace)
-    val skillRuntime = createWorkspaceSkillRuntime(skillWorkspace, "desktop-app-data")
-    val artifactRepository = createDesktopArtifactRepository()
-    val webContainerController = DesktopWebContainerLauncher(workspace)
     val pluginDirectory = Files.createDirectories(
         Path.of(System.getProperty("user.home"), ".kcode", "plugins"),
     ).toFile()
+    val nativeOverrides = if (profile.includeDefaults) buildList {
+        if (historyRepository == null && profile.overrides.none { it.descriptor.id == "provider.history.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.history.platform", "builtin", "native", setOf("history")),
+            DesktopNativeHistoryPlugin(), Path.of(System.getProperty("user.home"), ".kcode", "history.db").toAbsolutePath().toString(),
+        ))
+        if (settingsStore == null && profile.overrides.none { it.descriptor.id == "provider.settings.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.settings.platform", "builtin", "native", setOf("settings")),
+            DesktopNativeSettingsPlugin(), Path.of(System.getProperty("user.home"), ".kcode", "settings.preferences_pb").toAbsolutePath().toString(),
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.artifacts.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.artifacts.platform", "builtin", "native", setOf("artifacts")),
+            DesktopNativeArtifactsPlugin(), Path.of(System.getProperty("user.home"), ".kcode", "workspace").toAbsolutePath().toString(),
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.skills.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.skills.platform", "builtin", "native", setOf("skills")),
+            WorkspaceSkillsPlugin(), Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.web-containers.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.web-containers.platform", "builtin", "native", setOf("webContainers")),
+            DesktopNativeWebContainerPlugin(), workspace.toString(),
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.interaction.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.interaction.platform", "builtin", "native", setOf("interaction")),
+            SettingsToolInteractionPlugin(), Unit,
+        ))
+
+        if (profile.overrides.none { it.descriptor.id == "provider.notifications.platform" }) add(kcodePlugin(
+            PluginDescriptor("provider.notifications.platform", "builtin", "native", setOf("notifications")),
+            DesktopNativeNotificationsPlugin(), Unit,
+        ))
+        if (profile.overrides.none { it.descriptor.id == "provider.export.image-saving" }) add(kcodePlugin(
+            PluginDescriptor("provider.export.image-saving", "builtin", "native", setOf("conversationImageSaving")),
+            DesktopNativeImageSavingPlugin(), Unit,
+        ))
+    } else emptyList()
+    val nativeProfile = profile.copy(overrides = profile.overrides + nativeOverrides)
     val featurePlugins = listOf(
-        filesystemToolPlugin(
-            ToolRegistry {
-                tool(ReadFileTool(fileSystem))
-                tool(ListDirectoryTool(fileSystem))
-                tool(WriteFileTool(fileSystem))
-                tool(EditFileTool(fileSystem))
-                tool(ReadMediaFileTool(fileSystem))
-            },
+        kcodePlugin(
+            PluginDescriptor("provider.tool-approvals.native", "builtin", "native", setOf("toolApprovals")),
+            LocalizedNativeToolApprovalPlugin(), Unit,
         ),
-        desktopShellToolPlugin(
-            ToolRegistry { tool(AgentShellTool(DesktopShellCommandExecutor(workspace))) },
+        kcodePlugin(
+            PluginDescriptor("provider.fs.platform", "builtin", "native", setOf("fs", "skillWorkspace")),
+            DesktopNativeFileSystemPlugin(), workspace.toString(),
         ),
+        filesystemToolPlugin(),
+        kcodePlugin(
+            PluginDescriptor("provider.shell.platform", "builtin", "native", setOf("shell")),
+            DesktopNativeShellPlugin(), workspace.toString(),
+        ),
+        desktopShellToolPlugin(),
         webContainerToolPlugin(),
+        webSearchProviderPlugin(),
         webSearchToolPlugin(),
         skillToolPlugin(),
         artifactToolPlugin(),
@@ -76,18 +113,15 @@ fun createDesktopKoogChatRuntime(
         KcodePluginRuntime.create(
             KcodePluginRuntimeConfig(
                 interactionPolicy = InteractionPolicy(
-                    permissionModeProvider = {
-                        ToolPermissionMode.fromCode(settingsStore.load().toolPermissionMode)
-                    },
-                    approver = ToolCallApprover { request -> confirmDesktopToolCall(request) },
+                    approver = ToolCallApprover { false },
                 ),
-                skillRuntime = skillRuntime,
-                profile = profile,
+                hostInputs = DesktopPluginHostInputs(applicationWindow),
+                settingsBackedInteraction = true,
+                profile = nativeProfile,
                 settingsStore = settingsStore,
                 historyRepository = historyRepository,
-                artifactRepository = artifactRepository,
-                webContainerController = webContainerController,
                 featurePlugins = featurePlugins,
+                pluginCompositionStore = FilePluginCompositionStore(pluginDirectory),
                 dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
                     DesktopDynamicPluginController(context, loader, inventory, pluginDirectory)
                 },
@@ -96,21 +130,10 @@ fun createDesktopKoogChatRuntime(
     }
     return KcodeAgentRuntime(
         chatService = pluginRuntime.chatService,
-        webContainerController = webContainerController,
-        artifactRepository = artifactRepository,
+        webContainerController = pluginRuntime.webContainerController,
+        artifactRepository = pluginRuntime.artifactRepository,
         pluginManager = pluginRuntime.pluginManager,
         owner = pluginRuntime,
         applicationContent = pluginRuntime,
     )
 }
-
-private suspend fun confirmDesktopToolCall(request: ToolApprovalRequest): Boolean =
-    withContext(Dispatchers.Swing) {
-        JOptionPane.showConfirmDialog(
-            null,
-            "kcode wants to use ${request.name}.\n\nPurpose\n${request.description.ifBlank { request.name }.take(2_048)}\n\nInput\n${request.input.take(8_192)}",
-            "Allow tool call?",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.WARNING_MESSAGE,
-        ) == JOptionPane.YES_OPTION
-    }

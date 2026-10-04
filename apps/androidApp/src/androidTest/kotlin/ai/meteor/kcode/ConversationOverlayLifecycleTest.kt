@@ -36,12 +36,14 @@ class ConversationOverlayLifecycleTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             lateinit var turn: AgentConversationOverlayTurn
             lateinit var controller: AgentConversationOverlayController
+            val runtime = waitForRuntime(scenario)
             scenario.onActivity { activity ->
-                val runtimeField = MainActivity::class.java.getDeclaredField("agentRuntime").apply {
-                    isAccessible = true
-                }
-                val runtime = runtimeField.get(activity) as KcodeAgentRuntime
-                controller = requireNotNull(runtime.conversationOverlayController)
+                val pluginRuntime = requireNotNull(runtime.owner)
+                val contextField = pluginRuntime.javaClass.getDeclaredField("context").apply { isAccessible = true }
+                val pluginContext = contextField.get(pluginRuntime) as org.cordis.Context
+                val owned = runBlocking { pluginContext.require(ai.meteor.kcode.plugin.api.KcodeConversationOverlays.Key).current() }!!
+                val delegateField = owned.javaClass.getDeclaredField("delegate").apply { isAccessible = true }
+                controller = delegateField.get(owned) as AgentConversationOverlayController
                 turn = runBlocking {
                     controller.startTurn(
                         listOf(
@@ -80,6 +82,18 @@ class ConversationOverlayLifecycleTest {
             device.wait(Until.gone(By.text("kcode · 当前会话")), TIMEOUT_MILLIS / 2)
             assertNull(findOverlayTitle(device))
         }
+    }
+
+    private fun waitForRuntime(scenario: ActivityScenario<MainActivity>): KcodeAgentRuntime {
+        val field = MainActivity::class.java.getDeclaredField("agentRuntime").apply { isAccessible = true }
+        val deadline = android.os.SystemClock.uptimeMillis() + TIMEOUT_MILLIS
+        while (android.os.SystemClock.uptimeMillis() < deadline) {
+            var current: KcodeAgentRuntime? = null
+            scenario.onActivity { current = field.get(it) as? KcodeAgentRuntime }
+            current?.let { return it }
+            Thread.sleep(25)
+        }
+        error("Plugin runtime did not initialize")
     }
 
     private fun waitForOverlayTitle(device: UiDevice) =
