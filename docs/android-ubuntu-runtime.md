@@ -1,5 +1,9 @@
 # Android Ubuntu runtime
 
+Implementation ownership is in [native-execution](../plugins/native-execution/README.md).
+The UID-2000 test entry and permission-environment boundaries are documented in the
+[verification guide](verification.md#privileged-verification).
+
 kcode exposes two deliberately separate command tools on Android:
 
 - `execute_shell_command` runs Android `/system/bin/sh` as the selected App,

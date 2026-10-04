@@ -5,7 +5,7 @@
   <p>One adaptive Compose UI. One capable agent runtime. Your models, tools, skills, and data.</p>
 
   <p>
-    <strong>English</strong> · <a href="docs/README.zh-CN.md">简体中文</a>
+    <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
   </p>
 
   <p>
@@ -25,7 +25,7 @@ kcode is an open-source native AI agent for Android and desktop. It is built aro
 
 The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
 
-kcode's architectural goal is a Kotlin implementation of the DeepSeek Harness plugin model: “everything is a plugin.” Android and desktop share a [Cordis plugin tree](docs/plugin-architecture.md), with replaceable agent and application services. This is still a work in progress; the [Harness plugin specification](docs/deepseek-harness-plugin-spec.md) describes the target design, beyond what is implemented today.
+kcode's architectural goal is a Kotlin implementation of the DeepSeek Harness plugin model: “everything is a plugin.” Android and desktop share a [Cordis plugin tree](docs/plugin-architecture.md), with replaceable agent and application services. Existing application features are composed as replaceable plugins; the [feature audit](docs/plugin-feature-audit.md) records their implementation and lifecycle evidence. The [Harness plugin specification](docs/deepseek-harness-plugin-spec.md) also covers future subsystems whose APIs are reserved without providers. Real Shizuku authorization and root execution remain unverified.
 
 <table>
   <tr>
@@ -76,7 +76,7 @@ A built-in `kcode-web-app-builder` Skill drives the complete Web application loo
 
 Web Artifacts are small local applications managed inside the agent workspace. The agent can build one from conversation, debug it against the same Web container used by the product, and save it into the Artifacts library. Saved apps launch like native app entries instead of disappearing into chat history.
 
-The Web container supports local apps and remote sites, foreground/background lifecycle, a floating dock for active containers, DOM inspection, safe interaction handles, console collection, screenshots, and responsive debugging. Android additionally bridges available Web APIs to native device capabilities such as location, motion sensors, vibration, battery, camera, microphone, and file picking while preserving system permission checks. See [Artifact storage](docs/artifacts.md) and the [Web container guide](extensions/webContainer/README.md) for the implementation contracts.
+The Web container supports local apps and remote sites, foreground/background lifecycle, a floating dock for active containers, DOM inspection, safe interaction handles, console collection, screenshots, and responsive debugging. Android additionally bridges available Web APIs to native device capabilities such as location, motion sensors, vibration, battery, camera, microphone, and file picking while preserving system permission checks. See [Artifact storage](docs/artifacts.md) and the [Web container guide](plugins/web-container/WEB_CONTAINER_GUIDE.md) for the implementation contracts.
 
 ### Bring the model you prefer
 
@@ -101,7 +101,7 @@ Only the plugin inventory and loader are pinned bootstrap components. The defaul
 
 Desktop supports external JAR plugins; Android supports APK/dex plugins. The runtime supports loading, enabling, disabling, replacement, and unloading, with rollback on failed replacement. Actual external package loading is covered by desktop tests and Android device instrumentation tests. Plugin mutations require active agent turns to finish or be cancelled first.
 
-The shipped application starts with built-in plugins compiled into the host. It does not yet restore a separately installed plugin set at startup. Replacing the whole application renderer is supported; individual pages, settings fields, message renderers, and themes do not yet have independent plugin slots. Full Harness API decomposition, persistent plugin installation, ABI version negotiation, and state migration remain unfinished. See the [architecture guide](docs/plugin-architecture.md) for implementation details and boundaries.
+The shipped application composes built-in plugins and restores installed external packages and enable states from an atomic app-private manifest. Manifest publication failure rolls back the runtime change; incompatible declared API versions are rejected before loading. The application renderer, layout, sidebar, pages, theme, settings sections, messages, tool cards, and application effects have independent plugin contributions. A root UI resolves its own services and can render without any default application provider. Layout, sidebar, page, and navigation conventions live in the optional [default UI SDK](plugins/default-ui-api/README.md); the kernel uses open contribution keys and does not prescribe a layout. Reusable controls and design contracts live in the independent [UI library](libraries/ui/README.md), which UI plugins opt into without depending on application implementations. Conversation execution, generation runners, history sessions, Goals, scheduling, export, and each model provider are managed services or consumers. Android generation foreground policy is an independent plugin using shared OS leases. Plugin API 34 requires older external packages to be rebuilt. Missing providers suspend their consumers; operation owners cancel and await their work before withdrawal completes. Unimplemented Harness jobs, subprocess/PTY, full session event logs, and filesystem observation/version guards have [reserved contracts](docs/harness-reserved-api.md), with no placeholder providers. The [verification guide](docs/verification.md) records acceptance criteria and evidence limits; real Shizuku/root permission environments require independent verification. See the [architecture guide](docs/plugin-architecture.md) for the current boundaries.
 
 ## Platform support
 
@@ -165,42 +165,7 @@ The Ubuntu guest reports PRoot's emulated Linux root, but its actual Android fil
 
 #### Configure providers through ADB
 
-An authorized computer can configure the Android app without typing credentials on the device. Stop kcode first so an already-open settings screen cannot overwrite the external update, send an explicit broadcast, and then reopen the app. This Bash example selects DeepSeek plus Exa while keeping the secrets out of shell history:
-
-```bash
-read -rsp "DeepSeek API key: " KCODE_MODEL_API_KEY && echo
-read -rsp "Exa API key: " KCODE_SEARCH_API_KEY && echo
-adb shell am force-stop ai.meteor.kcode
-adb shell am broadcast --include-stopped-packages \
-  -a ai.meteor.kcode.action.CONFIGURE_SETTINGS \
-  -n ai.meteor.kcode/.AdbSettingsReceiver \
-  --es model-provider deepseek \
-  --es model deepseek-v4-pro \
-  --es model-api-key "$KCODE_MODEL_API_KEY" \
-  --es temperature 0.3 \
-  --es search-provider exa \
-  --es search-api-key "$KCODE_SEARCH_API_KEY"
-adb shell am start -n ai.meteor.kcode/.MainActivity
-unset KCODE_MODEL_API_KEY KCODE_SEARCH_API_KEY
-```
-
-The successful broadcast result lists only changed field names and never echoes credential values. Every option is a string extra supplied with `--es`; omitted options keep their current values:
-
-| Extra | Accepted value |
-| --- | --- |
-| `model-provider` | `openai`, `azure_openai`, `anthropic`, `google`, `deepseek`, `openrouter`, `bedrock`, `mistral`, `alibaba`, `ollama`, or `glm` |
-| `model` | A model ID offered for the selected provider; changing only the provider selects its first available model if necessary |
-| `model-api-key` | API key for the selected/current model provider |
-| `model-endpoint` | Endpoint required by Azure OpenAI or Ollama |
-| `model-region` | Region required by Amazon Bedrock |
-| `model-deployment` | Azure OpenAI deployment name |
-| `model-api-version` | Azure OpenAI API version |
-| `dashscope-region` | `china_mainland`, `singapore`, or `united_states` |
-| `temperature` | Number from `0` to `1` |
-| `search-provider` | `google`, `exa`, or `bright_data` |
-| `search-api-key` | API key for Exa or Bright Data; Google search does not use one |
-
-The receiver requires Android's system-protected `DUMP` permission, so normal third-party apps cannot invoke it; the ADB shell on an authorized connection can. Values are validated as one update and then stored through the same Keystore-protected encrypted MMKV used by the UI. Command arguments can still be observed transiently by the host or device, so use only a trusted computer and debugging connection. Environment variables prevent the literal keys from being saved in shell history.
+Open kcode before sending configuration broadcasts. The [ADB settings guide](docs/adb-settings.md) contains the complete PowerShell script, accepted options and result checks. A successful save returns `result=-1`; an adb exit code of zero alone does not prove saving.
 
 ## First run
 
@@ -222,7 +187,7 @@ Credential storage is platform-specific:
 - The global tool permission gate controls whether kcode denies, confirms, or immediately runs a tool. `Bypass` skips only kcode's prompt; it never bypasses operating-system, browser, WebView, Keystore, Shizuku, or root-manager controls.
 - Android shell execution has explicit app UID, Shizuku/ADB-shell, and root modes. An unavailable privilege source fails instead of silently falling back to another identity.
 - Android's Ubuntu tool follows the same selected identity. App and root modes share the private runtime, while ADB mode has a shell-owned runtime under `/data/local/tmp`; PRoot's guest root does not itself grant Android root access.
-- Android's ADB settings receiver accepts only explicit broadcasts from senders holding the system `DUMP` permission. It validates the complete update before writing to the normal encrypted settings store, but ADB command arguments remain visible to the trusted host while the command runs.
+- Android's ADB settings receiver accepts only explicit broadcasts from senders holding the system `DUMP` permission. The settings-command plugin validates the complete update before writing through the active settings provider, but ADB command arguments remain visible to the trusted host while the command runs.
 - Scheduled tasks execute only while the application process is available, persist their next-run state, and put each run in a separate conversation. Treat their prompts as future agent instructions using the model configured at run time and the same tool-permission, network, and operating-system constraints as an interactive turn.
 - Android's live conversation overlay is shown only while generation continues in the background and requires the operating system's “display over other apps” permission. Closing it does not grant or revoke any tool permission.
 - Local Web apps run in isolated containers and request sensitive capabilities at runtime. Remote sites never receive kcode's local native fallback bridge.
@@ -233,25 +198,32 @@ Please report security-sensitive issues privately to the maintainers instead of 
 
 ## Architecture
 
+Engineering guides and topic documentation are indexed in [docs](docs/README.md).
+
 ```text
 apps/
   androidApp/          Android application host
   desktopApp/          Desktop Compose host and distribution
+libraries/
+  ui/                  Optional reusable components, design contracts and vector resources
 plugins/
-  api/                 Stable Cordis service definitions and extension events
-  runtime/             Plugin-tree composition and lifecycle ownership
-  application/         Settings, history, Artifacts, Web containers, and Compose renderer providers
+  api/                 Shared plugin SDK: domain contracts, Cordis services and extension events
+  runtime/             Plugin-tree lifecycle, profiles, and committed UI snapshots
+  default-ui-api/      Optional default UI layout, sidebar, page, and theme protocols
+  bundle-native/       Default native product composition
+  application/         Default Compose root, settings session and product orchestration
+  ui-pages/            Independent chat, Artifact, settings host, and theme contributions
+  ui-settings/         Separate language, model, search, and Shell settings forms
+  capability-providers/ Platform fs and shell adapters
+  native-execution/    Native shell, Ubuntu and privileged process implementations
+  native-filesystem/   Native file and skill workspace implementations
+  native-notifications/ Native notification providers and owned platform resources
+  web-search-provider/ HTTP search implementation and client lifecycle
+  subagent-provider/   In-process coordination, separate from model tools
   agent-loop/          Koog loop provider
   inventory|tools|...  One Gradle module per core plugin capability
   filesystem|shell|... One Gradle module per platform feature consumer
   platform-*/          Desktop and Android loader/provider assembly
-shared/
-  src/commonMain/      Adaptive UI, domain state, persistence contracts
-  src/agentMain/       Koog runtime, tools, Goals, scheduled tasks, Skills, and multi-agent orchestration
-  src/*Main/           Platform storage, networking, tools, and host integrations
-  schemas/             Room migration schemas
-extensions/
-  webContainer/        Isolated Web runtimes, lifecycle, debugging, and native bridges
 docs/                  Design and engineering documentation
 ```
 
@@ -260,14 +232,17 @@ Android and desktop use the same Room schema with bundled SQLite.
 ## Build and test
 
 ```bash
-# Shared multiplatform tests
-./gradlew :shared:allTests
+# Plugin SDK multiplatform tests
+./gradlew :plugins:api:allTests
 
 # Every available multiplatform test suite
 ./gradlew allTests
 
 # Desktop plugin composition and external JAR loading
 ./gradlew :plugins:platform-desktop:test
+
+# Domain tools, search providers, and agent coordination
+./gradlew :plugins:goal:desktopTest :plugins:schedule:desktopTest :plugins:subagents:desktopTest :plugins:subagent-provider:desktopTest :plugins:web-search-provider:desktopTest
 
 # Android external APK/dex loading (requires an API 35+ device or emulator)
 ./gradlew :plugins:platform-android:connectedDebugAndroidTest

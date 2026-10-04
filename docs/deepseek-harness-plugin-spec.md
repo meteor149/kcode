@@ -1,118 +1,161 @@
-# DeepSeek Harness 插件接口设计与规范
+# DeepSeek Harness plugin interface design and specification
 
-本文总结本地参考仓库 `deepseek-harness` 在提交 `47f943859bef60e4160492346772ded9b24f765a` 上的插件架构。事实来源为该仓库的 `AGENTS.md`、`docs/architecture.md`、`docs/cordis-primer.md`、`docs/glossary.md`、`docs/subsystems/*`、`packages/README.md` 以及各分组 README。包清单覆盖该提交下所有带 `package.json` 的 Harness 包；精确字段和事件载荷仍以对应包的 README、导出类型与生成的事件目录为准。
+This document summarizes the plugin architecture of the local `deepseek-harness` reference
+repository at commit `47f943859bef60e4160492346772ded9b24f765a`. Its sources are that repository's
+`AGENTS.md`, `docs/architecture.md`, `docs/cordis-primer.md`, `docs/glossary.md`,
+`docs/subsystems/*`, `packages/README.md`, and group READMEs. The package catalog covers all
+Harness packages with a `package.json` at that commit. Consult the corresponding package
+READMEs, exported types, and generated event catalog for exact fields and event payloads.
 
-## 1. 总体模型
+See [Harness reserved APIs](harness-reserved-api.md) for Kotlin contracts, service keys, and
+lifecycle mappings of key subsystems that kcode has not implemented. Available definitions
+do not imply that the Native bundle supplies those capabilities.
 
-Harness 的核心命题是“一切皆插件”。模型适配器、会话日志、系统提示词、工具注册表、agent 接口和默认 agent loop 都没有启动特权，而是由 Cordis Loader 挂载到同一个插件树。插件只通过稳定的 `ctx.<key>` 服务、类型化事件和可逆 effect 交互，组合层通过 profile、bundle 和 patch 决定实际实现。
+## 1. Overall model
 
-一个可替换能力必须同时考虑三个角色：
+Harness treats everything as a plugin. Model adapters, session logs, system prompts, tool
+registries, agent interfaces, and the default agent loop have no startup privileges.
+The Cordis Loader mounts them in the same plugin tree. Plugins interact only through stable
+`ctx.<key>` services, typed events, and reversible effects. Profiles, bundles, and patches
+let the composition layer select implementations.
 
-- **Service Definition**：声明稳定服务键、调用接口、数据类型、错误和事件；消费者只依赖它。
-- **Service Provider**：实现服务或向服务注册一个命名 provider；平台、供应商和沙箱差异停在这里。
-- **Consumer**：通过 `inject` 获取服务，向模型暴露工具、向 UI 暴露视图或执行策略；不得反向依赖具体 provider。
+Every replaceable capability has three roles:
 
-角色在演进节奏不同时拆包。`shell` 是标准范例：`shell` 定义 `ctx.shell`，`bash-local`/`bash-sandbox`/`pwsh-local` 提供实现，`tool-bash`/`tool-pwsh` 消费服务并注册到 `ctx.tools`。
+- **Service Definition**: declares stable service keys, call interfaces, data types, errors, and events. Consumers depend only on this role.
+- **Service Provider**: implements a service or registers a named provider. Platform, vendor, and sandbox differences remain here.
+- **Consumer**: obtains services through `inject` and exposes model tools, UI views, or policy. It must not depend on concrete providers.
 
-## 2. Cordis 插件接口
+Separate roles into packages when their evolution differs. `shell` is the standard example:
+`shell` defines `ctx.shell`; `bash-local`/`bash-sandbox`/`pwsh-local` provide implementations;
+`tool-bash`/`tool-pwsh` consume the service and register tools with `ctx.tools`.
 
-插件有两种导出形态，不能混用：
+## 2. Cordis plugin interfaces
 
-- 服务插件默认导出 `Service` 子类，由类声明稳定 `ctx` key 和生命周期。
-- 函数插件只命名导出 `name`、`inject`、`Config`、`apply(ctx, config)`，不提供 default export。
+Plugins have two mutually exclusive export forms:
 
-`Context` 是服务容器和 effect 所有者。必须依赖用 `inject` 声明；必需服务通过注入后的 `ctx.<name>` 使用，可选服务用 `ctx.get(name)` 读取。加载顺序来自依赖满足关系，而不是手工排序。隔离 realm 用于同一插件树内的会话或 agent 私有实现；每 agent 的贡献注册到 `agent.ctx`，其可见范围和生命周期由同一 context 决定。
+- Service plugins default-export a `Service` subclass. The class declares a stable `ctx` key and lifecycle.
+- Function plugins use named exports only: `name`, `inject`, `Config`, and `apply(ctx, config)`. They have no default export.
 
-所有注册都是 effect：工具、提示词段、provider、listener、定时器和子插件必须经 `ctx.effect()`、`ctx.on()` 或返回 disposer 的 `register()` 安装。Fiber 卸载时按逆序撤销；注册表测试必须证明卸载后贡献消失。初始化失败必须回滚，动态替换只有整代插件全部成功才提交。
+`Context` is both the service container and effect owner. Declare required dependencies with
+`inject`, access required services through injected `ctx.<name>`, and read optional services
+with `ctx.get(name)`. Dependency satisfaction determines load order rather than manual sorting.
+Isolated realms provide session- or agent-private implementations within the same tree.
+Per-agent contributions register with `agent.ctx`, which determines both visibility and lifetime.
 
-配置在 Loader 边界验证。部署可调参数必须是可验证的 `Config` 字段，不得藏在常量或 `run()` 内部的隐式默认值里；默认值应在拥有语义的 provider 的显式 `resolve(request): spec` 阶段产生。配置自身即可判断的错误在加载时失败，其余错误在最早可确定的位置失败。
+Every registration is an effect. Install tools, prompt sections, providers, listeners, timers,
+and child plugins through `ctx.effect()`, `ctx.on()`, or `register()` returning a disposer.
+Fiber unloading revokes them in reverse order. Registry tests must prove contributions
+vanish after unloading. Failed initialization rolls back; dynamic replacement commits only
+when every plugin in the candidate generation succeeds.
 
-## 3. 事件和生命周期规范
+Validate configuration at the Loader boundary. Deployable parameters must be validated
+`Config` fields rather than hidden constants or implicit defaults in `run()`. Defaults belong
+to the semantic owner's explicit provider `resolve(request): spec` phase. Reject errors
+that configuration alone determines at load time, and other errors at the earliest point
+where they can be established.
 
-事件名和 dispatch mode 是公共 API：
+## 3. Events and lifecycle conventions
 
-| 模式 | 等待 | 顺序 | 返回值 | 用途 |
-|---|---:|---|---:|---|
-| `emit` | 否 | 注册顺序 | 否 | 同步观察通知 |
-| `parallel` | 是 | 并行 | 否 | 多个异步观察者 |
-| `serial` | 是 | 注册顺序 | 是 | 顺序决策或清理 |
-| `waterfall` | 否/链式 | 中间件顺序 | 是 | 包装、改写、拦截 |
+Event names and dispatch modes are public API:
 
-waterfall listener 必须调用 `next()` 才会委托给下游；不调用代表有意短路。事件通过声明合并保持可扩展，JSDoc 标注 `@mode` 和各 payload 参数。闭合联合必须按 discriminant 穷尽并以 `assertNever` 收尾；声明合并开放的联合保留有文档的默认分支。
+| Mode | Awaited | Order | Return value | Purpose |
+| --- | --- | --- | --- | --- |
+| `emit` | No | Registration order | No | Synchronous observation |
+| `parallel` | Yes | Parallel | No | Multiple asynchronous observers |
+| `serial` | Yes | Registration order | Yes | Sequential decisions or cleanup |
+| `waterfall` | No/chained | Middleware order | Yes | Wrapping, rewriting, interception |
 
-默认 agent loop 的稳定流程为：`turn/start` → 输入认领 → `agent/pre-step` → `step/start` → durable user message → `agent/request` → `llm/stream` → assistant chunks/message → tool calls → `tools/pre-execute` → `tools/execute` → `tools/post-execute` → tool results → `step/end` → 必要时下一 step → `agent/turn-stopping` → `turn/end`。`agent/pre-step`、`agent/request`、`llm/stream` 和三个 `tools/*` 事件是 waterfall。
+Waterfall listeners delegate downstream only by calling `next()`; omitting it intentionally
+short-circuits. Declaration merging keeps events extensible. JSDoc records `@mode` and every
+payload parameter. Exhaust closed unions by discriminant and finish with `assertNever`.
+Open unions extended through declaration merging retain a documented default branch.
 
-会话事件是追加日志中的持久事实；agent 事件描述进程内活动；能力事件连接 provider、policy 和 consumer。任何进入模型请求的内容都必须能从 session log 重建，即“model-visible ⟺ logged”。插件不能用 UI 状态、缓存或临时回调偷偷添加模型上下文。
+The default agent loop follows: `turn/start` → input claim → `agent/pre-step` → `step/start`
+→ durable user message → `agent/request` → `llm/stream` → assistant chunks/message → tool calls
+→ `tools/pre-execute` → `tools/execute` → `tools/post-execute` → tool results → `step/end`
+→ another step when needed → `agent/turn-stopping` → `turn/end`. `agent/pre-step`,
+`agent/request`, `llm/stream`, and the three `tools/*` events use waterfall dispatch.
 
-## 4. 模块全目录与接口职责
+Session events are durable facts in an append-only log; agent events describe in-process
+activity; capability events connect providers, policy, and consumers. All model request
+content must be reconstructable from the session log: "model-visible ⟺ logged". Plugins
+must not silently add model context through UI state, caches, or temporary callbacks.
 
-下表按 `packages/<group>/<package>` 完整列出当前 Harness 包。分号前是组级接口职责，括号中标出主要服务键或注册目标。
+## 4. Complete package catalog and interface responsibilities
 
-| 分组 | 包 | 接口职责 |
-|---|---|---|
-| `acp` | `acp` | 自动化 ACP server；把 agent/session 能力映射到协议，不承担人机 UI。 |
-| `api` | `gateway`, `remotes` | Typert 单次 RPC gateway（`typertGateway`/`remote`）与 Host/Client BFF 组装。 |
-| `attachment` | `attachment`, `attachment-local` | 不可变附件引用与限制（`attachments`）；本地内容寻址存储 provider。 |
-| `boot` | `app-boot`, `cmdline` | profile/bundle/patch 启动、树 settle、命令行交接（`cmdlineArgs`, `appExit`）。 |
-| `bundle` | `base`, `headless`, `web-app` | 只负责可覆盖的插件配置层；分别提供公共核心、一次性无 UI、Web 应用组合。 |
-| `client` | `connection`, `hmr`, `locale`, `modules`, `runtime`, `schema-form`, `ui-agent-preset`, `ui-attachment`, `ui-commands`, `ui-conversation`, `ui-deliverables`, `ui-directory-picker-browse`, `ui-directory-picker-native`, `ui-goal`, `ui-input-trigger`, `ui-jobs`, `ui-layout`, `ui-message-feedback`, `ui-model-selection`, `ui-permission-presets`, `ui-plan`, `ui-primitives`, `ui-settings`, `ui-settings-general`, `ui-settings-models`, `ui-settings-plugin-inventory`, `ui-settings-plugins`, `ui-sidebar`, `ui-skill`, `ui-slots`, `ui-subagent`, `ui-theme`, `ui-tool`, `ui-trajectory`, `ui-user-questions`, `ui-workflow-run`, `ui-workspace`, `web`, `web-react` | 浏览器端 shell、RPC、对象服务和 UI slot 插件；功能视图注册到 slot/renderer，不导入 Host provider。 |
-| `code-runtime` | `code-runtime`, `code-runtime-worker-thread` | 代码执行 Service Definition（`codeRuntime`）、worker-thread provider；Code Mode consumer 位于 tools。 |
-| `compaction` | `command-compact`, `compaction`, `compaction-basic`, `compaction-tool-result-pruner` | 压缩定义（`compaction`）、摘要 provider、无模型工具结果裁剪和 `/compact` consumer。 |
-| `context` | `agent-instructions`, `session-reference`, `time-context`, `tmux-context` | 通过 prompt/session 事件添加可持久重建的请求上下文；跨会话解析器为 `sessionReferenceResolver`。 |
-| `core` | `agent`, `agent-default-model`, `agent-loop`, `agent-tool-presentation`, `scope`, `session`, `system-prompt`, `tools` | 产品 API 主干：`agents`、默认模型、可替换 loop、工具展示、agent scope、`sessions`、`systemPrompt`、`tools`。 |
-| `credentials` | `credentials`, `credentials-local` | 凭据引用定义（`credentials`）与 env/`.env` provider；配置只保存引用，不跨边界传明文。 |
-| `e2b` | `e2b`, `fs-e2b`, `subprocess-e2b` | E2B sandbox 生命周期（`e2b`）及 `fs`/`subprocess` provider；上层 shell/LSP 无需分叉。 |
-| `examples` | `acp-demo`, `agent-spine-demo`, `jsonrpc-demo` | 可运行的真实 Loader 组合和快照入口，不定义产品接口。 |
-| `extensions` | `cordis-client-runner`, `cordis-host-runner`, `tool-cordis`, `ui-cordis` | 自修改：Host/Client 子树 runner、模型侧 Cordis 工具和 UI 管理 consumer。 |
-| `feedback` | `command-feedback`, `message-feedback` | 人类消息反馈的 durable domain 与命令 consumer。 |
-| `fs` | `fs`, `fs-local`, `fs-observation-policy`, `fs-sandbox`, `tool-fs`, `tool-fs-search`, `tool-str-replace-editor` | 文件系统定义（`fs`）、local/sandbox provider、观察策略，以及读写、搜索、精确编辑 consumers。 |
-| `goal` | `command-goal`, `goal`, `goal-round-driver`, `tool-goal` | 同会话目标状态（`goals`）、自动 continuation driver、人类命令和模型工具。 |
-| `guard` | `repeat-tool-reminder`, `timeout-policy` | 基于 agent/tools 扩展事件的循环卫生和工具超时 policy。 |
-| `hooks` | `hook-protocol`, `hooks-claude-code`, `hooks-codex` | Claude Code/Codex hook wire protocol 和桥接 provider。 |
-| `host` | `apiproxy`, `directory-picker`, `directory-picker-auto`, `directory-picker-browse`, `directory-picker-native`, `frontend-static`, `plugin-inventory`, `webserver` | Web Host API、目录选择 seam/providers、静态站点、Loader inventory 和 HTTP 路由服务。 |
-| `identity` | `anonymous-user-id` | 共享匿名身份 provider，拥有稳定生成和存储规则。 |
-| `interaction` | `commands`, `permission-presets`, `tool-ask-user`, `user-approval`, `user-questions` | 人类命令注册、权限预设、审批/提问 Service Definitions 与模型 consumer。 |
-| `jobs` | `jobs`, `jobs-local`, `tool-jobs` | 后台任务定义（`jobs`）、本地 provider、collect/stop 等模型工具。 |
-| `llm` | `llm`, `llm-deepseek`, `llm-pi-ai`, `llm-retry`, `token-meter` | 流式消息与 adapter registry（`llm`）、provider、重试 policy、独立 token 计量服务。 |
-| `lsp` | `lsp`, `lsp-stdio`, `tool-lsp` | LSP 定义（`lsp`）、stdio provider 和模型 consumer；进程委托 `subprocess`。 |
-| `mcp` | `mcp-client` | MCP client 生命周期与工具贡献适配。 |
-| `plan` | `plan-mode` | 作为 durable session state 的计划模式和相关 UI/agent 事件。 |
-| `preset` | `agent-presets`, `persona` | 每 session 的插件组合与 persona；用 isolate realm 构成独立 agent 能力集。 |
-| `runtime-diagnostics` | `invariants` | 各包注册运行时 invariant installer 并报告真实事件/数据关系。 |
-| `sandbox` | `sandbox`, `sandbox-local`, `sandbox-policy`, `sandbox-windows-acl` | 进程约束定义（`sandbox`）、平台 provider 与策略；只负责 argv/执行环境约束。 |
-| `schedule` | `schedule` | session-local 定时 follow-up 的 durable 定义、触发和取消。 |
-| `sdk` | `client`, `protocol`, `server` | JSON-RPC wire protocol、TypeScript client 和 Harness server plugin。 |
-| `session` | `session-checkpoint-policy`, `session-persistence`, `session-persistence-jsonl`, `session-persistence-sqlite`, `session-projection`, `session-projection-cache`, `session-stats`, `session-telemetry`, `session-telemetry-otel`, `session-title`, `session-title-all-prompts-llm`, `session-title-first-prompt-llm`, `session-title-llm` | persistence/projection/title/telemetry 等完整 Service Definition + Provider 族；都从 session event stream 派生。 |
-| `session-query` | `session-log-export`, `session-query`, `session-query-sqlite`, `tool-session-query` | 授权会话读取定义（`sessionQuery`）、SQLite FTS provider、导出 UI 和模型 consumer。 |
-| `settings` | `settings`, `settings-file` | 命名空间、分层解析和 commit 定义（`settings`）；文件 provider 支持外部变更观察。 |
-| `shell` | `bash-local`, `bash-sandbox`, `pwsh-local`, `pwsh-sandbox`, `shell`, `shell-env`, `tool-bash`, `tool-bash-persistent`, `tool-pwsh` | `shell` request/spec/result 定义、平台 providers、共享环境和模型 consumers。 |
-| `skill` | `skill`, `skill-badge`, `skill-filesystem`, `tool-skill` | provider-neutral skill registry（`skills`）、内置/文件 provider、catalog/loader tool consumer。 |
-| `spill` | `spill`, `spill-local`, `spill-policy` | 大输出存储定义（`spillStore`）、本地 provider、`tools/post-execute` 裁剪 policy。 |
-| `storage` | `storage`, `storage-domain`, `storage-json`, `storage-sqlite` | 非会话存储 hub（`storage`）、typed form/domain 和 JSON/SQLite providers。 |
-| `subagent` | `subagent`, `subagent-acp`, `subagent-claude-code`, `subagent-codex`, `subagent-dsh-sdk`, `subagent-fork-in-process`, `subagent-in-process-driver`, `subagent-spawn-in-process`, `tool-subagent`, `tool-subagent-control`, `tool-subagent-report` | 多 provider 子 agent registry（`subagents`）、进程内/外 providers、委派/控制/报告 consumers。 |
-| `subprocess` | `subprocess`, `subprocess-local` | 一个执行世界的进程树、stdio、signal、PTY primitive 定义（`subprocess`）和本地 provider。 |
-| `terminal` | `terminal`, `terminal-bash`, `tool-terminal` | owner-scoped persistent PTY registry（`terminals`）、shell provider 和六个模型工具。 |
-| `test-support` | `acp-snapshot`, `agent-loop-testkit`, `client-runtime`, `llm-mock-server`, `llm-replay`, `loader-smoke` | 真实 Loader smoke、无密钥 replay/snapshot、loop 和 Client 测试设施。 |
-| `todo` | `tool-todo` | 单 session todo durable state 与模型工具；无替换 provider，因此合为一包。 |
-| `typert` | `generator`, `loader`, `protocol`, `registry` | 类型图生成、Loader 发现、wire protocol 和运行时 schema registry（`typert`）。 |
-| `util` | `atomic-write`, `brand`, `home-paths`, `launch-environment`, `native-command`, `output-retention`, `timeout` | 无 Harness 依赖的 branded id、路径、原子写、原生命令、输出保留和 deadline 原语。 |
-| `web` | `tool-web`, `web`, `web-fetch-http`, `web-search-deepseek`, `web-search-exa`, `web-search-perplexity` | search/fetch registry（`web`）、各 provider 和统一模型 consumer。 |
-| `workflow` | `tool-ralph`, `tool-workflow`, `workflow`, `workflow-worker-thread` | workflow 定义（`workflowEngine`）、worker provider、通用 workflow 与固定 Ralph consumers。 |
-| `workspace` | `workspace` | 持久 workspace 实体、realpath、session membership 和 registry（`workspaceRegistry`）。 |
+The table lists all Harness packages by `packages/<group>/<package>`. It describes group
+responsibilities and identifies major service keys or registration targets in parentheses.
 
-## 5. 跨包硬性规范
+| Group | Packages | Interface responsibilities |
+| --- | --- | --- |
+| `acp` | `acp` | Automated ACP server; maps agent/session capabilities to the protocol and does not own human-facing UI. |
+| `api` | `gateway`, `remotes` | Typert single-call RPC gateway (`typertGateway`/`remote`) and Host/Client BFF assembly. |
+| `attachment` | `attachment`, `attachment-local` | Immutable attachment references and limits (`attachments`); local content-addressed storage provider. |
+| `boot` | `app-boot`, `cmdline` | Profile/bundle/patch startup, tree settling, and command-line handoff (`cmdlineArgs`, `appExit`). |
+| `bundle` | `base`, `headless`, `web-app` | Overridable plugin configuration layers only: shared core, one-shot headless execution, and Web application composition. |
+| `client` | `connection`, `hmr`, `locale`, `modules`, `runtime`, `schema-form`, `ui-agent-preset`, `ui-attachment`, `ui-commands`, `ui-conversation`, `ui-deliverables`, `ui-directory-picker-browse`, `ui-directory-picker-native`, `ui-goal`, `ui-input-trigger`, `ui-jobs`, `ui-layout`, `ui-message-feedback`, `ui-model-selection`, `ui-permission-presets`, `ui-plan`, `ui-primitives`, `ui-settings`, `ui-settings-general`, `ui-settings-models`, `ui-settings-plugin-inventory`, `ui-settings-plugins`, `ui-sidebar`, `ui-skill`, `ui-slots`, `ui-subagent`, `ui-theme`, `ui-tool`, `ui-trajectory`, `ui-user-questions`, `ui-workflow-run`, `ui-workspace`, `web`, `web-react` | Browser shell, RPC, object services, and UI slot plugins; feature views register with slots/renderers and do not import Host providers. |
+| `code-runtime` | `code-runtime`, `code-runtime-worker-thread` | Code execution service definition (`codeRuntime`) and worker-thread provider; the Code Mode consumer lives in tools. |
+| `compaction` | `command-compact`, `compaction`, `compaction-basic`, `compaction-tool-result-pruner` | Compaction definition (`compaction`), summary provider, model-free tool-result pruning, and `/compact` consumer. |
+| `context` | `agent-instructions`, `session-reference`, `time-context`, `tmux-context` | Adds durably reconstructable request context through prompt/session events; the cross-session resolver is `sessionReferenceResolver`. |
+| `core` | `agent`, `agent-default-model`, `agent-loop`, `agent-tool-presentation`, `scope`, `session`, `system-prompt`, `tools` | Product API backbone: `agents`, default model, replaceable loop, tool presentation, agent scope, `sessions`, `systemPrompt`, and `tools`. |
+| `credentials` | `credentials`, `credentials-local` | Credential reference definition (`credentials`) and env/`.env` provider; configuration stores references and does not pass plaintext across boundaries. |
+| `e2b` | `e2b`, `fs-e2b`, `subprocess-e2b` | E2B sandbox lifecycle (`e2b`) and `fs`/`subprocess` providers; higher-level shell/LSP consumers do not need separate implementations. |
+| `examples` | `acp-demo`, `agent-spine-demo`, `jsonrpc-demo` | Runnable real Loader compositions and snapshot entry points; no product interface definitions. |
+| `extensions` | `cordis-client-runner`, `cordis-host-runner`, `tool-cordis`, `ui-cordis` | Self-modification: Host/Client subtree runners, model-facing Cordis tools, and UI management consumers. |
+| `feedback` | `command-feedback`, `message-feedback` | Durable domain for human message feedback and command consumer. |
+| `fs` | `fs`, `fs-local`, `fs-observation-policy`, `fs-sandbox`, `tool-fs`, `tool-fs-search`, `tool-str-replace-editor` | Filesystem definition (`fs`), local/sandbox providers, observation policy, and read/write, search, and exact-edit consumers. |
+| `goal` | `command-goal`, `goal`, `goal-round-driver`, `tool-goal` | Goals within a session (`goals`), automatic continuation driver, human commands, and model tools. |
+| `guard` | `repeat-tool-reminder`, `timeout-policy` | Loop hygiene and tool timeout policy using agent/tools extension events. |
+| `hooks` | `hook-protocol`, `hooks-claude-code`, `hooks-codex` | Claude Code/Codex hook wire protocols and bridge providers. |
+| `host` | `apiproxy`, `directory-picker`, `directory-picker-auto`, `directory-picker-browse`, `directory-picker-native`, `frontend-static`, `plugin-inventory`, `webserver` | Web Host API, directory selection interfaces/providers, static frontend, Loader inventory, and HTTP routing services. |
+| `identity` | `anonymous-user-id` | Shared anonymous identity provider, owning stable generation and storage rules. |
+| `interaction` | `commands`, `permission-presets`, `tool-ask-user`, `user-approval`, `user-questions` | Human command registration, permission presets, approval/question service definitions, and model consumers. |
+| `jobs` | `jobs`, `jobs-local`, `tool-jobs` | Background job definition (`jobs`), local provider, and model tools such as collect/stop. |
+| `llm` | `llm`, `llm-deepseek`, `llm-pi-ai`, `llm-retry`, `token-meter` | Streaming messages and adapter registry (`llm`), providers, retry policy, and independent token metering. |
+| `lsp` | `lsp`, `lsp-stdio`, `tool-lsp` | LSP definition (`lsp`), stdio provider, and model consumer; delegates processes to `subprocess`. |
+| `mcp` | `mcp-client` | MCP client lifecycle and tool contribution adaptation. |
+| `plan` | `plan-mode` | Plan mode as durable session state, with related UI/agent events. |
+| `preset` | `agent-presets`, `persona` | Per-session plugin composition and persona; isolated realms form independent agent capability sets. |
+| `runtime-diagnostics` | `invariants` | Packages register runtime invariant installers and report actual event/data relationships. |
+| `sandbox` | `sandbox`, `sandbox-local`, `sandbox-policy`, `sandbox-windows-acl` | Process confinement definition (`sandbox`), platform providers, and policy; owns only argv/execution environment constraints. |
+| `schedule` | `schedule` | Durable definition, triggering, and cancellation of session-local scheduled follow-ups. |
+| `sdk` | `client`, `protocol`, `server` | JSON-RPC wire protocol, TypeScript client, and Harness server plugin. |
+| `session` | `session-checkpoint-policy`, `session-persistence`, `session-persistence-jsonl`, `session-persistence-sqlite`, `session-projection`, `session-projection-cache`, `session-stats`, `session-telemetry`, `session-telemetry-otel`, `session-title`, `session-title-all-prompts-llm`, `session-title-first-prompt-llm`, `session-title-llm` | Complete service definition/provider families for persistence, projections, titles, and telemetry, all derived from the session event stream. |
+| `session-query` | `session-log-export`, `session-query`, `session-query-sqlite`, `tool-session-query` | Authorized session reading definition (`sessionQuery`), SQLite FTS provider, export UI, and model consumers. |
+| `settings` | `settings`, `settings-file` | Namespace, layered resolution, and commit definition (`settings`); file provider supports external change observation. |
+| `shell` | `bash-local`, `bash-sandbox`, `pwsh-local`, `pwsh-sandbox`, `shell`, `shell-env`, `tool-bash`, `tool-bash-persistent`, `tool-pwsh` | `shell` request/spec/result definition, platform providers, shared environment, and model consumers. |
+| `skill` | `skill`, `skill-badge`, `skill-filesystem`, `tool-skill` | Provider-neutral skill registry (`skills`), built-in/filesystem providers, and catalog/loader tool consumers. |
+| `spill` | `spill`, `spill-local`, `spill-policy` | Large-output storage definition (`spillStore`), local provider, and `tools/post-execute` truncation policy. |
+| `storage` | `storage`, `storage-domain`, `storage-json`, `storage-sqlite` | Non-session storage hub (`storage`), typed form/domain, and JSON/SQLite providers. |
+| `subagent` | `subagent`, `subagent-acp`, `subagent-claude-code`, `subagent-codex`, `subagent-dsh-sdk`, `subagent-fork-in-process`, `subagent-in-process-driver`, `subagent-spawn-in-process`, `tool-subagent`, `tool-subagent-control`, `tool-subagent-report` | Multi-provider subagent registry (`subagents`), in-process/external providers, and delegation/control/reporting consumers. |
+| `subprocess` | `subprocess`, `subprocess-local` | Process tree, stdio, signal, and PTY primitive definition (`subprocess`) for one execution world, with a local provider. |
+| `terminal` | `terminal`, `terminal-bash`, `tool-terminal` | Owner-scoped persistent PTY registry (`terminals`), shell provider, and six model tools. |
+| `test-support` | `acp-snapshot`, `agent-loop-testkit`, `client-runtime`, `llm-mock-server`, `llm-replay`, `loader-smoke` | Real Loader smoke tests, credential-free replay/snapshots, and loop/Client test facilities. |
+| `todo` | `tool-todo` | Durable per-session todo state and model tools; combined in one package because there is no replaceable provider. |
+| `typert` | `generator`, `loader`, `protocol`, `registry` | Type graph generation, Loader discovery, wire protocol, and runtime schema registry (`typert`). |
+| `util` | `atomic-write`, `brand`, `home-paths`, `launch-environment`, `native-command`, `output-retention`, `timeout` | Branded IDs, paths, atomic writes, native commands, output retention, and deadline primitives without Harness dependencies. |
+| `web` | `tool-web`, `web`, `web-fetch-http`, `web-search-deepseek`, `web-search-exa`, `web-search-perplexity` | Search/fetch registry (`web`), individual providers, and a unified model consumer. |
+| `workflow` | `tool-ralph`, `tool-workflow`, `workflow`, `workflow-worker-thread` | Workflow definition (`workflowEngine`), worker provider, generic workflow consumers, and fixed Ralph consumers. |
+| `workspace` | `workspace` | Durable workspace entities, realpath, session membership, and registry (`workspaceRegistry`). |
 
-- 扩展只依赖 Service Definition；只有 bundle/应用组合可以依赖具体 provider。
-- 新行为挂在已记录的事件或 registry 上；若必须改 `agent-loop`，同步更新总架构和生命周期文档。
-- opaque 跨边界 ID 使用 branded type，不裸用 `String`；进程、文件、JSON、数据库、模型 tool 参数和 wire 输入必须验证。
-- 同进程强类型接口信任静态类型，不为不可能值增加兜底；真正的外部边界必须 fail loud。
-- 运行时可调项进入 `Config`；协议常量、安全 invariant 和外部标准保持固定。
-- registry 的 `register()` 返回 disposer，测试 Fiber dispose 后贡献消失；异步操作只能有一个明确生命周期 owner。
-- 状态只在 commit point 发布；失败替换不得改变已发布代。缓存、projection、UI 和 telemetry 从同一权威事件源派生。
-- 限制在完整结果可见处执行，覆盖包装和元数据；测试极小、恰好、超大单块和多字节边界。
-- 每个产品可见插件需要真实 Loader 组合测试；model/user-visible 改动还需要无密钥可回放 snapshot。
-- 每包 README 记录 purpose、API、extension points、Model Experience、限制；公共导出和事件有完整 JSDoc。
+## 5. Cross-package requirements
 
-## 6. 对 kcode 的可复用结论
+- Extensions depend only on service definitions. Only bundles/application compositions may depend on concrete providers.
+- Attach new behavior to documented events or registries. If `agent-loop` must change, update overall architecture and lifecycle documentation together.
+- Use branded types for opaque cross-boundary IDs instead of bare `String` values. Validate process, file, JSON, database, model tool argument, and wire inputs.
+- Trust static types in strongly typed in-process interfaces rather than adding fallbacks for impossible values. Fail explicitly at genuine external boundaries.
+- Put runtime configuration in `Config`. Keep protocol constants, security invariants, and external standards fixed.
+- Registry `register()` returns a disposer. Test that Fiber disposal removes contributions. Every asynchronous operation has one explicit lifecycle owner.
+- Publish state only at commit points. Failed replacement must not change the published generation. Derive caches, projections, UI, and telemetry from the same authoritative event source.
+- Enforce limits where the complete result is visible, including wrappers and metadata. Test tiny, exact-limit, oversized single-block, and multibyte boundaries.
+- Every product-visible plugin needs real Loader composition tests. Model/user-visible changes also need credential-free replayable snapshots.
+- Each package README records purpose, API, extension points, Model Experience, and limitations. Public exports and events have complete JSDoc.
 
-kcode 不需要逐字复制 TypeScript API，但必须复用这些稳定设计：能力三角色、稳定 service key、consumer 不依赖 provider、注册 effect 化、Loader 配置组合、动态代事务替换、事件 mode 固定、模型可见状态可重建、平台实现停在 provider。具体 Kotlin 映射见 [plugin-architecture.md](plugin-architecture.md)。
+## 6. Design lessons for kcode
+
+kcode does not need to copy the TypeScript API verbatim, but should preserve these stable
+design principles: three capability roles, stable service keys, consumers independent of
+providers, effect-owned registrations, Loader configuration composition, transactional
+replacement of dynamic generations, fixed event modes, reconstructable model-visible state,
+and platform implementations confined to providers. See
+[plugin architecture](plugin-architecture.md) for the Kotlin mapping.

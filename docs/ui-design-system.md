@@ -1,8 +1,14 @@
 # kcode UI design system
 
-This document is the sizing contract for shared Compose UI on Android
-and desktop. New components should consume the tokens in
-`ai.meteor.kcode.ui.KcodeDesignSystem` instead of introducing one-off values.
+This document describes the shipped UI's design conventions on Android and desktop.
+The parameterized `KcodeTheme`, `KcodeDesignTokens`, `KcodeSpacing`, `KcodeRadius`
+and `KcodeSize` contracts live in `libraries/ui` under `ai.meteor.kcode.ui.design`.
+Product values and palette/typography policy belong to the theme plugin in `ui-pages`.
+The sizes below describe the default theme, not requirements for a replacement root.
+
+Reusable components accept labels, data, slots and callbacks; they do not access
+repositories, localization services or navigation. See the [UI library](../libraries/ui/README.md)
+and [default UI contracts](../plugins/default-ui-api/README.md) for their separate boundaries.
 
 ## Principles
 
@@ -53,6 +59,11 @@ Use `control` (12dp), `card` (20dp), and `panel` (28dp) corner radii. A child
 surface should not have a larger radius than its parent.
 
 ## Component density
+
+Store control icons as 24×24 VectorDrawable XML in
+`libraries/ui/src/commonMain/composeResources/drawable`, render through `KcodeIcon`
+and semantic tint. Do not use text glyphs, page-local Canvas icons or SVG control
+resources. Raster artwork is limited to brand/launcher assets with suitable densities.
 
 - Bottom sheet: on compact layouts, anchor to the bottom edge at 99% viewport
   height with 34dp top corners and no side gutter; on wider layouts, constrain
