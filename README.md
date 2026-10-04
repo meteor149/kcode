@@ -1,8 +1,8 @@
 <div align="center">
   <img src="branding/kcode-mark-transparent.png" alt="kcode logo" width="112" />
   <h1>kcode</h1>
-  <p><strong>An elegant, full-featured, cross-platform native AI agent.</strong></p>
-  <p>One adaptive Compose UI. One capable agent runtime. Your models, tools, skills, and data.</p>
+  <p><strong>A Kotlin-native, plugin-first AI Harness for Android and desktop.</strong></p>
+  <p>Everything is a plugin. Native by design. Your models, tools, interface, and data.</p>
 
   <p>
     <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
@@ -19,246 +19,166 @@
 > [!IMPORTANT]
 > kcode is evolving quickly. Expect breaking changes, verify important agent actions, and read the security model before enabling privileged tools.
 
-## The idea
+## Meet kcode
 
-kcode is an open-source native AI agent for Android and desktop. It is built around a simple belief: an agent should feel like a thoughtfully designed application—not a terminal transplanted into a chat box, and not a thin web wrapper duplicated for every device.
+kcode is the first open-source plugin-based AI Harness in the Kotlin Multiplatform ecosystem, with native applications for Android and desktop. Built with [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/), [Koog](https://docs.koog.ai/), and Cordis, it combines a native interface, an extensible agent runtime, and local data storage.
 
-The project combines an adaptive [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) interface with a [Koog](https://docs.koog.ai/)-powered runtime, local-first persistence, real tools, reusable Skills, persistent Goals, scheduled automation, multi-agent orchestration, and runnable Web Artifacts. The same conversation can therefore move naturally from an answer, to tool-backed work, to a longer autonomous objective, to a recurring task, or to a small application you can open and use.
-
-kcode's architectural goal is a Kotlin implementation of the DeepSeek Harness plugin model: “everything is a plugin.” Android and desktop share a [Cordis plugin tree](docs/plugin-architecture.md), with replaceable agent and application services. Existing application features are composed as replaceable plugins; the [feature audit](docs/plugin-feature-audit.md) records their implementation and lifecycle evidence. The [Harness plugin specification](docs/deepseek-harness-plugin-spec.md) also covers future subsystems whose APIs are reserved without providers. Real Shizuku authorization and root execution remain unverified.
+**Everything is a plugin.** Compose the models, tools, prompts, permission policies, and UI you need. Replace the agent loop, swap a storage provider, or build a different root interface. Inspired by the DeepSeek Harness plugin model, kcode brings the same architecture to both platforms.
 
 <table>
   <tr>
     <td align="center" width="76%">
       <img src="docs/images/app-home-desktop.png" alt="kcode desktop home screen" width="760" />
-      <br />
-      <sub>Desktop</sub>
+      <br /><sub>Desktop</sub>
     </td>
     <td align="center" width="24%">
       <img src="docs/images/app-home.png" alt="kcode Android home screen" width="210" />
-      <br />
-      <sub>Android</sub>
+      <br /><sub>Android</sub>
     </td>
   </tr>
 </table>
 
-## What it can do
+## Features
 
-### Work as an agent, not only a chatbot
+### Tools that get work done
 
-- Stream rich Markdown while preserving assistant responses and tool-call history in the conversation.
-- Expose tool progress and results in place, with stop, regenerate, message selection, and rendered conversation export on supported platforms.
-- Keep generation alive when the UI moves into the background on supported mobile hosts. Android can also show the live conversation and tool activity in a movable system overlay after the app leaves the foreground.
-- Search the current Web through Google, Exa, or Bright Data and return source links.
-- Read, list, write, and patch workspace files; read media where the platform implementation supports it.
-- Run shell commands inside the desktop workspace. Android provides both its native `/system/bin/sh` environment and a complete Ubuntu 24.04 ARM64 user space, each using the selected app UID, Shizuku/ADB-shell, or real root identity.
-- Route capability-bearing tools through a global `Deny`, `Ask`, or `Bypass` permission policy; internal coordination and Goal bookkeeping remain automatic.
+- Stream Markdown responses with visible tool progress and saved conversation history.
+- Search the Web through Google, Exa, or Bright Data, with source links.
+- Read, list, write, and patch workspace files; read media on supported platforms.
+- Run desktop shell commands or use Android's native shell and bundled Ubuntu 24.04 ARM64 environment.
+- Stop or regenerate responses and export conversations as images.
+- Continue generation in the Android background, with an optional floating conversation overlay.
 
-### Plan and finish longer work
+### Goals and multi-agent work
 
-**Goals** turn a conversation into a persistent objective. A Goal survives app restarts, tracks status, elapsed time, and optional token budget, and can continue across agent turns until it is completed or genuinely blocked. Create one with `/goal <objective>`, then pause, resume, edit, or clear it from the conversation. Active Goals are surfaced above the composer; completed Goals leave the UI automatically.
+Create a persistent objective with `/goal <objective>`. Goals survive app restarts, track status, elapsed time, and an optional token budget, and continue across turns. Pause, resume, edit, or clear them from the conversation.
 
-**Multi-agent orchestration** lets the root agent delegate concrete subtasks, exchange messages, interrupt or reuse workers, and wait for their results before producing the final response. kcode supports five concurrent agents including the root coordinator. Running workers appear above the composer in a live two-column status area; selecting one opens its activity and output.
+When asked to delegate, the root agent can dispatch subtasks, exchange messages, and wait for results. The default composition supports five concurrent agents, including the root. Select a worker in the conversation to inspect its activity and output.
 
-### Schedule one-shot and recurring work
+### Scheduled tasks
 
-When explicitly requested, the agent can create, list, pause, resume, and cancel scheduled prompts for the current conversation. A task can run once after a delay or at an absolute time, or repeat on an interval of at least one minute. Each run executes as a separate standalone conversation, presents its selected result in a floating card, and can be promoted into normal history or discarded. Android and desktop use the same persisted task model and can surface a platform notification, when permission and platform support allow it, after a result finishes in the background.
+Ask for a one-shot or recurring task. Each run uses a separate conversation and presents a result you can keep in history or discard, with background notifications where supported. Recurring intervals start at one minute.
 
-Scheduling is process-based rather than an operating-system alarm service: tasks run while the kcode process is available. Persisted overdue tasks are recovered after the app starts again, and recurring schedules skip missed intervals instead of launching overlapping catch-up runs.
+Tasks run while the application process is available. On restart, overdue tasks are recovered; recurring schedules skip missed intervals rather than launching a batch of catch-up runs.
 
-### Extend behavior with Skills
+### Skills and Web Artifacts
 
-kcode discovers `SKILL.md` packages from `/workspace/.agents/skills` and `/workspace/.kcode/skills`, then injects only the relevant instructions for the current request. Skills can describe domain knowledge, repeatable workflows, and tool usage without bloating the permanent system prompt. The runtime validates package boundaries and supports additional Skill providers through its authority-based provider model.
+Add `SKILL.md` packages under `/workspace/.agents/skills` or `/workspace/.kcode/skills` to provide reusable instructions and workflows.
 
-A built-in `kcode-web-app-builder` Skill drives the complete Web application loop: implement a responsive app, open it in the real container, inspect and interact with the rendered UI, collect console output and screenshots, fix defects, and—only after explicit confirmation—save it as an Artifact.
+The built-in `kcode-web-app-builder` Skill lets the agent build a Web app, test it in the embedded container, inspect the DOM, collect console output and screenshots, and fix issues. With your confirmation, it saves the app to the Artifacts library for later use. Android also bridges supported Web APIs to native capabilities such as location, sensors, camera, and file picking, subject to system permissions.
 
-### Build and keep runnable Artifacts
+See [Artifacts](docs/artifacts.md) and the [Web container guide](plugins/web-container/WEB_CONTAINER_GUIDE.md).
 
-Web Artifacts are small local applications managed inside the agent workspace. The agent can build one from conversation, debug it against the same Web container used by the product, and save it into the Artifacts library. Saved apps launch like native app entries instead of disappearing into chat history.
+### Your choice of model
 
-The Web container supports local apps and remote sites, foreground/background lifecycle, a floating dock for active containers, DOM inspection, safe interaction handles, console collection, screenshots, and responsive debugging. Android additionally bridges available Web APIs to native device capabilities such as location, motion sensors, vibration, battery, camera, microphone, and file picking while preserving system permission checks. See [Artifact storage](docs/artifacts.md) and the [Web container guide](plugins/web-container/WEB_CONTAINER_GUIDE.md) for the implementation contracts.
+Built-in adapters cover OpenAI, Azure OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Mistral AI, Alibaba DashScope / Qwen, Ollama, Zhipu GLM, and Amazon Bedrock (desktop).
 
-### Bring the model you prefer
-
-kcode currently integrates:
-
-- OpenAI and Azure OpenAI
-- Anthropic
-- Google Gemini
-- DeepSeek
-- OpenRouter
-- Amazon Bedrock (desktop)
-- Mistral AI
-- Alibaba DashScope / Qwen
-- Ollama
-- Zhipu GLM
-
-Providers, models, endpoints, regions, credentials, and temperature are configured in the app. Ollama can connect to a local endpoint without an API key.
-
-## Plugin architecture and current scope
-
-Only the plugin inventory and loader are pinned bootstrap components. The default composition can disable or replace product plugins, including model adapters, prompts, permissions, tools, the Koog loop, settings, conversation history, Artifact storage, Web containers, and the application renderer. Consumers resolve services through Cordis and rebind when their providers change.
-
-Desktop supports external JAR plugins; Android supports APK/dex plugins. The runtime supports loading, enabling, disabling, replacement, and unloading, with rollback on failed replacement. Actual external package loading is covered by desktop tests and Android device instrumentation tests. Plugin mutations require active agent turns to finish or be cancelled first.
-
-The shipped application composes built-in plugins and restores installed external packages and enable states from an atomic app-private manifest. Manifest publication failure rolls back the runtime change; incompatible declared API versions are rejected before loading. The application renderer, layout, sidebar, pages, theme, settings sections, messages, tool cards, and application effects have independent plugin contributions. A root UI resolves its own services and can render without any default application provider. Layout, sidebar, page, and navigation conventions live in the optional [default UI SDK](plugins/default-ui-api/README.md); the kernel uses open contribution keys and does not prescribe a layout. Reusable controls and design contracts live in the independent [UI library](libraries/ui/README.md), which UI plugins opt into without depending on application implementations. Conversation execution, generation runners, history sessions, Goals, scheduling, export, and each model provider are managed services or consumers. Android generation foreground policy is an independent plugin using shared OS leases. Plugin API 34 requires older external packages to be rebuilt. Missing providers suspend their consumers; operation owners cancel and await their work before withdrawal completes. Unimplemented Harness jobs, subprocess/PTY, full session event logs, and filesystem observation/version guards have [reserved contracts](docs/harness-reserved-api.md), with no placeholder providers. The [verification guide](docs/verification.md) records acceptance criteria and evidence limits; real Shizuku/root permission environments require independent verification. See the [architecture guide](docs/plugin-architecture.md) for the current boundaries.
+Configure credentials, endpoints, and provider options in Settings; choose the model and temperature from the composer. Ollama supports local endpoints without an API key. Plugins can add model providers.
 
 ## Platform support
 
+Android and desktop share chat, history, Goals, scheduling, multi-agent orchestration, Skills, file tools, Web search, Artifacts, and conversation image export. Platform differences are:
+
 | Capability | Android | Desktop |
-| --- | :---: | :---: |
-| Adaptive native Compose UI | ✅ | ✅ |
-| Model chat and local history | ✅ | ✅ |
-| Streaming Koog agent runtime | ✅ | ✅ |
-| Persistent Goals | ✅ | ✅ |
-| One-shot and recurring scheduled tasks | ✅ | ✅ |
-| Multi-agent orchestration and Skills | ✅ | ✅ |
-| Agent file workspace and Web search | ✅ | ✅ |
-| Web Artifacts and container | ✅ | ✅ |
-| Conversation image export | ✅ | ✅ |
-| Native mobile Web capability bridge | ✅ | — |
-| Native system shell tool | App UID / Shizuku / root | `/workspace` |
-| Ubuntu 24.04 PRoot tool | App UID / Shizuku / root (ARM64) | — |
-| Live conversation system overlay | ✅ | — |
-| Amazon Bedrock client | — | ✅ |
-| Dynamic Cordis agent plugins | ✅ APK/dex | ✅ JAR |
+| --- | --- | --- |
+| External plugins | APK/dex | JAR |
+| Native shell | App UID / Shizuku / root | Workspace shell |
+| Bundled Ubuntu 24.04 | ARM64, via PRoot | — |
+| Native Web capability bridge | Supported device APIs | — |
+| Background conversation overlay | Requires overlay permission | — |
+| Amazon Bedrock adapter | — | Supported |
 
-Availability on each platform also depends on the selected model, device capabilities, and granted permissions.
+Availability depends on installed plugins, the selected model, and platform permissions. Real Shizuku authorization and root execution still need independent verification; see [verification](docs/verification.md).
 
-The browser application target has been removed. Android and desktop retain Web search, embedded Web containers, and runnable Web Artifacts.
+## Get started
 
-## Get kcode
+Download an Android APK, Windows MSI, macOS DMG, or Linux DEB from [GitHub Releases](https://github.com/meteor149/kcode/releases).
 
-Tagged builds publish a signed Android APK, Windows MSI, macOS DMG, and Linux DEB to [GitHub Releases](https://github.com/meteor149/kcode/releases).
+1. Open **Settings → Model provider**, select a service, and enter its credentials and connection options.
+2. Return to the conversation and choose a model and temperature.
+3. Ask for tool-backed work, create a Goal with `/goal <objective>`, or explicitly request parallel subtasks or scheduled work.
 
-### Requirements
+### Build from source
 
-- JDK 21; JVM bytecode targets Java 17
-- Android Studio and Android SDK 35 for Android (minimum Android API 35)
-- An ARM64 Android device and at least 384 MiB free in the selected runtime location to use the optional Ubuntu environment
-
-Use the checked-in Gradle wrapper from the repository root. On Windows, replace `./gradlew` with `gradlew.bat`.
-
-### Desktop
+Use JDK 21 and the checked-in Gradle wrapper. JVM bytecode targets Java 17. Android builds require SDK 35; running the app requires an API 35+ device or emulator. On Windows, use `.\gradlew.bat` instead of `./gradlew`.
 
 ```bash
+# Run desktop
 ./gradlew :apps:desktopApp:run
-```
 
-### Android
-
-Start an API 35+ emulator or connect a compatible device, then run:
-
-```bash
+# Install Android debug build
 ./gradlew :apps:androidApp:installDebug
 ```
 
-Android exposes two command environments to the agent. `execute_shell_command` uses Android's `/system/bin/sh`; `execute_ubuntu_command` installs the bundled Ubuntu 24.04 ARM64 root filesystem on first use and runs GNU/Linux tools through PRoot. Both follow the shell mode selected in Settings:
+Desktop installers use `packageMsi`, `packageDmg`, and `packageDeb` under `:apps:desktopApp` on the corresponding operating system. The release workflow builds Android and desktop packages from tags.
 
-- **App** uses kcode's application UID and private `/workspace`.
-- **ADB** requires Shizuku started by `adb`, runs as UID 2000, and keeps a separate runtime and workspace under `/data/local/tmp/ai.meteor.kcode/ubuntu`.
-- **Root** requires a working `su` grant, verifies UID 0, and shares the app-mode runtime and workspace.
+### Android shell and Ubuntu
 
-Only App and Root mode expose the regular private agent workspace; ADB mode's `/workspace` is not visible to kcode's app-UID file tools. Because Root shares the private workspace, host files it creates can also retain ownership or permissions that App mode cannot read later.
+`execute_shell_command` runs Android's native shell. `execute_ubuntu_command` installs the bundled Ubuntu root filesystem on first use and runs it through PRoot. Ubuntu requires an ARM64 device and at least 384 MiB free in the runtime location.
 
-The Ubuntu guest reports PRoot's emulated Linux root, but its actual Android filesystem and device access always comes from the selected identity. It is not a VM and does not supply a booted Linux kernel or systemd. PRoot itself grants no kernel privilege; any extra host capability in Root mode comes from the verified Android UID 0 and remains subject to the device's `su`, capability, and SELinux policy. See [Android Ubuntu runtime](docs/android-ubuntu-runtime.md) for installation hardening, limits, provenance, checksums, and third-party licenses.
+Both tools follow the selected Shell mode:
 
-#### Configure providers through ADB
+- **App** uses the application UID and private workspace.
+- **ADB** requires Shizuku started through adb, runs as UID 2000, and uses a separate runtime/workspace under `/data/local/tmp/ai.meteor.kcode/ubuntu`.
+- **Root** requires a verified `su` grant and shares the app-mode runtime/workspace.
 
-Open kcode before sending configuration broadcasts. The [ADB settings guide](docs/adb-settings.md) contains the complete PowerShell script, accepted options and result checks. A successful save returns `result=-1`; an adb exit code of zero alone does not prove saving.
+ADB mode's workspace is separate from the app's file tools. Root-created files may have ownership or permissions that App mode cannot later access. PRoot provides a Linux user space, not a VM or additional Android privileges. Installation, provenance, and limits are documented in [Android Ubuntu runtime](docs/android-ubuntu-runtime.md).
 
-## First run
+To configure model and search providers through adb, start kcode first and follow the [ADB settings guide](docs/adb-settings.md). A successful save returns `result=-1`; adb's exit code alone does not confirm saving.
 
-1. Open **Settings → Model provider** and select a service.
-2. Enter its credentials and any required endpoint, deployment, or region.
-3. Return to the conversation and choose a model and temperature from the composer.
-4. Ask a normal question, request tool-backed work, explicitly ask the agent to delegate parallel subtasks, or create a persistent objective with `/goal <objective>`.
-5. For automation, explicitly ask for a one-shot reminder or recurring task; the agent will manage it through the current conversation.
+## Plugin architecture
 
-Credential storage is platform-specific:
+Native hosts provide platform primitives, `plugins/runtime` manages the Cordis tree, and `plugins/bundle-native` selects the default product composition. Only inventory and loading are pinned bootstrap components. Feature plugins declare service dependencies; consumers suspend when required providers disappear and rebind when they return.
 
-- Android encrypts settings with MMKV and protects its key with Android Keystore.
-- Desktop stores settings in the application data directory; native desktop keychain integration is planned.
+| Module | Responsibility |
+| --- | --- |
+| `plugins/api` | Neutral domain, persistence, agent, lifecycle, and open UI contribution contracts |
+| `plugins/default-ui-api` | Optional contracts for default layouts, pages, settings, and presenters |
+| `libraries/ui` | Reusable Compose controls, design contracts, and vector icons |
+| `plugins/runtime` | Composition, lifecycle ownership, and committed render snapshots |
+| `plugins/bundle-native` | Default native product composition |
+| `plugins/installation-store` | Installed packages and enable-state persistence |
+| `apps/*`, `plugins/platform-*` | Application hosts, loaders, and platform adapters |
 
-## Security model
+Product implementations live in feature modules: `application`, `ui-pages`, and `ui-settings` provide the default interface; repository, execution, model, search, and native capability providers own their services. Android and desktop share Room schemas and bundled SQLite. Module declarations are maintained in [settings.gradle.kts](settings.gradle.kts).
 
-- Desktop exposes a virtual `/workspace` rooted in application-owned storage. Path traversal and symbolic-link escape are rejected. Skill and Artifact resources are also constrained to their packages or managed workspace trees.
-- Android file and media tools may accept real absolute paths in addition to the private workspace, but remain subject to Android/Linux filesystem permissions and the selected execution identity.
-- The global tool permission gate controls whether kcode denies, confirms, or immediately runs a tool. `Bypass` skips only kcode's prompt; it never bypasses operating-system, browser, WebView, Keystore, Shizuku, or root-manager controls.
-- Android shell execution has explicit app UID, Shizuku/ADB-shell, and root modes. An unavailable privilege source fails instead of silently falling back to another identity.
-- Android's Ubuntu tool follows the same selected identity. App and root modes share the private runtime, while ADB mode has a shell-owned runtime under `/data/local/tmp`; PRoot's guest root does not itself grant Android root access.
-- Android's ADB settings receiver accepts only explicit broadcasts from senders holding the system `DUMP` permission. The settings-command plugin validates the complete update before writing through the active settings provider, but ADB command arguments remain visible to the trusted host while the command runs.
-- Scheduled tasks execute only while the application process is available, persist their next-run state, and put each run in a separate conversation. Treat their prompts as future agent instructions using the model configured at run time and the same tool-permission, network, and operating-system constraints as an interactive turn.
-- Android's live conversation overlay is shown only while generation continues in the background and requires the operating system's “display over other apps” permission. Closing it does not grant or revoke any tool permission.
-- Local Web apps run in isolated containers and request sensitive capabilities at runtime. Remote sites never receive kcode's local native fallback bridge.
-- Artifact saving requires explicit user confirmation and uses validated, bounded, rollback-aware storage operations.
-- Never commit API keys, `local.properties`, device captures, generated databases, or other private data.
+Use the plugin manager to load, enable, disable, replace, or unload external packages. Finish or cancel active agent turns before changing composition. Installed state persists across restarts, and failed replacement or manifest publication restores the committed composition. Withdrawal cancels and waits for owned operations before releasing resources. Replacing storage does not automatically migrate data.
 
-Please report security-sensitive issues privately to the maintainers instead of publishing exploit details in a public issue.
+External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 34**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
 
-## Architecture
+Read the [architecture guide](docs/plugin-architecture.md) and [plugin development guide](docs/plugin-development.md) for implementation rules. The [feature audit](docs/plugin-feature-audit.md) records current coverage; the [Harness specification](docs/deepseek-harness-plugin-spec.md) and [reserved API guide](docs/harness-reserved-api.md) distinguish implemented features from contracts that have no providers yet. All guides are indexed in [docs](docs/README.md).
 
-Engineering guides and topic documentation are indexed in [docs](docs/README.md).
+## Permissions and data
 
-```text
-apps/
-  androidApp/          Android application host
-  desktopApp/          Desktop Compose host and distribution
-libraries/
-  ui/                  Optional reusable components, design contracts and vector resources
-plugins/
-  api/                 Shared plugin SDK: domain contracts, Cordis services and extension events
-  runtime/             Plugin-tree lifecycle, profiles, and committed UI snapshots
-  default-ui-api/      Optional default UI layout, sidebar, page, and theme protocols
-  bundle-native/       Default native product composition
-  application/         Default Compose root, settings session and product orchestration
-  ui-pages/            Independent chat, Artifact, settings host, and theme contributions
-  ui-settings/         Separate language, model, search, and Shell settings forms
-  capability-providers/ Platform fs and shell adapters
-  native-execution/    Native shell, Ubuntu and privileged process implementations
-  native-filesystem/   Native file and skill workspace implementations
-  native-notifications/ Native notification providers and owned platform resources
-  web-search-provider/ HTTP search implementation and client lifecycle
-  subagent-provider/   In-process coordination, separate from model tools
-  agent-loop/          Koog loop provider
-  inventory|tools|...  One Gradle module per core plugin capability
-  filesystem|shell|... One Gradle module per platform feature consumer
-  platform-*/          Desktop and Android loader/provider assembly
-docs/                  Design and engineering documentation
-```
+- **Tool policy:** `Deny`, `Ask`, and `Bypass` control tool approval. `Bypass` skips kcode's prompt, while operating-system and Web permissions still apply. Scheduled runs use the model configured at execution time and the same permission policy as interactive work.
+- **Files:** desktop paths stay inside the managed `/workspace`, with traversal and symlink escapes rejected. Android can also accept real absolute paths, subject to filesystem permissions. Skill and Artifact resources are constrained to their managed package boundaries.
+- **Credentials:** Android uses encrypted MMKV with a Keystore-protected key. Desktop settings are stored in the application data directory. The ADB receiver requires system `DUMP` permission and validates updates through settings commands; command arguments are visible to the trusted host during execution.
+- **Android execution:** unavailable Shizuku/root access fails rather than silently switching identity. The background overlay requires “display over other apps” permission.
+- **Web apps:** local apps request sensitive capabilities at runtime; remote sites do not receive the local native bridge. Saving an Artifact requires confirmation and uses validated, bounded storage with rollback on failure.
 
-Android and desktop use the same Room schema with bundled SQLite.
+Report security-sensitive issues privately to the maintainers. Never commit credentials, `local.properties`, device captures, or generated databases.
 
 ## Build and test
 
 ```bash
-# Plugin SDK multiplatform tests
-./gradlew :plugins:api:allTests
+# Multiplatform tests and both application hosts
+./gradlew allTests :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug
 
-# Every available multiplatform test suite
-./gradlew allTests
+# Focused SDK and default UI tests
+./gradlew :plugins:api:allTests :plugins:default-ui-api:desktopTest
 
-# Desktop plugin composition and external JAR loading
+# Desktop composition and real external JAR loading
 ./gradlew :plugins:platform-desktop:test
 
-# Domain tools, search providers, and agent coordination
-./gradlew :plugins:goal:desktopTest :plugins:schedule:desktopTest :plugins:subagents:desktopTest :plugins:subagent-provider:desktopTest :plugins:web-search-provider:desktopTest
-
-# Android external APK/dex loading (requires an API 35+ device or emulator)
+# Android external APK/dex loading on an API 35+ device or emulator
 ./gradlew :plugins:platform-android:connectedDebugAndroidTest
-
-# Android debug APK
-./gradlew :apps:androidApp:assembleDebug
-
-# Desktop application
-./gradlew :apps:desktopApp:run
 ```
 
-Desktop installers are available through `packageMsi`, `packageDmg`, and `packageDeb` tasks under `:apps:desktopApp`. Tagged commits automatically package Android and desktop release assets.
+`allTests` excludes connected device instrumentation. Device, Shizuku, and root checks have separate requirements in the [verification guide](docs/verification.md).
 
 ## Acknowledgements
 
-kcode is possible because of the work shared by the open-source community. Our sincere thanks go to the maintainers and contributors of these projects, especially the foundations and reference implementations below:
+Thanks to the maintainers and contributors of the projects that power kcode:
 
 | Project | How it helps kcode |
 | --- | --- |
@@ -269,18 +189,14 @@ kcode is possible because of the work shared by the open-source community. Our s
 | [MMKV](https://github.com/Tencent/MMKV) and [Shizuku](https://github.com/RikkaApps/Shizuku) | Support mobile settings storage and explicit ADB-shell execution on Android. |
 | [Operit](https://github.com/AAswordman/Operit), [OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore), [PRoot](https://github.com/proot-me/proot), [PRoot-Distro](https://github.com/termux/proot-distro), and [Ubuntu](https://ubuntu.com/) | Operit's runtime design and TerminalCore artifact chain informed the Android Ubuntu implementation. The packaged PRoot binaries, loader, and Ubuntu rootfs provenance are documented precisely in the [runtime guide](docs/android-ubuntu-runtime.md) and [NOTICE](NOTICE). |
 
-This is a selective thank-you, not a complete third-party software inventory, and does not imply endorsement or affiliation. Every project remains governed by its own license and attribution terms; the Gradle dependency declarations and packaged notices are the authoritative implementation records.
+Third-party licenses and attribution are recorded in [NOTICE](NOTICE) and the Gradle dependencies.
 
 ## Contributing
 
 Contributions are welcome. Read [AGENTS.md](AGENTS.md) for repository structure, conventions, test commands, and pull-request expectations. Keep changes focused, test observable behavior, and include before/after media for UI work.
 
-The long-term direction is deliberate: preserve a quiet, polished native experience while expanding the agent's autonomy, tools, portability, and user control. Features should feel integrated into the product—not bolted onto the conversation.
-
 ## License
 
 Copyright 2026 The kcode Authors.
 
-Licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify, and distribute this project, including for commercial purposes, subject to the license terms. The license includes an express patent grant and requires preservation of applicable copyright, license, and NOTICE information. Third-party components remain under their respective licenses. Use of the kcode name and logo is governed by the trademark provisions in Section 6 of Apache-2.0.
-
-See [NOTICE](NOTICE) for attribution information.
+Licensed under [Apache License 2.0](LICENSE). Third-party components retain their own licenses. See [NOTICE](NOTICE) for attribution.
