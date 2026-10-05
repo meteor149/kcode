@@ -607,3 +607,40 @@ This evidence does not establish rendered confirmation behavior. Desktop/device 
 independent recovery UI, failures before initial host construction, verified Bundle import,
 credential-safe export, recovery/closure failure auditing and final platform acceptance remain
 outstanding. The overall goal remains active.
+
+## Private Android management rendering evidence
+
+The native-window instrumentation case uses the shipped private settings, Profile and theme
+APK renderers, with an injected management client and a test replacement for the application
+root. It opens the Profile section, edits its definition through Compose semantics, sends a
+real system-back key, checks invalid-save retention, switches the app language inside the live
+dialog, continues editing, saves/leaves and discards/leaves. Durable draft reads prove saving
+precedes return and does not change the active Profile/generation. It waits for enabled editing
+after asynchronous metadata loading rather than treating the first visible label as readiness.
+
+Actual rendering exposed MissingResourceException: the shared Compose Android reader looks
+up feature string assets through the host context. Profile strings now compile from the existing
+feature-owned XML into a private dictionary, following the localization provider's established
+pattern. No host APK resource fallback or new shared ABI identity is introduced. App-language
+selection and custom translation overrides remain intact. Existing locked generations still
+require explicit package upgrades to adopt changed implementation bytes.
+
+Screenshot inspection also exposed a clipped Continue editing action when AlertDialog wrapped
+separate confirm/dismiss slots. All three actions now use one measured column; save is a filled
+button and other actions use the semantic onSurface color. The device test checks each action's
+text bounds against its measured size and captures the actual confirmation window. A busy
+save cannot dismiss the confirmation before its durable result; a session test covers that
+pending-write boundary. The final screenshot was inspected with all actions visible/readable.
+
+Final concentrated validation passed 23 tests: 15 UI session, 6 tree form/compiler, 1 generated
+text-default and 1 actual native private-JAR contribution case, with zero failures, errors or
+skipped cases. Desktop compilation, Android application assembly and platform instrumentation
+APK assembly passed against Cordis 9f1ceac. AndroidProfileUiRenderingTest passed on the ARM64
+API 36 physical device: OK (1 test), INSTRUMENTATION_CODE -1, 47.895 seconds. No public SDK
+ABI change is required beyond the existing API 69 boundary.
+
+This establishes the tested Android management/edit-confirmation surface, not full application
+navigation, all structured forms, activation from UI, touch/keyboard accessibility, every sheet
+dismissal path or desktop rendering. Independent recovery UI, initial startup failure recovery,
+verified Bundle import, credential-safe export, closure/restoration failure audit and final
+requirement/platform acceptance remain outstanding. The overall goal remains active.

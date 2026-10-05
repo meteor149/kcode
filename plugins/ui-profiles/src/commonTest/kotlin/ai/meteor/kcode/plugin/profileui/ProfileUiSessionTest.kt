@@ -39,6 +39,31 @@ import kotlin.test.assertTrue
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProfileUiSessionTest {
     @Test
+    fun busyLeaveSaveCannotBeDismissedBeforeItsDurableResult(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            session.edit(Json.encodeToString(ProfileDefinition.serializer(), client.definition.copy(displayName = "Saved")))
+            var navigations = 0
+            session.requestLeave { navigations++ }
+            val gate = CompletableDeferred<Unit>()
+            client.queryGate = gate
+            client.queryStarted = CompletableDeferred()
+            val save = async { session.saveAndLeave() }
+            client.queryStarted!!.await()
+            assertTrue(session.state.value.busy)
+            assertFailsWith<IllegalStateException> { session.cancelLeave() }
+            assertTrue(session.state.value.leaveRequested)
+            assertEquals(0, navigations)
+            gate.complete(Unit)
+            save.await()
+            assertEquals(1, navigations)
+            assertEquals("Saved", client.definition.displayName)
+        } finally { session.close() }
+    }
+
+    @Test
     fun navigationPreservesEditsUntilExplicitDiscardAndKeepsFirstDestination(): Unit = runTest {
         val client = Client()
         val session = ProfileUiSession(client)

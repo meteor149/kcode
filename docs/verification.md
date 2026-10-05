@@ -24,6 +24,14 @@ Focused test selection is phase evidence. Run the full relevant suites and both 
 the final boundary. Any classes compiled but not executed remain unverified. In particular,
 legacy typed replacement and full management/recovery UI require their own observable checks.
 
+AndroidProfileUiRenderingTest mounts shipped private settings/Profile/theme APK renderers in
+a native window and checks definition editing, system-back confirmation, invalid-save retention,
+live English/Chinese labels and save/discard return against durable drafts. Confirmation action
+text bounds and an inspected screenshot cover the tested layout. The fixture replaces the
+application root and uses Compose semantic actions for editing/clicks; it does not establish
+full application navigation, touch/keyboard accessibility, every dismissal path, all tree forms
+or desktop rendering. Keep these evidence limits separate from SDK and real-package loading tests.
+
 ## Android execution worlds
 
 App-UID shell/Ubuntu tests establish only application execution, scoped paths and packaged

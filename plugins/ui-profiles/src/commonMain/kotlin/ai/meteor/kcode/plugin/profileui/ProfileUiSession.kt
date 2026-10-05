@@ -132,6 +132,7 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
 
     fun cancelLeave() {
         owner.requireOpen()
+        check(!state.value.busy) { "Profile editor is busy" }
         pendingLeave = null
         mutableState.value = state.value.copy(leaveRequested = false)
     }

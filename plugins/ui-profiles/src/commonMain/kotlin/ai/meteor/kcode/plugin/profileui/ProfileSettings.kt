@@ -60,6 +60,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +76,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import ai.meteor.kcode.ui.design.KcodeSpacing
 import kotlinx.coroutines.CancellationException
@@ -161,7 +163,7 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
                 onBundles = { target, revision, bundles -> scope.launch { session.reorderBundles(target, revision, bundles) } })
             OutlinedTextField(state.document, { document ->
                 try { session.edit(document) } catch (error: IllegalStateException) { /* Withdrawn or busy callbacks cannot edit. */ }
-            }, Modifier.fillMaxWidth(), enabled = enabled,
+            }, Modifier.fillMaxWidth().testTag("profile-definition"), enabled = enabled,
                 minLines = 10, maxLines = 20, textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 label = { Text(profileText(Res.string.profile_editor)) })
             TextButton(enabled = enabled && state.dirty, onClick = { scope.launch { session.save() } }) {
@@ -235,16 +237,19 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
             }
         },
         confirmButton = {
-            TextButton(enabled = !state.busy, onClick = { scope.launch { session.saveAndLeave() } }) {
-                Text(profileText(Res.string.profile_save_leave))
-            }
-        },
-        dismissButton = {
-            Column {
-                TextButton(enabled = !state.busy, onClick = {
+            // One action column gives AlertDialog a single measured child. Separate long
+            // confirm/dismiss slots can wrap and clip the final action on narrow screens.
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(KcodeSpacing.xs)) {
+                Button(modifier = Modifier.fillMaxWidth(), enabled = !state.busy,
+                    onClick = { scope.launch { session.saveAndLeave() } }) {
+                    Text(profileText(Res.string.profile_save_leave))
+                }
+                TextButton(modifier = Modifier.fillMaxWidth(), enabled = !state.busy,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface), onClick = {
                     try { session.discardAndLeave() } catch (error: IllegalStateException) { /* Stale confirmation cannot discard. */ }
                 }) { Text(profileText(Res.string.profile_discard_leave)) }
-                TextButton(enabled = !state.busy, onClick = {
+                TextButton(modifier = Modifier.fillMaxWidth(), enabled = !state.busy,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface), onClick = {
                     try { session.cancelLeave() } catch (error: IllegalStateException) { /* Withdrawn editor. */ }
                 }) { Text(profileText(Res.string.profile_continue_editing)) }
             }

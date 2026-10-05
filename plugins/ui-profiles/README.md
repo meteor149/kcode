@@ -29,6 +29,10 @@ not the accepted command. Explicit cancellation uses the retained command handle
 command status comes from the host stream, so a reconstructed screen can see the result.
 The package owns English/Chinese resource defaults, follows the app language, and permits
 custom translation catalogue overrides. Spacing and colors use shared design tokens.
+The string XML generates a private default dictionary during compilation. Profile labels
+do not use the shared Compose Android resource reader, which resolves through the host
+context rather than the feature APK. This keeps defaults independent of host resources
+on both platforms while preserving app-language selection and catalogue overrides.
 
 New native templates select `kcode.default-ui` version 2, which includes this module.
 Existing committed generations retain their frozen version 1 Bundle definitions; they
@@ -40,7 +44,12 @@ animation. Users can save the revision-checked draft and leave, discard to the s
 or continue editing. Invalid documents, authority conflicts and changed confirmation targets
 retain the editor; saving never activates the draft. Forced provider withdrawal bypasses the
 confirmation and cancels owned work without running pending navigation.
+Saving keeps the confirmation open until its durable result. Confirmation actions share
+one measured column so narrow layouts do not clip the final action.
 
-Import/export, independent recovery UI, and rendered desktop/device
-acceptance remain outstanding. Unit tests establish session behavior; native tests establish
-actual private JAR contribution registration, withdrawal and recovery, not visual acceptance.
+Android instrumentation renders the actual private settings/Profile/theme APKs in a native
+window and checks editing, system-back confirmation, invalid-save retention, live English/
+Chinese switching, save/leave and discard/leave against durable metadata. It also checks
+confirmation text bounds and captures a screenshot. These semantic actions do not establish
+touch/keyboard accessibility or complete form/activation acceptance. Import/export,
+independent recovery UI, desktop rendering and broader device acceptance remain outstanding.

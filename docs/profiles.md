@@ -121,8 +121,14 @@ section return, system back and sheet dismissal before exit animation. Saving an
 publishes a draft without activating it; invalid documents or revision conflicts preserve
 the editor. Discard restores the saved document, while continuing retains edits. Confirmation
 captures the document/target/revision and cannot discard newer input. Forced withdrawal bypasses
-the prompt and never invokes pending navigation. Import/export and rendered desktop/device acceptance remain
-outstanding. Session and actual JAR contribution tests do not establish visual acceptance.
+the prompt and never invokes pending navigation. Saving keeps the prompt open until its durable
+result. Android private-APK rendering checks cover editing, system-back confirmation, invalid
+save retention, save/discard return and live English/Chinese labels. Feature XML generates
+private text defaults rather than reading them from host APK resources. Confirmation actions
+use one measured column and their text bounds are checked for clipping. Import/export,
+independent recovery UI, desktop rendering and broader device acceptance remain outstanding.
+This device case does not establish all tree forms, activation, keyboard/touch navigation or
+all settings dismissal routes.
 
 ## Documents and restart
 
