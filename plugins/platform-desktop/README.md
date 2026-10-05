@@ -12,5 +12,6 @@ uses the legacy workspace or a directory under `<homeDirectory>/workspaces`.
 Caller stores are borrowed and keep their caller-defined scope and lifetime.
 
 Committed bundle snapshots and release locks govern restart. Edited drafts do not replace
-successful generations. Profile updates and runtime switching are not yet exposed by this
-factory; see the Profile guide for current limits.
+successful generations. `AgentPluginManager` updates active Profile intent through native
+module/tree transactions, including verified archive import and independent instance removal.
+Runtime Profile switching and the management UI remain pending; see the Profile guide.

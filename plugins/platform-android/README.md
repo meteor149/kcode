@@ -18,6 +18,11 @@ locations. Android workspace scope enforcement and runtime Profile switching rem
 Privately loaded storage providers accept their legacy Unit defaults or machine-supplied
 String identities/paths; those machine values are not copied into portable Profile intent.
 
+`AndroidDynamicPluginController.prepareProfilePackages` uses the shared native transaction
+protocol with Android descriptors and candidate dex exports. The managed runtime owns the
+tree and durable generation boundary. Code resources are released only after restoration
+or successful retirement. Build validation does not establish this protocol's device behavior.
+
 `settingsBackedInteraction = true` retains the independently loaded interaction settings
 feature. A custom approver is published through the SDK-only `HostToolApprovalsInputPlugin`
 and `KcodeToolApprovals`; the feature owns permission schema, validation and optional UI.

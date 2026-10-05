@@ -49,7 +49,6 @@ import ai.meteor.kcode.plugin.api.KcodePluginInstallations
 import ai.meteor.kcode.plugin.api.PluginCompositionStore
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
 import ai.meteor.kcode.plugin.api.StoredDynamicPlugin
-import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
 import ai.meteor.kcode.plugin.api.validatePluginApi
 import ai.meteor.kcode.plugin.api.validatePackageDependencies
 import ai.meteor.kcode.plugin.api.KcodePluginInventory
@@ -100,6 +99,9 @@ import ai.meteor.kcode.plugin.profiles.profileLock
 import ai.meteor.kcode.plugin.profiles.ProfileStartupFactory
 import ai.meteor.kcode.plugin.profiles.ProfileCompiler
 import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.profiles.ResolvedProfile
+import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
 
 interface DynamicPluginController : AgentPluginManager {
     /** Apply a resolved Profile through the host's managed startup boundary. */
@@ -108,6 +110,8 @@ interface DynamicPluginController : AgentPluginManager {
     /** Register verified release modules without creating package-level plugin instances. */
     suspend fun registerProfilePackages(specs: List<DynamicPluginSpec>): Map<String, String> =
         error("This controller does not support declarative profile modules")
+    suspend fun prepareProfilePackages(specs: List<DynamicPluginSpec>): ProfileModuleTransaction =
+        error("This controller does not support Profile module transactions")
     /** Imports and validates a not-yet-installed artifact without applying or publishing it. */
     suspend fun validateCandidate(spec: DynamicPluginSpec): Unit =
         error("This controller does not support candidate validation")
@@ -191,6 +195,55 @@ class KcodePluginRuntime private constructor(
     private var activeProfile: ProfileActivation? = null
     private var profileStartupOpen = false
     private val profileDescriptors = linkedMapOf<String, PluginDescriptor>()
+    private val profileModules = linkedMapOf<String, KcodePluginMount>()
+    private data class ProfileBinding(val key: String, val packageId: String, val configuration: StoredPluginConfiguration?, val source: Any?, val export: Any?)
+    private val profileBindings = linkedMapOf<String, ProfileBinding>()
+    private var profileBindingSequence = 0L
+
+    private fun bindProfileTree(
+        resolved: ResolvedProfile,
+        exports: Map<String, Any?>,
+        bindings: MutableMap<String, ProfileBinding>,
+        descriptors: MutableMap<String, PluginDescriptor>,
+    ): List<EntryOptions> {
+        val loader = context.require(Loader.Key)
+        val installed = resolved.packages.associateBy { it.id }
+        fun bind(items: List<EntryOptions>): List<EntryOptions> = items.map { entry ->
+            require(entry.id !in BootstrapIds && entry.id !in records) { "Profile entry '${entry.id}' conflicts with infrastructure" }
+            if (entry.group == true) {
+                require(entry.name == "core.group" || entry.name == "cordis:group") { "Profile groups use core.group" }
+                entry.copy(name = "cordis:group", config = bind((entry.config as List<*>).map { it as EntryOptions }))
+            } else {
+                val configured = profileConfiguration(entry)
+                val spec = installed[entry.name]
+                val builtin = if (spec == null) profileModules[entry.name] else null
+                require(spec != null || builtin != null) { "Unknown Profile module '${entry.name}'" }
+                val source = if (spec != null) exports.getValue(spec.id) else builtin
+                val previous = bindings[entry.id]
+                val binding = if (previous?.packageId == entry.name && previous.configuration == configured && previous.source === source) previous
+                    else ProfileBinding("profile-binding-${++profileBindingSequence}", entry.name, configured, source,
+                        if (builtin != null) builtin.export(configured) else source)
+                bindings[entry.id] = binding
+                loader.builtins[binding.key] = binding.export
+                descriptors[entry.id] = if (builtin != null) builtin.descriptor.copy(id = entry.id)
+                    else spec!!.let { PluginDescriptor(entry.id, it.version, it.artifactPath, it.capabilities) }
+                entry.copy(name = "cordis:${binding.key}", config = if (builtin != null) Unit else if (configured != null) configured.decode() else spec!!.config,
+                    extra = entry.extra + ("kcode.packageId" to entry.name))
+            }
+        }
+        return bind(resolved.composition.entries)
+    }
+
+    private suspend fun validateProfileConfigurations(items: List<EntryOptions>) {
+        val loader = context.require(Loader.Key)
+        items.forEach { entry ->
+            val plugin = requireNotNull(loader.unwrapExports(loader.import(entry.name)).asDynamicPlugin()) {
+                "Profile module '${entry.name}' does not export a plugin"
+            }
+            plugin.config?.validate(entry.config)
+            if (entry.group == true) validateProfileConfigurations((entry.config as List<*>).map { it as EntryOptions })
+        }
+    }
 
     private suspend fun activateProfile(activation: ProfileActivation, builtinModules: List<KcodePluginMount>) = lock.withLock {
         check(profileStartupOpen && !closed && activeProfile == null && turns.isEmpty()) { "Profile startup requires a fresh declarative runtime" }
@@ -202,44 +255,15 @@ class KcodePluginRuntime private constructor(
             "Resolved Profile lock does not match its deployment packages"
         }
         require(builtinModules.map { it.descriptor.id }.distinct().size == builtinModules.size) { "Duplicate profile builtin module" }
-        val modules = builtinModules.associateBy { it.descriptor.id }
+        profileModules.putAll(builtinModules.associateBy { it.descriptor.id })
         resolved.packages.forEach { validateInstallation(it) }
         val loader = context.require(Loader.Key)
         val urls = if (resolved.packages.isEmpty()) emptyMap() else dynamic().registerProfilePackages(resolved.packages)
-        val installed = resolved.packages.associateBy { it.id }
         loader.builtins["group"] = GroupPlugin
         val descriptors = linkedMapOf<String, PluginDescriptor>()
-        fun bind(items: List<EntryOptions>): List<EntryOptions> = items.map { entry ->
-            require(entry.id !in BootstrapIds && entry.id !in records) { "Profile entry '${entry.id}' conflicts with infrastructure" }
-            if (entry.group == true) {
-                require(entry.name == "core.group" || entry.name == "cordis:group") { "Profile groups use core.group" }
-                entry.copy(name = "cordis:group", config = bind((entry.config as List<*>).map { it as EntryOptions }))
-            } else {
-                val configured = profileConfiguration(entry)
-                val builtin = modules[entry.name]
-                if (builtin != null) {
-                    val key = "profile-${entry.id}"
-                    loader.builtins[key] = builtin.export(configured)
-                    descriptors[entry.id] = builtin.descriptor.copy(id = entry.id)
-                    entry.copy(name = "cordis:$key", config = Unit)
-                } else {
-                    val spec = requireNotNull(installed[entry.name]) { "Unknown Profile module '${entry.name}'" }
-                    descriptors[entry.id] = PluginDescriptor(entry.id, spec.version, spec.artifactPath, spec.capabilities)
-                    entry.copy(name = urls.getValue(spec.id), config = if (configured != null) configured.decode() else spec.config)
-                }
-            }
-        }
-        val tree = bind(resolved.composition.entries)
-        suspend fun validateConfigurations(items: List<EntryOptions>) {
-            items.forEach { entry ->
-                val plugin = requireNotNull(loader.unwrapExports(loader.import(entry.name)).asDynamicPlugin()) {
-                    "Profile module '${entry.name}' does not export a plugin"
-                }
-                plugin.config?.validate(entry.config)
-                if (entry.group == true) validateConfigurations((entry.config as List<*>).map { it as EntryOptions })
-            }
-        }
-        validateConfigurations(tree)
+        val exports = urls.mapValues { (_, url) -> loader.import(url) }
+        val tree = bindProfileTree(resolved, exports, profileBindings, descriptors)
+        validateProfileConfigurations(tree)
         require(descriptors.keys.none { id -> resolved.packages.any { "package:${it.id}" == id } }) {
             "Profile instance conflicts with a package inventory identity"
         }
@@ -335,6 +359,7 @@ class KcodePluginRuntime private constructor(
             this@KcodePluginRuntime.activateProfile(activation, builtinModules)
         }
         override suspend fun importPackages(packages: List<PluginPackageImport>) {
+            if (tryChangeProfile(PluginCompositionChange(), imports = packages)) return
             var specs = emptyList<DynamicPluginSpec>()
             mutate(prepare = {
                 require(packages.isNotEmpty()) { "No plugin packages supplied" }
@@ -346,17 +371,26 @@ class KcodePluginRuntime private constructor(
 
         override suspend fun applyChanges(changes: PluginCompositionChange) {
             if (changes.upserts.isEmpty() && changes.removals.isEmpty() && trySetProfileEnabled(changes.enabled)) return
+            if (tryChangeProfile(changes)) return
             mutate { applyCompositionChange(changes) }
         }
 
-        override suspend fun install(spec: DynamicPluginSpec) = mutate {
+        override suspend fun install(spec: DynamicPluginSpec) {
+            if (tryChangeProfile(PluginCompositionChange(upserts = listOf(spec)), mode = "install")) return
+            installLegacy(spec)
+        }
+        private suspend fun installLegacy(spec: DynamicPluginSpec) = mutate {
             validateInstallation(spec)
             require(spec.id !in records) { "plugin '${spec.id}' is configured; use replace()" }
             validatePackageDependencies(dynamic().installed() + spec)
             dynamic().install(spec)
         }
 
-        override suspend fun replace(spec: DynamicPluginSpec) = mutate {
+        override suspend fun replace(spec: DynamicPluginSpec) {
+            if (tryChangeProfile(PluginCompositionChange(upserts = listOf(spec)), mode = "replace")) return
+            replaceLegacy(spec)
+        }
+        private suspend fun replaceLegacy(spec: DynamicPluginSpec) = mutate {
             validateInstallation(spec)
             validatePackageDependencies(dynamic().installed().filterNot { it.id == spec.id } + spec)
             val record = records[spec.id]
@@ -376,7 +410,11 @@ class KcodePluginRuntime private constructor(
             }
         }
 
-        override suspend fun uninstall(id: String) = mutate {
+        override suspend fun uninstall(id: String) {
+            if (tryChangeProfile(PluginCompositionChange(removals = setOf(id)))) return
+            uninstallLegacy(id)
+        }
+        private suspend fun uninstallLegacy(id: String) = mutate {
             validatePackageDependencies(external?.installed().orEmpty().filterNot { it.id == id })
             if (external?.installed()?.any { it.id == id } == true) {
                 external.uninstall(id)
@@ -427,6 +465,161 @@ class KcodePluginRuntime private constructor(
 
     val dynamicPlugins: DynamicPluginController? get() = if (external == null) null else pluginManager
 
+    private suspend fun tryChangeProfile(
+        changes: PluginCompositionChange,
+        mode: String? = null,
+        imports: List<PluginPackageImport>? = null,
+    ): Boolean {
+        PluginOperationOwner.requireOutsideCall()
+        ChatGenerationRunner.requireOutsideCall()
+        return lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            val activation = activeProfile ?: return@withLock false
+            check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
+            val previous = activation.resolved
+            val imported = imports?.let {
+                require(it.isNotEmpty()) { "No plugin packages supplied" }
+                context.require(KcodePluginPackages.Key).resolver.resolve(it, previous.packages)
+            }
+            val upserts = imported ?: changes.upserts
+            require(upserts.map { it.id }.distinct().size == upserts.size) { "Duplicate composition upsert" }
+            require(upserts.none { it.id in changes.removals } && changes.enabled.keys.none { it in changes.removals }) { "Conflicting composition changes" }
+            val entries = linkedMapOf<String, EntryOptions>()
+            fun index(items: List<EntryOptions>) {
+                items.forEach { entry ->
+                    entries[entry.id] = entry
+                    if (entry.group == true) index((entry.config as List<*>).map { it as EntryOptions })
+                }
+            }
+            index(previous.composition.entries)
+            val available = previous.packages.associateBy { it.id }.toMutableMap()
+            val operations = mutableListOf<ProfileOperation>()
+            changes.removals.forEach { id ->
+                val targets = if (id in entries) listOf(id) else entries.values.filter { it.name == id }.map { it.id }
+                require(targets.isNotEmpty()) { "Unknown Profile instance '$id'" }
+                targets.forEach { operations += ProfileOperation.Remove(it) }
+            }
+            upserts.forEach { spec ->
+                validateInstallation(spec)
+                val old = available[spec.id]
+                val oldRelease = old?.packageInstallation
+                val newRelease = spec.packageInstallation
+                if (old?.version == spec.version && oldRelease != null && newRelease != null) {
+                    require(oldRelease.archiveSha256 == newRelease.archiveSha256) { "A package release cannot be republished with different bytes" }
+                }
+                if (mode == "install") require(old == null && spec.id !in entries) { "Plugin '${spec.id}' exists; use replace" }
+                if (mode == "replace") require(old != null || spec.id in entries) { "Plugin '${spec.id}' is not configured" }
+                available[spec.id] = spec.copy(enabled = true)
+                val requestedImport = imports?.firstOrNull { it.sha256.equals(spec.packageInstallation?.archiveSha256, ignoreCase = true) }
+                val requested = imports == null || requestedImport != null
+                if (requested) {
+                    val configured = StoredPluginConfiguration.encode(spec.config)
+                    val entry = entries[spec.id]
+                    if (entry == null) {
+                        // Upgrading available code must not resurrect a deliberately removed
+                        // default instance while independently named instances retain the release.
+                        if (old == null) operations += ProfileOperation.Insert(listOf(ProfileEntry(spec.id, spec.id,
+                            configured.value, enabled = spec.enabled, configurationKind = configured.kind)))
+                    }
+                    else {
+                        require(entry.group != true) { "Cannot replace a structural Group with a release" }
+                        if (entry.name != spec.id) operations += ProfileOperation.Replace(entry.id, spec.id, entry.name)
+                        if (imports == null || requestedImport?.configuration != null) {
+                            operations += ProfileOperation.Configure(entry.id, configured.value, configured.kind)
+                        }
+                        val enabled = if (imports == null) spec.enabled else requestedImport?.enabled
+                        if (enabled != null) operations += if (enabled) ProfileOperation.Enable(entry.id) else ProfileOperation.Disable(entry.id)
+                    }
+                }
+            }
+            changes.enabled.forEach { (id, enabled) -> operations += if (enabled) ProfileOperation.Enable(id) else ProfileOperation.Disable(id) }
+            val definition = previous.definition.copy(patches = previous.definition.patches + operations)
+            val machine = activation.machineConfiguration?.invoke(definition, previous.bundles) ?: previous.machineOverrides
+            val composition = ProfileCompiler().compile(definition, previous.bundles, machine, previous.launchOverrides).requireValid()
+            val required = linkedSetOf<String>()
+            fun retain(id: String) {
+                if (!required.add(id)) return
+                val spec = requireNotNull(available[id]) { "Missing Profile package '$id'" }
+                (spec.dependencies + spec.packageInstallation?.dependencies.orEmpty().keys).forEach(::retain)
+            }
+            fun visit(items: List<EntryOptions>) {
+                items.forEach { entry ->
+                    if (entry.group == true) visit((entry.config as List<*>).map { it as EntryOptions })
+                    else if (entry.name in available) retain(entry.name)
+                    else require(entry.name in profileModules) { "Unknown Profile module '${entry.name}'" }
+                }
+            }
+            visit(composition.entries)
+            val snapshot = PluginCompositionSnapshot(external = required.map { StoredDynamicPlugin.from(available.getValue(it)) }).also { it.validate() }
+            val packages = snapshot.orderedExternal().map { available.getValue(it.id) }
+            packages.forEach { validateInstallation(it) }
+            val candidate = previous.copy(definition = definition, composition = composition, packages = packages,
+                lock = profileLock(snapshot), machineOverrides = machine)
+            applyProfileChange(activation, candidate)
+            true
+        }
+    }
+
+    private suspend fun applyProfileChange(activation: ProfileActivation, candidate: ResolvedProfile) {
+        val loader = context.require(Loader.Key)
+        val beforeInventory = inventory.snapshot()
+        val beforeDescriptors = profileDescriptors.toMap()
+        val oldKeys = profileBindings.values.mapTo(mutableSetOf()) { it.key }
+        val bindings = profileBindings.toMutableMap()
+        val descriptors = linkedMapOf<String, PluginDescriptor>()
+        val oldPackageIds = activation.resolved.packages.mapTo(mutableSetOf()) { "package:${it.id}" }
+        require(candidate.packages.none { spec -> beforeInventory.any { it.id == "package:${spec.id}" && it.id !in oldPackageIds } }) {
+            "Profile package conflicts with an infrastructure inventory identity"
+        }
+        val moduleTransaction = if (candidate.packages.isNotEmpty() || activation.resolved.packages.isNotEmpty())
+            dynamic().prepareProfilePackages(candidate.packages) else null
+        try {
+            val tree = bindProfileTree(candidate, moduleTransaction?.exports.orEmpty(), bindings, descriptors)
+            bindings.keys.retainAll(descriptors.keys)
+            validateProfileConfigurations(tree)
+            require(descriptors.keys.none { id -> candidate.packages.any { "package:${it.id}" == id } }) { "Profile instance conflicts with package inventory" }
+            val removedIds = beforeDescriptors.keys - descriptors.keys
+            val packageIds = candidate.packages.mapTo(mutableSetOf()) { "package:${it.id}" }
+            (removedIds + (oldPackageIds - packageIds)).forEach { inventory.remove(it) }
+            candidate.packages.forEach { spec ->
+                val descriptor = PluginDescriptor("package:${spec.id}", spec.version, spec.artifactPath, spec.capabilities)
+                if (beforeInventory.any { it.id == descriptor.id }) inventory.replace(descriptor) else inventory.publish(descriptor)
+            }
+            descriptors.values.forEach { descriptor ->
+                if (beforeInventory.any { it.id == descriptor.id }) inventory.replace(descriptor) else inventory.publish(descriptor)
+            }
+            profileDescriptors.clear()
+            profileDescriptors.putAll(descriptors)
+            loader.withTreeTransaction(tree) {
+                settle(publishView = false)
+                val prepared = prepareApplicationView()
+                val snapshot = compositionSnapshot().copy(external = candidate.packages.map(StoredDynamicPlugin::from),
+                    builtinsEnabled = records.mapValues { it.value.enabled } + descriptors.mapValues { (id, _) -> !loader.resolve(id).disabled })
+                activation.session.commitDefinition(candidate.definition, snapshot, candidate.bundles)
+                moduleTransaction?.commit()
+                activeProfile = activation.copy(resolved = candidate)
+                profileBindings.clear()
+                profileBindings.putAll(bindings)
+                val keep = bindings.values.mapTo(mutableSetOf()) { it.key }
+                (oldKeys - keep).forEach(loader.builtins::remove)
+                commitApplicationView(prepared)
+            }
+        } catch (error: Throwable) {
+            // Cordis restores old bindings before candidate code resources can be released.
+            withContext(NonCancellable) {
+                runCatching { moduleTransaction?.rollback() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                profileDescriptors.clear()
+                profileDescriptors.putAll(beforeDescriptors)
+                val owned = (beforeDescriptors.keys + descriptors.keys + activation.resolved.packages.map { "package:${it.id}" } + candidate.packages.map { "package:${it.id}" }).toSet()
+                owned.forEach { inventory.remove(it) }
+                beforeInventory.filter { it.id in owned }.forEach { inventory.publish(it) }
+                bindings.values.map { it.key }.filter { it !in oldKeys }.forEach(loader.builtins::remove)
+                runCatching { settle(publishView = true) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+            }
+            throw error
+        }
+    }
+
     /** Entry enable state is portable intent; release availability and instance identity stay fixed. */
     private suspend fun trySetProfileEnabled(changes: Map<String, Boolean>): Boolean {
         PluginOperationOwner.requireOutsideCall()
@@ -472,7 +665,9 @@ class KcodePluginRuntime private constructor(
                     commitApplicationView(prepared)
                 }
             } catch (error: Throwable) {
-                runCatching { settle(publishView = false) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                withContext(NonCancellable) {
+                    runCatching { settle(publishView = true) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                }
                 throw error
             }
             true

@@ -94,6 +94,16 @@ internal class DesktopDynamicPluginController(
         }
     }
 
+    override suspend fun prepareProfilePackages(specs: List<DynamicPluginSpec>): ProfileModuleTransaction {
+        require(this.specs.isEmpty()) { "Cannot mix Profile and legacy modules" }
+        ensureManualReloadOnly()
+        return prepareProfileModules(profileSpecs.values.toList(), specs, configuredModules, modules::moduleUrl,
+            register = { spec -> modules.register(JvmModuleDescriptor(spec.id, spec.version, spec.entryClass,
+                File(spec.artifactPath), spec.sha256, dependencies = spec.dependencies, sharedHostPackages = SharedPluginApiPackages)) },
+            release = modules::release, unregister = { modules.unregister(it) }, forget = configuredModules::forget,
+            stageSpecs = { candidate -> profileSpecs.clear(); profileSpecs.putAll(candidate.associateBy { it.id }) })
+    }
+
     override suspend fun validateCandidate(spec: DynamicPluginSpec) {
         spec.validatePluginApi()
         require(spec.id !in specs) { "Candidate '${spec.id}' is already installed" }
@@ -216,7 +226,7 @@ internal class DesktopDynamicPluginController(
 
     override suspend fun settle() {
         profileSpecs.values.forEach { spec ->
-            val entries = loader.entries().filter { it.options.name == modules.moduleUrl(spec.id) }.toList()
+            val entries = loader.entries().filter { it.options.name == modules.moduleUrl(spec.id) || it.options.extra["kcode.packageId"] == spec.id }.toList()
             val state = when {
                 entries.isEmpty() || entries.all { it.disabled } -> PluginState.Disabled
                 entries.any { it.fiber?.state == FiberState.FAILED } -> PluginState.Failed

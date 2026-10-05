@@ -133,6 +133,11 @@ suspend fun createAndroidKoogChatRuntime(
                     },
                     launchOverrides = profile.disabled.map { ProfileOperation.Disable(it) },
                     machineConfiguredPackages = setOf("provider.settings.platform", "provider.history.platform"),
+                    builtinOverrides = nativeProfile.overrides.map { it.descriptor.id }.toSet() +
+                        nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" }.map { it.descriptor.id } + buildSet {
+                            if (settingsStore != null) add("provider.settings.platform")
+                            if (historyRepository != null) add("provider.history.platform")
+                        },
                 )
             },
             profileBuiltinModules = nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" },

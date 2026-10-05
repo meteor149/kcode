@@ -96,6 +96,10 @@ fun createDesktopKoogChatRuntime(
                         },
                         launchOverrides = profile.disabled.map { ProfileOperation.Disable(it) },
                         machineConfiguredPackages = setOf("provider.settings.platform", "provider.history.platform", "provider.shell.platform", "provider.fs.platform"),
+                        builtinOverrides = profile.overrides.map { it.descriptor.id }.toSet() + buildSet {
+                            if (settingsStore != null) add("provider.settings.platform")
+                            if (historyRepository != null) add("provider.history.platform")
+                        },
                     )
                 },
                 interactionPolicy = InteractionPolicy(

@@ -61,5 +61,9 @@ Android workspace scope enforcement and management UI remain under development. 
 Resolved profiles retain machine and launch operations separately from portable definitions.
 Runtime enable transactions recompile with those original layers, so saved user changes
 cannot displace a launch policy. `AgentPluginManager.setEnabled` and enable-only
-`applyChanges` publish Profile operations and the local snapshot together. Code replacement,
-imports and removals still require joint module-generation transactions.
+`applyChanges` publish Profile operations and the local snapshot together. Native hosts
+regenerate machine configuration for changed intent through `ProfileActivation.machineConfiguration`.
+Imports, code replacement and removals use joint native module-generation and tree transactions.
+Candidate exports are borrowed by instance bindings until successful publication or completed
+restoration; portable metadata never contains these runtime exports. See the Profile guide for
+instance/package removal semantics and the remaining management/switching work.

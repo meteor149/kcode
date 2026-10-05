@@ -60,7 +60,7 @@ Provider implementations remain independently loaded and replaceable.
 
 The move retains package names and public signatures, including existing product
 compatibility fields and localization keys. It does not turn those contracts into
-implementation plugins or generalize all existing product schemas. Current Plugin API is 42;
+implementation plugins or generalize all existing product schemas. Current Plugin API is 64;
 no `:shared` Gradle dependency is required. Package imports and composition batches use
 `AgentPluginManager.importPackages` / `applyChanges`. `PluginPackageInstallation` locks archive,
 variant, SDK ABI and package dependencies in the same persisted snapshot as native descriptors.

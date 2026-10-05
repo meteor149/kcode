@@ -22,6 +22,7 @@ suspend fun prepareNativeProfileActivation(
     machineOverrides: (ProfileDefinition, List<ProfileBundle>) -> List<ProfileOperation> = { _, _ -> emptyList() },
     launchOverrides: List<ProfileOperation> = emptyList(),
     machineConfiguredPackages: Set<String> = emptySet(),
+    builtinOverrides: Set<String> = emptySet(),
 ): ProfileActivation {
     val prepared = prepareProfileBootstrap(repository, template, bundles, legacyStore, aliases, requestedId, machineConfiguredPackages)
     val committed = repository.loadCommitted(prepared.definition.id)
@@ -36,7 +37,7 @@ suspend fun prepareNativeProfileActivation(
         }
     val resolved = ProfileResolver(resolver).resolve(
         prepared.definition, frozenBundles, effectiveOffers, builtinModules, previous,
-        machineOverrides(prepared.definition, frozenBundles), launchOverrides,
+        machineOverrides(prepared.definition, frozenBundles), launchOverrides, builtinOverrides,
     )
-    return ProfileActivation(resolved, prepared.session)
+    return ProfileActivation(resolved, prepared.session, machineOverrides)
 }

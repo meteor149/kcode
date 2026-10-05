@@ -17,6 +17,35 @@ import kotlin.test.assertTrue
 
 class ProfileActivationPreparationTest {
     @Test
+    fun localRawDescriptorsRestoreFromSnapshotWithoutClaimingArchiveLocks(): Unit = runBlocking {
+        val local = spec("agent").copy(packageInstallation = null)
+        val resolver = object : PluginPackageResolver {
+            override suspend fun resolve(imports: List<PluginPackageImport>, installed: List<DynamicPluginSpec>): List<DynamicPluginSpec> = error("Do not import local snapshots")
+            override suspend fun verify(spec: DynamicPluginSpec) = error("Raw descriptors are validated by the native loader")
+        }
+        val definition = ProfileDefinition(id = "coding", patches = listOf(ProfileOperation.Insert(listOf(ProfileEntry("agent", "agent")))))
+        val restored = ProfileResolver(resolver).resolve(definition, emptyList(), emptyMap(), emptySet(), listOf(local))
+        assertEquals(listOf(local), restored.packages)
+        assertTrue(restored.lock.packages.isEmpty())
+        assertEquals(local.sha256, restored.packages.single().sha256)
+    }
+
+    @Test
+    fun lockedReleaseSurvivesBuiltinCatalogueShadowUnlessHostExplicitlyOverrides(): Unit = runBlocking {
+        val release = spec("agent")
+        val resolver = object : PluginPackageResolver {
+            override suspend fun resolve(imports: List<PluginPackageImport>, installed: List<DynamicPluginSpec>): List<DynamicPluginSpec> = error("Do not re-resolve locks")
+            override suspend fun verify(spec: DynamicPluginSpec) = Unit
+        }
+        val definition = ProfileDefinition(id = "coding", patches = listOf(ProfileOperation.Insert(listOf(ProfileEntry("agent", "agent")))))
+        val locked = ProfileResolver(resolver).resolve(definition, emptyList(), emptyMap(), setOf("agent"), listOf(release))
+        assertEquals(listOf(release), locked.packages)
+        val borrowed = ProfileResolver(resolver).resolve(definition, emptyList(), emptyMap(), setOf("agent"), listOf(release),
+            builtinOverrides = setOf("agent"))
+        assertTrue(borrowed.packages.isEmpty())
+    }
+
+    @Test
     fun disabledInstancesDoNotWithdrawDependencyCodeOrPersistMachinePaths(): Unit = runBlocking {
         val agent = spec("agent", mapOf("storage" to "1"))
         val storage = spec("storage").copy(enabled = false, config = "/previous/machine/path")

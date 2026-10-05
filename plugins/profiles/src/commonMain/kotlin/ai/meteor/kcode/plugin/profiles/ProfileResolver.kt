@@ -6,6 +6,7 @@ import ai.meteor.kcode.plugin.PluginPackageResolver
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
 import ai.meteor.kcode.plugin.api.StoredDynamicPlugin
 import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
+import ai.meteor.kcode.plugin.api.validatePluginApi
 import org.cordis.include.CompositionResult
 import org.cordis.loader.EntryOptions
 import kotlinx.serialization.json.JsonElement
@@ -33,6 +34,7 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         previous: List<DynamicPluginSpec> = emptyList(),
         machineOverrides: List<ProfileOperation> = emptyList(),
         launchOverrides: List<ProfileOperation> = emptyList(),
+        builtinOverrides: Set<String> = emptySet(),
     ): ResolvedProfile {
         val composition = ProfileCompiler().compile(definition, bundles, machineOverrides, launchOverrides).requireValid()
         val referenced = mutableSetOf<String>()
@@ -43,7 +45,7 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
                     require(entry.name == "core.group" || entry.name == "cordis:group") { "Profile groups use core.group" }
                     val children = entry.config as List<*>
                     visit(children.map { it as EntryOptions })
-                } else if (entry.name !in builtinModules) referenced += entry.name
+                } else if (entry.name !in builtinModules || previous.any { it.id == entry.name } && entry.name !in builtinOverrides) referenced += entry.name
             }
         }
         visit(composition.entries)
@@ -52,7 +54,7 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         val requested = linkedSetOf<String>()
         fun collect(id: String) {
             if (!requested.add(id)) return
-            val dependencies = offers[id]?.dependencies ?: existing[id]?.packageInstallation?.dependencies?.keys
+            val dependencies = offers[id]?.dependencies ?: existing[id]?.let { it.dependencies + it.packageInstallation?.dependencies.orEmpty().keys }
                 ?: error("No package release available for '$id'")
             dependencies.forEach(::collect)
         }
@@ -74,14 +76,15 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         fun retain(id: String) {
             if (!required.add(id)) return
             val spec = requireNotNull(available[id]) { "Package resolution omitted '$id'" }
-            val installation = requireNotNull(spec.packageInstallation) { "Portable profiles require verified package archives for '$id'" }
-            installation.dependencies.keys.forEach(::retain)
+            // Legacy direct native descriptors stay local in the atomic snapshot. They are
+            // hash/API checked by native registration; only verified archives enter portable locks.
+            (spec.dependencies + spec.packageInstallation?.dependencies.orEmpty().keys).forEach(::retain)
         }
         referenced.forEach(::retain)
         val resolved = required.map { available.getValue(it) }
         val snapshot = PluginCompositionSnapshot(external = resolved.map(StoredDynamicPlugin::from)).also { it.validate() }
         val ordered = snapshot.orderedExternal().map { available.getValue(it.id) }
-        ordered.forEach { packages.verify(it) }
+        ordered.forEach { if (it.packageInstallation != null) packages.verify(it) else it.validatePluginApi() }
         return ResolvedProfile(definition, composition, ordered, profileLock(snapshot),
             bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } }, machineOverrides, launchOverrides)
     }

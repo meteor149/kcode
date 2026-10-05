@@ -43,8 +43,9 @@ The runtime now accepts ProfileActivation through its managed startup facade. Na
 register modules without creating package-level instances; the Cordis tree retains instance
 IDs, groups, per-instance configuration and code origins. Configurations, inventories, settling
 and application frame preparation precede the atomic generation publisher. Legacy manager
-enable mutations now use Profile transactions. Code upserts, imports and removals still
-reject declarative mode pending joint module-generation and tree transaction routing.
+enable mutations now use Profile transactions. Native imports, code upserts and removals
+also route through joint module-generation and tree transactions. Full declaration editing,
+Profile switching, external bundle import and management/recovery UI remain pending.
 
 The shipped hosts now select this mode through ProfileStartupFactory. Native bundle layers,
 explicit IDs, saved selection, machine configuration and committed restart are wired. Settings
@@ -122,3 +123,30 @@ retry, rejection of an invalid batch before withdrawal, and launch-layer precede
 saved Enable intent. The legacy manager routes individual and enable-only batch operations
 through managed Profile tree transactions. Release imports/upserts/removals, configuration
 changes, Profile switching and recovery UI remain pending.
+
+## Package transaction phase evidence
+
+Native controllers share prepared module-generation transactions. Runtime commands now
+compile portable install/configure/enable/remove intent, retain required code dependencies,
+bind candidate exports, validate all instances, settle the tree and prepare frames before
+publishing a generation. Failure restores the old tree before releasing candidate code;
+cancellation completes metadata/inventory/frame recovery without cancelling cleanup.
+Unchanged releases retain bindings, and a code upgrade does not recreate a removed default
+instance. Startup prefers saved releases over catalogue shadows, except explicit caller
+overrides. Raw local descriptors stay in local snapshots rather than claiming archive locks.
+
+The cancellation test exposed a Cordis lifecycle hang: explicit disposal did not cancel a
+suspended apply. Cordis commit `ef00190` cancels the allocation child while the transition
+owner completes suspending cleanup. Commit `f08918d` preserves provider exception identity
+when crossing that child boundary. The final Cordis Core/Loader/Include/HMR JVM run passed
+122 tests (60/35/16/11). Dependency-relocation behavior remains covered by existing tests.
+
+The first Kcode run after the lifecycle fix passed all eight new real-JAR/archive package
+transaction tests, including cancellation, publication/allocation failure, retry, independent
+removal, unrelated resources, mixed batches, immutable releases and archive restart. An
+existing exception-identity assertion failed and prompted the second Cordis fix. The final
+complete Kcode phase build passed 71 tests: 23 Profile compiler/repository/preparation tests,
+14 runtime tests, 1 native host test, 15 existing package integration tests, 10 Profile runtime
+tests and 8 Profile package transaction tests. Desktop compilation and Android APK assembly
+passed in the same build against Cordis commit `f08918d`. This does not establish Android
+device package loading, complete Profile editing, switching or recovery UI.
