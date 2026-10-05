@@ -17,6 +17,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":plugins:api"))
+            api(project(":plugins:profiles"))
             implementation(project(":plugins:default-ui-api"))
             implementation(project(":libraries:ui"))
             implementation(project(":plugins:installation-store"))

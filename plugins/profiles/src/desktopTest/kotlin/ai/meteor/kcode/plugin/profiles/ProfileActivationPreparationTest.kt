@@ -16,6 +16,59 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ProfileActivationPreparationTest {
+    @Test
+    fun disabledInstancesDoNotWithdrawDependencyCodeOrPersistMachinePaths(): Unit = runBlocking {
+        val agent = spec("agent", mapOf("storage" to "1"))
+        val storage = spec("storage").copy(enabled = false, config = "/previous/machine/path")
+        val bundle = ProfileBundle(id = "base", version = "1", patches = listOf(ProfileOperation.Insert(listOf(
+            ProfileEntry("agent", "agent"), ProfileEntry("storage", "storage"),
+        ))))
+        val template = ProfileDefinition(id = "native", bundles = listOf(ProfileBundleReference("base", "1")))
+        val migrated = migrateLegacyProfile(template, listOf(bundle), PluginCompositionSnapshot(
+            external = listOf(StoredDynamicPlugin.from(agent.copy(enabled = false)), StoredDynamicPlugin.from(storage)),
+        ), machineConfiguredPackages = setOf("storage"))
+        val resolver = object : PluginPackageResolver {
+            override suspend fun resolve(imports: List<PluginPackageImport>, installed: List<DynamicPluginSpec>): List<DynamicPluginSpec> = error("Locked releases need no re-resolution")
+            override suspend fun verify(spec: DynamicPluginSpec) = Unit
+        }
+        val result = ProfileResolver(resolver).resolve(migrated, listOf(bundle), emptyMap(), emptySet(), listOf(agent, storage))
+        assertTrue(result.packages.all { it.enabled })
+        assertTrue(result.composition.entries.all { it.disabled == true })
+        assertEquals(null, result.composition.entries.single { it.id == "storage" }.config)
+    }
+
+    @Test
+    fun nativeRestartRetainsCommittedBundleContentAndPackageLock(): Unit = runBlocking {
+        val root = Files.createTempDirectory("profile-frozen-restart")
+        val repository = FileProfileRepository(root.toFile())
+        val candidate = spec("agent")
+        var resolutions = 0
+        val resolver = object : PluginPackageResolver {
+            override suspend fun resolve(imports: List<PluginPackageImport>, installed: List<DynamicPluginSpec>): List<DynamicPluginSpec> {
+                resolutions++
+                return listOf(candidate)
+            }
+            override suspend fun verify(spec: DynamicPluginSpec) = Unit
+        }
+        val bundle = ProfileBundle(id = "base", version = "1", patches = listOf(ProfileOperation.Insert(listOf(
+            ProfileEntry("original", "agent"),
+        ))))
+        val template = ProfileDefinition(id = "coding", bundles = listOf(ProfileBundleReference("base", "1")))
+        try {
+            val first = prepareNativeProfileActivation(repository, template, listOf(bundle), resolver,
+                mapOf("agent" to ProfilePackageOffer(PluginPackageImport("first.kplugin", "1".repeat(64)))), emptySet())
+            first.session.commitDefinition(first.resolved.definition,
+                PluginCompositionSnapshot(external = first.resolved.packages.map(StoredDynamicPlugin::from)), first.resolved.bundles)
+            val changed = bundle.copy(patches = listOf(ProfileOperation.Insert(listOf(ProfileEntry("changed", "agent")))))
+            val restarted = prepareNativeProfileActivation(repository, template, listOf(changed), resolver,
+                mapOf("agent" to ProfilePackageOffer(PluginPackageImport("new.kplugin", "3".repeat(64)))), emptySet())
+            assertEquals(1, resolutions)
+            assertEquals("original", restarted.resolved.composition.entries.single().id)
+            assertEquals(first.resolved.lock, restarted.resolved.lock)
+            assertEquals(listOf(bundle), restarted.resolved.bundles)
+        } finally { root.toFile().deleteRecursively() }
+    }
+
     private fun spec(id: String, dependencies: Map<String, String> = emptyMap()) = DynamicPluginSpec(
         id = id, version = "1", entryClass = "fixture.$id", artifactPath = "/local/$id.jar", sha256 = "0".repeat(64),
         packageInstallation = PluginPackageInstallation("/local/$id.kplugin", "1".repeat(64), "desktop", "2".repeat(64), dependencies),

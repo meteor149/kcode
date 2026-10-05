@@ -16,9 +16,15 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import kotlinx.coroutines.launch
 
-fun main() {
+fun main(args: Array<String>) {
+    val profileId = when {
+        args.isEmpty() -> null
+        args.size == 2 && args[0] == "--profile" -> args[1]
+        args.size == 1 && args[0].startsWith("--profile=") -> args[0].substringAfter('=')
+        else -> error("Usage: kcode [--profile <id>]")
+    }
     val applicationWindow = AtomicReference<Frame?>()
-    val runtime = createDesktopKoogChatRuntime(applicationWindow = applicationWindow::get)
+    val runtime = createDesktopKoogChatRuntime(applicationWindow = applicationWindow::get, profileId = profileId)
     application {
         val retirementScope = rememberCoroutineScope()
         val closing = remember { mutableStateOf(false) }

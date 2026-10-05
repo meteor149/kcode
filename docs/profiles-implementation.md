@@ -45,9 +45,11 @@ IDs, groups, per-instance configuration and code origins. Configurations, invent
 and application frame preparation precede the atomic generation publisher. Legacy manager
 mutations currently reject declarative mode pending Profile transaction routing.
 
-The shipped hosts do not yet select this mode. Default product bundle adaptation, host inputs,
-data-scope binding, Profile updating/switching, management UI and recovery remain outstanding.
-Do not claim complete native Profile support from the runtime startup tests alone.
+The shipped hosts now select this mode through ProfileStartupFactory. Native bundle layers,
+explicit IDs, saved selection, machine configuration and committed restart are wired. Settings
+and history scopes are bound on both platforms; desktop workspace scopes are bound as well.
+Android workspace scope enforcement, Profile updating/switching, management UI and recovery
+remain outstanding. Do not claim complete native Profile support from startup tests alone.
 
 Phase-one validation passed: Cordis `:include:jvmTest` (14 tests), Kcode
 `:plugins:profiles:desktopTest` (4 tests), using the Cordis composite source build.
@@ -90,6 +92,21 @@ Failure scenarios cover pre-allocation validation and resource cleanup after pub
 Pending consumers and rejection of late startup were verified as discovered test cases in XML.
 
 Android platform debug Kotlin compilation and the final runtime Android compilation passed.
-No Android device Profile loading, shipped host selection, full Profile package update or
+No Android device Profile loading, full Profile package update or
 Profile switching evidence is claimed. Public lazy mount export changes Plugin API to 64;
 the exact existing shared exports cover the new member and external packages must be rebuilt.
+
+## Native host startup phase evidence
+
+The final phase build passed 57 tests: 21 Profile compiler/repository/preparation tests,
+6 Profile runtime tests, 1 real native host test, 14 existing runtime tests and 15 package
+integration tests. Desktop application compilation and Android APK assembly passed in the
+same build against the Cordis worktree. The host test writes actual settings/history, closes
+the runtime, selects a Profile and verifies persisted isolated data after restart; a corrupt
+draft cannot displace the successful commit. Explicit native startup reads its separate data.
+
+Format 2 commits freeze Bundle contents, always serialize their version, and retain code
+locks on restart. Tests cover omitted-version format 1 recovery/upgrade and refusal to commit
+incomplete frozen bundles. JSON null configuration survives serialization; machine overlays
+apply to every matching instance without copying host paths into portable definitions.
+These tests do not establish Android device persistence or complete mutation/switch semantics.

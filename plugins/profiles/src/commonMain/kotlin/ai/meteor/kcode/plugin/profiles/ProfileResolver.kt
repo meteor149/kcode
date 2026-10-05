@@ -15,6 +15,7 @@ data class ResolvedProfile(
     val composition: CompositionResult,
     val packages: List<DynamicPluginSpec>,
     val lock: ProfileLock,
+    val bundles: List<ProfileBundle> = emptyList(),
 )
 
 /** Dependency hints locate archives; the native resolver still verifies the real manifest graph. */
@@ -44,7 +45,8 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
             }
         }
         visit(composition.entries)
-        val existing = previous.associateBy { it.id }
+        // Releases are available code; only entries determine which instances run.
+        val existing = previous.associate { it.id to it.copy(enabled = true) }
         val requested = linkedSetOf<String>()
         fun collect(id: String) {
             if (!requested.add(id)) return
@@ -54,13 +56,13 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         }
         referenced.forEach(::collect)
         val requests = requested.mapNotNull { id ->
-            offers[id]?.release?.also { require(it.sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "Invalid profile package digest" } }
+            offers[id]?.release?.copy(enabled = true)?.also { require(it.sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "Invalid profile package digest" } }
                 ?: run {
                     require(id in existing) { "No package release available for '$id'" }
                     null
                 }
         }
-        val candidates = if (requests.isEmpty()) emptyList() else packages.resolve(requests, previous.filter { it.id in requested })
+        val candidates = if (requests.isEmpty()) emptyList() else packages.resolve(requests, existing.values.filter { it.id in requested })
         require(candidates.map { it.id }.distinct().size == candidates.size) { "Duplicate resolved package identity" }
         require(candidates.all { it.id in requested && offers[it.id]?.release?.sha256 == it.packageInstallation?.archiveSha256 }) {
             "Resolved package identity does not match profile offers"
@@ -78,7 +80,7 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         val snapshot = PluginCompositionSnapshot(external = resolved.map(StoredDynamicPlugin::from)).also { it.validate() }
         val ordered = snapshot.orderedExternal().map { available.getValue(it.id) }
         ordered.forEach { packages.verify(it) }
-        return ResolvedProfile(definition, composition, ordered, profileLock(snapshot))
+        return ResolvedProfile(definition, composition, ordered, profileLock(snapshot), bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } })
     }
 }
 

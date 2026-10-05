@@ -22,6 +22,13 @@ choices and external dependency graphs, retaining a whole former feature group w
 member is required and suppressing the aggregate by default until migration is possible.
 Legacy standalone settings-item aliases retire to empty sets.
 
+`nativeProfileBundles` produces the ordered data layers `kcode.base`, `kcode.agent` and
+`kcode.default-ui` from the offered native module catalogue. `nativeProfileTemplate` selects
+them for the initial `native` Profile and preserves legacy settings/history scopes. These
+layers describe entries; allocation happens later through the managed Profile runtime.
+Successful commits freeze their contents. The distribution catalogue and profile instance
+tree remain separate, so one release can supply independently configured instances.
+
 Native factories with `includeDefaults = false` do not stage the default catalog or mount
 default product features. A supplied composition store still mounts the installation
 service, so explicit imports and persisted enable choices work in alternative products.

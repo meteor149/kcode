@@ -12,6 +12,33 @@ import kotlin.test.assertTrue
 
 class ProfileCompilerTest {
     @Test
+    fun persistedExplicitNullRemainsDifferentFromOmittedConfiguration() {
+        val definition = ProfileDefinition(id = "nullable", patches = listOf(ProfileOperation.Insert(listOf(
+            ProfileEntry("omitted", "module"), ProfileEntry("explicit", "module", JsonNull),
+        ))))
+        val restored = Json.decodeFromString<ProfileDefinition>(Json.encodeToString(definition))
+        assertEquals(definition, restored)
+        val entries = compiler.compile(restored, emptyList()).requireValid().entries
+        assertEquals(null, profileConfiguration(entries[0]))
+        assertEquals(JsonNull, profileConfiguration(entries[1])?.decode())
+    }
+
+    @Test
+    fun machineAddressesApplyToEveryInstanceWithoutChangingPortableIntent() {
+        val definition = ProfileDefinition(id = "custom", patches = listOf(ProfileOperation.Insert(listOf(
+            ProfileEntry("first", "storage"), ProfileEntry("second", "storage"),
+        ))))
+        val machine = profileMachineConfiguration(definition, emptyList(), mapOf(
+            "storage" to ai.meteor.kcode.plugin.api.StoredPluginConfiguration.encode("/local/data"),
+        ))
+        val tree = compiler.compile(definition, emptyList(), machine).requireValid().entries
+        assertEquals(listOf("/local/data", "/local/data"), tree.map { profileConfiguration(it)?.decode() })
+        assertEquals(null, (definition.patches.single() as ProfileOperation.Insert).entries.first().config)
+        assertEquals("profile-custom", profileDataScopeKey("custom", "profile"))
+        assertEquals("shared-team", profileDataScopeKey("custom", "team"))
+    }
+
+    @Test
     fun serviceMetadataUsesNativeContextValuesAndPreservesRealmRules() {
         val entry = ProfileEntry("consumer", "example.consumer",
             inject = mapOf("answer" to JsonPrimitive(true)),

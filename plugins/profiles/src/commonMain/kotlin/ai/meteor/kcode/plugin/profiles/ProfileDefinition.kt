@@ -41,7 +41,7 @@ data class ProfileDataScope(
     }
 }
 
-@Serializable
+@Serializable(with = ProfileEntrySerializer::class)
 data class ProfileEntry(
     val id: String,
     val packageId: String,

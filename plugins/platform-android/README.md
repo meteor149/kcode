@@ -10,6 +10,14 @@ trusted bundled catalog or explicitly imported packages. Shared exports are defi
 default product. A supplied settings store replaces the packaged storage provider without
 transferring ownership of that caller resource.
 
+The factory's `profileId` selects named startup; otherwise it uses saved selection or the
+`native` template. The Activity forwards its `profile` intent extra. Metadata lives in
+`filesDir/cordis_profiles`. Settings scopes select separate encrypted MMKV identities;
+history scopes select separate Room database paths. The native template retains legacy
+locations. Android workspace scope enforcement and runtime Profile switching remain pending.
+Privately loaded storage providers accept their legacy Unit defaults or machine-supplied
+String identities/paths; those machine values are not copied into portable Profile intent.
+
 `settingsBackedInteraction = true` retains the independently loaded interaction settings
 feature. A custom approver is published through the SDK-only `HostToolApprovalsInputPlugin`
 and `KcodeToolApprovals`; the feature owns permission schema, validation and optional UI.

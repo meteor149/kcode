@@ -55,6 +55,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":plugins:bundle-native"))
     implementation("androidx.core:core-ktx:1.15.0")
     androidTestImplementation(project(":plugins:test-support"))
     androidTestImplementation(project(":plugins:default-ui-api"))

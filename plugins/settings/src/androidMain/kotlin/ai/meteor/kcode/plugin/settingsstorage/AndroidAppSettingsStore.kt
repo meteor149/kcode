@@ -20,7 +20,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-fun androidSettingsStoreFactory(context: Context): SettingsStoreFactory {
+fun androidSettingsStoreFactory(context: Context, mmapId: String = SETTINGS_MMAP_ID): SettingsStoreFactory {
+    require(mmapId.matches(Regex("[a-zA-Z0-9._-]{1,160}"))) { "Invalid settings store identity" }
     val applicationContext = context.applicationContext
     return SettingsStoreFactory {
         withContext(Dispatchers.IO) {
@@ -46,7 +47,7 @@ fun androidSettingsStoreFactory(context: Context): SettingsStoreFactory {
                     if (allocationFailure == null) throw cleanup else allocationFailure.addSuppressed(cleanup)
                 }
             }
-            val lease = openMmkvSettingsLease(applicationContext, SETTINGS_MMAP_ID, cryptKey)
+            val lease = openMmkvSettingsLease(applicationContext, mmapId, cryptKey)
             SettingsStoreResource(MmkvAppSettingsStore(lease, SettingsProtection.AndroidKeystore), lease::close)
         }
     }

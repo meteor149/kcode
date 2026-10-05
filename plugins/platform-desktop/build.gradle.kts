@@ -48,6 +48,7 @@ dependencies {
     testImplementation(project(":plugins:schedule"))
     api(project(":plugins:api"))
     api(project(":plugins:runtime"))
+    implementation(project(":plugins:bundle-native"))
     implementation(project(":plugins:installation-store"))
     implementation(project(":plugins:package-provider"))
     testImplementation(project(":plugins:history-repository"))

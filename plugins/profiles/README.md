@@ -14,7 +14,7 @@ to activation, not compilation.
 
 `FileProfileRepository` shares its JVM implementation between desktop and Android. Drafts
 are independent of committed generations. Each committed JSON document atomically contains
-the definition, verified package lock and local runtime composition. Publication uses a
+the definition, frozen bundle layers, verified package lock and local runtime composition. Publication uses a
 compare-and-set generation check, process serialization, a file lock and a synced temporary
 file followed by atomic replacement. A corrupt existing commit fails closed without rewrite.
 
@@ -44,5 +44,16 @@ configuration and code origins remain independent, and package inventory rows us
 identities while instance rows use their entry IDs. Runtime startup validates all configurations,
 settles the tree and prepares application snapshots before atomically committing a generation.
 
-This module is under development; default host bundle selection, Profile update/switching,
-data-scope allocation and management UI follow the phases in `docs/profiles-implementation.md`.
+`ProfileStartupFactory` prepares a deployment before product allocation. Native factories
+use `prepareNativeProfileActivation` to select an explicit ID, the saved selection, or the
+`native` template, in that order. Format 2 generations always serialize their version and
+contain every referenced bundle. Format 1 commits, including documents that omitted their
+default version, are readable and acquire frozen bundles on the next successful commit.
+Restarting retains previously verified release identities instead of silently upgrading
+them from distribution offers. Machine overlays configure every matching package instance
+without putting local paths into portable intent.
+
+The shipped factories now bind settings/history scopes on both native platforms and workspace
+directories on desktop. Caller-supplied stores remain borrowed. Profile update/switching,
+Android workspace scope enforcement and management UI remain under development. See
+`docs/profiles.md` and `docs/profiles-implementation.md`.

@@ -45,16 +45,24 @@ data class ProfileLock(
 
 /** One atomic durable publication, separate from the editable draft. Paths stay local. */
 @Serializable
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 data class CommittedProfileGeneration(
-    val formatVersion: Int = 1,
+    @kotlinx.serialization.EncodeDefault
+    val formatVersion: Int = 2,
     val generation: Long,
     val definition: ProfileDefinition,
     val lock: ProfileLock,
     val composition: PluginCompositionSnapshot,
+    val bundles: List<ProfileBundle> = emptyList(),
 ) {
     fun validate(restoring: Boolean = false) {
-        require(formatVersion == 1 && generation > 0) { "Invalid profile generation" }
+        require((formatVersion == 2 || restoring && formatVersion == 1) && generation > 0) { "Invalid profile generation" }
         definition.validate()
+        require(bundles.map { it.id }.distinct().size == bundles.size) { "Duplicate committed bundle" }
+        if (formatVersion == 2) require(bundles.map { it.id }.toSet() == definition.bundles.map { it.id }.toSet()) {
+            "Committed Profile must contain every declared bundle snapshot"
+        }
+        if (bundles.isNotEmpty()) ProfileCompiler().compile(definition, bundles).requireValid()
         lock.validate()
         if (restoring) composition.validateForRestore() else composition.validate()
         val locked = lock.packages.associateBy { it.id }

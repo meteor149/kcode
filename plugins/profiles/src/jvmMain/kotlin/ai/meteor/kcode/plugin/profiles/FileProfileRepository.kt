@@ -19,6 +19,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /** App-private JSON repository. Committed definition, lock and runtime snapshot share one file. */
 class FileProfileRepository(directory: File) : ProfileRepository {
@@ -76,7 +79,11 @@ class FileProfileRepository(directory: File) : ProfileRepository {
 
     private fun committed(id: String): CommittedProfileGeneration? =
         read(profileDirectory(id).resolve("committed.json"))?.let {
-            json.decodeFromString<CommittedProfileGeneration>(it).also { value ->
+            val document = json.parseToJsonElement(it).jsonObject
+            // Early format 1 writers omitted the default formatVersion field.
+            val versioned = if ("formatVersion" in document) document else
+                JsonObject(document + ("formatVersion" to JsonPrimitive(1)))
+            json.decodeFromJsonElement<CommittedProfileGeneration>(versioned).also { value ->
                 require(value.definition.id == id) { "Profile identity mismatch" }
                 value.validate(restoring = true)
             }

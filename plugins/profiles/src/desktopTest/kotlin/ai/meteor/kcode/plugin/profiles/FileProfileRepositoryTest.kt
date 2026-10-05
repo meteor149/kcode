@@ -9,8 +9,36 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 class FileProfileRepositoryTest {
+    @Test
+    fun omittedLegacyVersionUpgradesToAnExplicitGenerationWithFrozenBundles(): Unit = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-format-upgrade")
+        val definition = ProfileDefinition(id = "legacy", bundles = listOf(ProfileBundleReference("base", "1")))
+        val bundle = ProfileBundle(id = "base", version = "1", patches = emptyList())
+        try {
+            val folder = Files.createDirectories(root.resolve(definition.id))
+            val old = CommittedProfileGeneration(formatVersion = 1, generation = 1, definition = definition,
+                lock = ProfileLock(), composition = PluginCompositionSnapshot())
+            val document = Json.parseToJsonElement(Json.encodeToString(old)).jsonObject
+            Files.writeString(folder.resolve("committed.json"), JsonObject(document - "formatVersion").toString())
+            val repository = FileProfileRepository(root.toFile())
+            assertEquals(1, repository.loadCommitted(definition.id)?.formatVersion)
+            val session = ProfileCompositionSession.open(repository, definition, initialBundles = listOf(bundle))
+            session.save(session.load())
+            val upgraded = repository.loadCommitted(definition.id)!!
+            assertEquals(2, upgraded.formatVersion)
+            assertEquals(listOf(bundle), upgraded.bundles)
+            assertTrue("formatVersion" in Json.parseToJsonElement(Files.readString(folder.resolve("committed.json"))).jsonObject)
+            assertFailsWith<IllegalArgumentException> { repository.commit(upgraded.copy(generation = 3, bundles = emptyList()), 2) }
+            assertEquals(upgraded, repository.loadCommitted(definition.id))
+        } finally { root.toFile().deleteRecursively() }
+    }
+
     private fun generation(id: String, revision: Long) = CommittedProfileGeneration(
         generation = revision,
         definition = ProfileDefinition(id = id),

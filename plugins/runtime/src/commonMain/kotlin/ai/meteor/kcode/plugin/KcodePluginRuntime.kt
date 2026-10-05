@@ -97,6 +97,7 @@ import org.cordis.loader.withTreeTransaction
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.profiles.profileConfiguration
 import ai.meteor.kcode.plugin.profiles.profileLock
+import ai.meteor.kcode.plugin.profiles.ProfileStartupFactory
 
 interface DynamicPluginController : AgentPluginManager {
     /** Apply a resolved Profile through the host's managed startup boundary. */
@@ -128,6 +129,7 @@ data class KcodePluginRuntimeConfig(
     val dynamicPluginControllerFactory: DynamicPluginControllerFactory? = null,
     val profile: KcodePluginProfile = KcodePluginProfile(),
     val profileActivation: ai.meteor.kcode.plugin.profiles.ProfileActivation? = null,
+    val profileStartup: ProfileStartupFactory? = null,
     val profileBuiltinModules: List<KcodePluginMount> = emptyList(),
     val settingsStore: AppSettingsStore? = null,
     val settingsStoreFactory: SettingsStoreFactory? = null,
@@ -252,7 +254,7 @@ class KcodePluginRuntime private constructor(
                 external = resolved.packages.map(StoredDynamicPlugin::from),
                 builtinsEnabled = records.mapValues { it.value.enabled } + descriptors.mapValues { (id, _) -> !loader.resolve(id).disabled },
             )
-            activation.session.commitDefinition(resolved.definition, snapshot)
+            activation.session.commitDefinition(resolved.definition, snapshot, resolved.bundles)
             // Everything after the atomic publisher is in-memory and cannot allocate providers.
             activeProfile = activation
             commitApplicationView(prepared)
@@ -888,10 +890,12 @@ class KcodePluginRuntime private constructor(
         }
 
         private suspend fun createOwned(config: KcodePluginRuntimeConfig): KcodePluginRuntime {
+            require(config.profile.overrides.map { it.descriptor.id }.distinct().size == config.profile.overrides.size) { "Duplicate Profile override" }
+            require(config.profileBuiltinModules.map { it.descriptor.id }.distinct().size == config.profileBuiltinModules.size) { "Duplicate Profile builtin module" }
             require(config.profileActivation == null || (config.profile.disabled.isEmpty() && config.profile.overrides.isEmpty())) {
                 "Legacy Profile overrides cannot be combined with a declarative Profile"
             }
-            val compositionStore = config.profileActivation?.session ?: config.pluginCompositionStore
+            require(config.profileActivation == null || config.profileStartup == null) { "Choose one Profile startup source" }
             val overlayUiSlots = MutableStateFlow(UiContributionsSnapshot())
             val overlayHostState = ConversationOverlayHostState(overlayUiSlots.asStateFlow())
             val mounts = linkedMapOf<String, KcodePluginMount>()
@@ -900,7 +904,7 @@ class KcodePluginRuntime private constructor(
                 require(id.isNotBlank() && id !in BootstrapIds) { "invalid product plugin id '$id'" }
                 require(mounts.put(id, mount) == null) { "duplicate plugin id '$id'" }
             }
-            if (config.profileActivation == null && config.profile.includeDefaults) (config.bundle ?: nativePluginBundle(NativePluginServices(
+            val defaults = if (config.profileActivation == null && config.profile.includeDefaults) (config.bundle ?: nativePluginBundle(NativePluginServices(
                 interactionPolicy = config.interactionPolicy,
                 settingsBackedInteraction = config.settingsBackedInteraction,
                 skillRuntime = config.skillRuntime,
@@ -916,7 +920,25 @@ class KcodePluginRuntime private constructor(
                 pluginCompositionStore = config.pluginCompositionStore,
                 conversationOverlayHostState = overlayHostState,
                 packagedProviderIds = config.bundledPackages.map { it.id }.toSet(),
-            ))).forEach(::add)
+            ))) else emptyList()
+            val profileModules = linkedMapOf<String, KcodePluginMount>()
+            if (config.profileStartup != null) {
+                defaults.filterNot { it.descriptor.id == "provider.plugin-installations.platform" }.forEach { module ->
+                    profileModules[module.descriptor.id] = module
+                }
+                config.profileBuiltinModules.forEach { module ->
+                    require(module.descriptor.id.isNotBlank() && module.descriptor.id !in BootstrapIds)
+                    profileModules[module.descriptor.id] = module
+                }
+                config.profile.overrides.forEach { module ->
+                    require(module.descriptor.id in profileModules || config.bundledPackages.any { it.id == module.descriptor.id }) {
+                        "Override refers to unknown Profile module '${module.descriptor.id}'"
+                    }
+                    profileModules[module.descriptor.id] = module
+                }
+            } else if (config.profileActivation == null) defaults.forEach(::add)
+            val activation = config.profileActivation ?: config.profileStartup?.prepare(profileModules.values.toList())
+            val compositionStore = activation?.session ?: config.pluginCompositionStore
             config.featurePlugins.forEach(::add)
             // Persistence is composition infrastructure, independent of the selected product.
             // An explicitly supplied provider remains replaceable through the normal manager.
@@ -928,7 +950,7 @@ class KcodePluginRuntime private constructor(
                 ))
             }
             val overrideIds = mutableSetOf<String>()
-            config.profile.overrides.forEach { mount ->
+            if (activation == null) config.profile.overrides.forEach { mount ->
                 val id = mount.descriptor.id
                 require(overrideIds.add(id)) { "duplicate override '$id'" }
                 require(id in mounts || config.bundledPackages.any { it.id == id }) { "override refers to unknown plugin '$id'" }
@@ -936,10 +958,10 @@ class KcodePluginRuntime private constructor(
             }
             require(config.bundledPackages.map { it.id }.distinct().size == config.bundledPackages.size) { "Duplicate bundled plugin identity" }
             require(config.bundledPackages.all { it.id.isNotBlank() && it.id !in BootstrapIds }) { "Invalid bundled plugin identity" }
-            val bundled = if (config.profileActivation != null) emptyList() else config.bundledPackages.filterNot { it.id in overrideIds }
+            val bundled = if (activation != null) emptyList() else config.bundledPackages.filterNot { it.id in overrideIds }
             val bundledIds = bundled.map { it.id }.toSet()
             bundledIds.forEach(mounts::remove)
-            require(config.profile.disabled.all { it in mounts || it in bundledIds }) { "profile disables unknown plugin ids" }
+            if (activation == null) require(config.profile.disabled.all { it in mounts || it in bundledIds }) { "profile disables unknown plugin ids" }
             val context = overlayHostState.bind(Context()).let { config.hostInputs?.bind(it) ?: it }
             val bootstrap = mutableListOf<Fiber<*>>()
             val records = linkedMapOf<String, ManagedPlugin>()
@@ -962,9 +984,10 @@ class KcodePluginRuntime private constructor(
                 val aliases = config.builtinAliases
                     ?: if (config.bundle == null && config.profile.includeDefaults) NativeBuiltinAliases else emptyMap()
                 return KcodePluginRuntime(context, config.hostInputs, bootstrap, records, inventory, external, aliases, overlayHostState, overlayUiSlots).also {
-                    if (config.profileActivation != null) {
+                    if (activation != null) {
                         it.profileStartupOpen = true
-                        it.pluginManager.activateProfile(config.profileActivation, config.profileBuiltinModules)
+                        it.pluginManager.activateProfile(activation,
+                            if (config.profileStartup != null) profileModules.values.toList() else config.profileBuiltinModules)
                     } else {
                         it.restoreInstalledComposition(bundled, config.profile.disabled)
                         it.settle()

@@ -8,6 +8,7 @@ fun migrateLegacyProfile(
     bundles: List<ProfileBundle>,
     legacy: PluginCompositionSnapshot,
     aliases: Map<String, Set<String>> = emptyMap(),
+    machineConfiguredPackages: Set<String> = emptySet(),
 ): ProfileDefinition {
     legacy.validateForRestore()
     val base = ProfileCompiler().compile(template, bundles).requireValid()
@@ -39,12 +40,12 @@ fun migrateLegacyProfile(
         if (spec.id !in entries) operations += ProfileOperation.Insert(listOf(ProfileEntry(
             id = spec.id,
             packageId = spec.id,
-            config = config.value,
+            config = if (spec.id in machineConfiguredPackages) null else config.value,
             enabled = spec.enabled,
             configurationKind = config.kind,
         ))) else {
             operations += ProfileOperation.Replace(spec.id, spec.id)
-            operations += ProfileOperation.Configure(spec.id, config.value, config.kind)
+            if (spec.id !in machineConfiguredPackages) operations += ProfileOperation.Configure(spec.id, config.value, config.kind)
             states[spec.id] = spec.enabled
         }
     }

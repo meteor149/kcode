@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
             var adopted = false
             try {
                 val runtime = createAndroidKoogChatRuntime(
+                    profileId = intent?.getStringExtra("profile"),
                     activity = this@MainActivity,
                     settingsBackedShell = true,
                     permissionHost = permissionBroker,

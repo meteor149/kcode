@@ -13,11 +13,13 @@ class ProfileCompositionSession private constructor(
     initial: CommittedProfileGeneration?,
     definition: ProfileDefinition,
     initialSnapshot: PluginCompositionSnapshot,
+    initialBundles: List<ProfileBundle>,
 ) : PluginCompositionStore {
     private val mutex = Mutex()
     private var generation = initial?.generation
     private var definition = definition
     private var snapshot = initial?.composition ?: initialSnapshot
+    private var bundles = initial?.bundles?.takeIf { initial.formatVersion == 2 || it.isNotEmpty() } ?: initialBundles
 
     override suspend fun load(): PluginCompositionSnapshot = mutex.withLock { snapshot }
 
@@ -26,34 +28,39 @@ class ProfileCompositionSession private constructor(
     }
 
     /** Called as the durable publisher inside a managed runtime transaction. */
-    suspend fun commitDefinition(candidate: ProfileDefinition, snapshot: PluginCompositionSnapshot) = mutex.withLock {
+    suspend fun commitDefinition(candidate: ProfileDefinition, snapshot: PluginCompositionSnapshot,
+        bundles: List<ProfileBundle> = this.bundles) = mutex.withLock {
         candidate.validate()
         require(candidate.id == definition.id) { "Switch profiles by rebuilding the runtime" }
-        publish(candidate, snapshot)
+        publish(candidate, snapshot, bundles)
     }
 
-    private suspend fun publish(candidate: ProfileDefinition, snapshot: PluginCompositionSnapshot) {
+    private suspend fun publish(candidate: ProfileDefinition, snapshot: PluginCompositionSnapshot,
+        bundles: List<ProfileBundle> = this.bundles) {
         snapshot.validate()
         val next = CommittedProfileGeneration(
             generation = (generation ?: 0L) + 1L,
             definition = candidate,
             lock = profileLock(snapshot),
             composition = snapshot,
+            bundles = bundles,
         )
         withContext(NonCancellable) {
             repository.commit(next, generation)
             this@ProfileCompositionSession.snapshot = snapshot
             definition = candidate
             generation = next.generation
+            this@ProfileCompositionSession.bundles = bundles
         }
     }
 
     companion object {
         suspend fun open(repository: ProfileRepository, definition: ProfileDefinition,
-            initialSnapshot: PluginCompositionSnapshot = PluginCompositionSnapshot()): ProfileCompositionSession {
+            initialSnapshot: PluginCompositionSnapshot = PluginCompositionSnapshot(),
+            initialBundles: List<ProfileBundle> = emptyList()): ProfileCompositionSession {
             definition.validate()
             val previous = repository.loadCommitted(definition.id)
-            return ProfileCompositionSession(repository, previous, previous?.definition ?: definition, initialSnapshot)
+            return ProfileCompositionSession(repository, previous, previous?.definition ?: definition, initialSnapshot, initialBundles)
         }
     }
 }
