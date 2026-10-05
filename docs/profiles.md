@@ -14,15 +14,15 @@ Native factories choose an explicit `profileId`, the repository selection, or th
 the `profile` Activity intent extra. These choose startup; they do not perform a live switch
 or save selection by themselves.
 
-Desktop factories return stable facades owned by `KcodeProfileHost`.
-`createDesktopProfileHost` is the suspending construction entry point; `switchTo(id)` performs
+Desktop and Android factories return stable facades owned by `KcodeProfileHost`.
+`createDesktopProfileHost` and `createAndroidProfileHost` are the suspending construction entry points; `switchTo(id)` performs
 an in-process switch and saves selection only after successful target activation. Active calls
 and overlay leases must finish first, or the caller must request `cancelActive = true` to cancel
 and join them. Target preflight precedes old-runtime withdrawal; failed allocation/publication
 reconstructs the old locked generation without rewriting history. Failed old closure or failed
 restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's admitted current
-runtime rather than a retained old owner. Android factory integration and recovery UI remain
-pending. These controls are currently native runtime APIs, not an exported Profile management SDK.
+runtime rather than a retained old owner. Each allocation receives fresh host inputs. Recovery UI
+remains pending. These controls are currently native runtime APIs, not an exported Profile management SDK.
 
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
@@ -46,7 +46,7 @@ and `selection.json` are imported once and remain read-only migration evidence. 
 authority corruption fails closed rather than falling back to those legacy documents.
 `ProfileGenerationRepository.state()` reads the selected generation and revision together;
 `commitAndSelect` compares both the target generation and authority revision before publishing
-the new generation and selection in one operation. Runtime switching must still coordinate
+the new generation and selection in one operation. The native host coordinator combines
 this publisher with staged activation, failure recovery and stable host facades.
 
 `prepareNativeProfileActivation(stageSwitch = true)` requires an explicit target and captures
@@ -91,8 +91,13 @@ to Profile settings/history scopes. Service isolation and persistent data scopes
 
 Desktop binds settings/history paths under `profile-data/<scope>` and workspace directories
 under `workspaces/<scope>`; legacy values retain former locations. Android binds settings
-to an encrypted MMKV identity and history to a scoped Room database. Android workspace
-scope enforcement remains pending. Caller-supplied stores are borrowed and retain their own
+to an encrypted MMKV identity and history to a scoped Room database. Android binds scoped
+file tools, App shell working directories and Ubuntu `/workspace` to the same directory under
+`filesDir/workspaces/<scope>`. Legacy/default workspace selection preserves former behavior.
+App-private scoped workspaces reject ADB execution before requesting authorization; they do
+not silently fall back to the shared ADB workspace. Root paths use the configured directory,
+but real root authorization, permissions and execution have not been verified by these tests.
+Caller-supplied stores are borrowed and retain their own
 storage location. Closing a provider or deleting Profile metadata does not delete durable data.
 
 ## Current boundaries
@@ -131,7 +136,11 @@ Code availability and locked releases do not change during an enable-only transa
 Publication failure preserves the previous committed intent. Repository generation CAS
 remains the authority for concurrent writers.
 
-Profile editing/activation commands, live selection/switching,
+Public Profile editing/activation commands,
 external bundle import, credential-safe export and management/recovery UI remain incomplete.
-Desktop tests cover real startup, persistence and restart. Android compilation and APK
-assembly establish build compatibility; they do not prove device loading or data isolation.
+Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
+actual package startup, switching, persistence, rollback and restart. Three Android tests on
+an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu
+workspace binding, stale services, selection restart, failed allocation recovery and scoped
+ADB rejection. They do not establish root or Shizuku authorization. See [verification](verification.md)
+for evidence boundaries; complete declaration editing and recovery UI are still required.

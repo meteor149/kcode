@@ -212,3 +212,11 @@ retaining unchanged future identities and unknown document fields.
 
 Execution mode policy, validation, settings UI and their tests live in this module alongside
 the native providers. `policy.shell-mode.platform` remains an independently replaceable entry.
+
+Packaged Android system/Ubuntu entries accept Unit or an absolute machine workspace path.
+Unit retains legacy directories; a scoped path supplies the App default working directory,
+system `/workspace` alias and local Ubuntu bind. Root system commands use that scoped default
+and alias as well. App-private paths are not accessible to ADB UID worlds: scoped ADB requests
+currently reject before authorization rather than reuse global state. App-UID instrumentation
+does not prove actual Root/Shizuku execution. Older locked Unit-only releases require an explicit
+code upgrade before accepting the new scoped configuration; hosts do not silently upgrade locks.

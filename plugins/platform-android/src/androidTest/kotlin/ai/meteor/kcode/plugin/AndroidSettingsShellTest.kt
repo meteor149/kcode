@@ -90,7 +90,7 @@ class AndroidSettingsShellTest {
                     settingsBackedShell = true, profile = KcodePluginProfile(overrides = listOf(capture)),
                 )
                 try {
-                    val root = runtime.owner as KcodePluginRuntime
+                    val root = runtime.productRuntimeForTest()
                     assertTrue(shell.javaClass.classLoader !== ShellBackend::class.java.classLoader)
                     assertEquals("android", root.pluginManager.installed().single { it.id == "provider.shell.platform" }.packageInstallation?.variantId)
                     val result = shell.run(ShellRequest("id -u"))

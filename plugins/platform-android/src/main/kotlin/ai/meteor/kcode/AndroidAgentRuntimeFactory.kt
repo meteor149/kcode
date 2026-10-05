@@ -16,6 +16,10 @@ import ai.meteor.kcode.plugin.FilePluginCompositionStore
 import ai.meteor.kcode.plugin.KcodePluginProfile
 import ai.meteor.kcode.plugin.KcodePluginRuntime
 import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.plugin.KcodeProfileHost
+import ai.meteor.kcode.plugin.PreparedProfileRuntime
+import ai.meteor.kcode.plugin.ProfileRuntimeFactory
+import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.AndroidPermissionHost
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -82,6 +86,25 @@ suspend fun createAndroidKoogChatRuntime(
     confirmationDialogs: ConfirmationDialogHost? = null,
     profileId: String? = null,
 ): KcodeAgentRuntime {
+    return createAndroidProfileHost(activity, modeProvider, permissionModeProvider, toolCallApprover,
+        settingsStore, historyRepository, profile, settingsBackedInteraction, settingsBackedShell,
+        permissionHost, confirmationDialogs, profileId).runtime
+}
+
+suspend fun createAndroidProfileHost(
+    activity: Activity,
+    modeProvider: suspend () -> ShellExecutionMode = { ShellExecutionMode.App },
+    permissionModeProvider: suspend () -> ToolPermissionMode = { ToolPermissionMode.Ask },
+    toolCallApprover: ToolCallApprover? = null,
+    settingsStore: AppSettingsStore? = null,
+    historyRepository: ConversationHistoryRepository? = null,
+    profile: KcodePluginProfile = KcodePluginProfile(),
+    settingsBackedInteraction: Boolean = false,
+    settingsBackedShell: Boolean = false,
+    permissionHost: AndroidPermissionHost? = null,
+    confirmationDialogs: ConfirmationDialogHost? = null,
+    profileId: String? = null,
+): KcodeProfileHost {
     val nativeOverrides = if (profile.includeDefaults) buildList {
         if (toolCallApprover == null && !settingsBackedInteraction && profile.overrides.none { it.descriptor.id == "provider.interaction.platform" }) {
             val descriptor = PluginDescriptor("provider.interaction.platform", "builtin", "native", setOf("interaction"))
@@ -112,55 +135,85 @@ suspend fun createAndroidKoogChatRuntime(
         .filter { it.id != "provider.history.platform" || historyRepository == null }
     val legacyStore = FilePluginCompositionStore(pluginDirectory)
     val repository = FileProfileRepository(File(activity.filesDir, "cordis_profiles"))
-    val pluginRuntime = KcodePluginRuntime.create(
-        KcodePluginRuntimeConfig(
-            bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
-            profileStartup = ProfileStartupFactory { modules ->
-                val bundles = nativeProfileBundles((modules.map { it.descriptor.id } + bundled.map { it.id }).distinct())
-                prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
-                    NativePluginPackageResolver(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity)),
-                    bundled.associate { it.id to ProfilePackageOffer(it.release) }, modules.map { it.descriptor.id }.toSet(),
-                    legacyStore, NativeBuiltinAliases + NativeProfileInfrastructureAliases, profileId,
-                    machineOverrides = { definition, frozen ->
-                        val settingsKey = profileDataScopeKey(definition.id, definition.dataScope.settings)
-                        val historyKey = profileDataScopeKey(definition.id, definition.dataScope.history)
-                        val configs = buildMap {
-                            if (settingsKey != "legacy") put("provider.settings.platform", "kcode.settings.$settingsKey")
-                            if (historyKey != "legacy") put("provider.history.platform",
-                                File(activity.filesDir, "profile-data/$historyKey/history.db").absolutePath)
-                        }.filterKeys { id -> bundled.any { it.id == id } }.mapValues { StoredPluginConfiguration.encode(it.value) }
-                        profileMachineConfiguration(definition, frozen, configs)
-                    },
-                    launchOverrides = profile.disabled.map { ProfileOperation.Disable(it) },
-                    machineConfiguredPackages = setOf("provider.settings.platform", "provider.history.platform"),
-                    builtinOverrides = nativeProfile.overrides.map { it.descriptor.id }.toSet() +
-                        nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" }.map { it.descriptor.id } + buildSet {
-                            if (settingsStore != null) add("provider.settings.platform")
-                            if (historyRepository != null) add("provider.history.platform")
-                        },
-                )
+    var requestedId = profileId
+    var staging = false
+    lateinit var catalogue: Set<String>
+    lateinit var initialActivation: ProfileActivation
+    suspend fun prepare(): ProfileActivation {
+        val bundles = nativeProfileBundles((catalogue + bundled.map { it.id }).toList())
+        return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
+            NativePluginPackageResolver(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity)),
+            bundled.associate { it.id to ProfilePackageOffer(it.release) }, catalogue,
+            legacyStore, NativeBuiltinAliases + NativeProfileInfrastructureAliases, requestedId,
+            machineOverrides = { definition, frozen ->
+                val settingsKey = profileDataScopeKey(definition.id, definition.dataScope.settings)
+                val historyKey = profileDataScopeKey(definition.id, definition.dataScope.history)
+                val configs = buildMap {
+                    if (settingsKey != "legacy") put("provider.settings.platform", "kcode.settings.$settingsKey")
+                    if (historyKey != "legacy") put("provider.history.platform",
+                        File(activity.filesDir, "profile-data/$historyKey/history.db").absolutePath)
+                    if (definition.dataScope.workspace !in setOf("default", "legacy")) {
+                        val workspaceKey = profileDataScopeKey(definition.id, definition.dataScope.workspace)
+                        val workspace = Files.createDirectories(activity.filesDir.toPath().resolve("workspaces").resolve(workspaceKey)).toRealPath().toString()
+                        put("provider.fs.platform", workspace)
+                        put("provider.shell.platform", workspace)
+                        put("provider.shell.ubuntu", workspace)
+                    }
+                }.filterKeys { id -> bundled.any { it.id == id } }.mapValues { StoredPluginConfiguration.encode(it.value) }
+                profileMachineConfiguration(definition, frozen, configs)
             },
-            profileBuiltinModules = nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" },
-            interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover ?: ToolCallApprover { false }),
-            hostInputs = when {
-                confirmationDialogs != null -> AndroidPluginHostInputs(activity, permissionHost, confirmationDialogs)
-                permissionHost != null -> AndroidPluginHostInputs(activity, permissionHost)
-                else -> AndroidPluginHostInputs(activity)
-            },
-            settingsBackedInteraction = settingsBackedInteraction,
-            profile = nativeProfile,
-            settingsStore = settingsStore,
-            historyRepository = historyRepository,
-            featurePlugins = nativeFeaturePlugins.filter { it.descriptor.id == "provider.plugin-packages.platform" },
-            pluginCompositionStore = legacyStore,
-            dynamicPluginControllerFactory = androidPluginControllerFactory(activity, pluginDirectory),
-        ),
+            launchOverrides = profile.disabled.map { ProfileOperation.Disable(it) },
+            machineConfiguredPackages = setOf("provider.settings.platform", "provider.history.platform", "provider.fs.platform", "provider.shell.platform", "provider.shell.ubuntu"),
+            builtinOverrides = nativeProfile.overrides.map { it.descriptor.id }.toSet() +
+                nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" }.map { it.descriptor.id } + buildSet {
+                    if (settingsStore != null) add("provider.settings.platform")
+                    if (historyRepository != null) add("provider.history.platform")
+                },
+            stageSwitch = staging,
+        )
+    }
+    val startup = ProfileStartupFactory { modules ->
+        catalogue = modules.map { it.descriptor.id }.toSet()
+        prepare().also { initialActivation = it }
+    }
+    fun hostInputs() = when {
+        confirmationDialogs != null -> AndroidPluginHostInputs(activity, permissionHost, confirmationDialogs)
+        permissionHost != null -> AndroidPluginHostInputs(activity, permissionHost)
+        else -> AndroidPluginHostInputs(activity)
+    }
+    val configuration = KcodePluginRuntimeConfig(
+        bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
+        profileStartup = startup,
+        profileBuiltinModules = nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" },
+        interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover ?: ToolCallApprover { false }),
+        settingsBackedInteraction = settingsBackedInteraction,
+        profile = nativeProfile,
+        settingsStore = settingsStore,
+        historyRepository = historyRepository,
+        featurePlugins = nativeFeaturePlugins.filter { it.descriptor.id == "provider.plugin-packages.platform" },
+        pluginCompositionStore = legacyStore,
+        dynamicPluginControllerFactory = androidPluginControllerFactory(activity, pluginDirectory),
     )
-    return KcodeAgentRuntime(
-        chatService = pluginRuntime.chatService,
-        conversationOverlayController = pluginRuntime.conversationOverlayController,
-        pluginManager = pluginRuntime.pluginManager,
-        owner = pluginRuntime,
-        applicationContent = pluginRuntime,
+    fun facade(runtime: KcodePluginRuntime) = KcodeAgentRuntime(
+        chatService = runtime.chatService,
+        conversationOverlayController = runtime.conversationOverlayController,
+        pluginManager = runtime.pluginManager,
+        owner = runtime,
+        applicationContent = runtime,
     )
+    val initial = KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs()))
+    staging = true
+    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, ProfileRuntimeFactory { id ->
+        requestedId = id
+        val activation = prepare()
+        PreparedProfileRuntime(activation) {
+            facade(KcodePluginRuntime.create(configuration.copy(
+                hostInputs = hostInputs(),
+                profileStartup = ProfileStartupFactory { modules ->
+                    check(modules.map { it.descriptor.id }.toSet() == catalogue) { "Native module catalogue changed" }
+                    activation
+                },
+            )))
+        }
+    })
 }

@@ -83,6 +83,9 @@ withdrawal. Credentials and host paths do not belong in exported profile definit
 Completion requires all phases, migration tests, real package loading evidence, desktop
 and Android build validation and documentation. Phase-one tests alone are not completion.
 
+The phase evidence below records behavior at each checkpoint. Later sections supersede
+earlier pending-status statements; the [Profile guide](profiles.md) describes current behavior.
+
 ## Runtime startup phase evidence
 
 Declarative startup validation passed against the Cordis worktree: 16 Profile compiler,
@@ -213,3 +216,29 @@ including all three actual native factory tests. Desktop application compilation
 platform compilation passed against Cordis `f08918d`. Android factory integration, the exported
 management SDK/UI and recovery UI remain outstanding; no Android device switching evidence is
 claimed.
+
+## Android native host integration evidence
+
+Android factories now return the coordinator's stable facades and prepare target/restoration
+recipes from the module ID catalogue. Every initial, candidate and restored allocation receives
+fresh host inputs. Settings/history scopes use the existing MMKV/Room providers. Scoped file
+tools, App shell defaults and Ubuntu `/workspace` share the configured app-private directory.
+Unit configuration retains legacy paths. ADB rejects app-private scoped workspaces before
+authorization rather than silently selecting shared data. Root paths are configured but actual
+root authorization and execution are not established by this phase.
+
+The phase build assembled the Android app and platform instrumentation APK, compiled the app's
+instrumentation sources and passed the 97 related desktop tests (32 Profile and 65 native/runtime/
+package tests), against Cordis `f08918d`. The dedicated instrumentation APK then ran all three
+`AndroidProfileHostTest` cases successfully on an ARM64 API 36 physical device (`OK (3 tests)`).
+The switch case requires the real APK Ubuntu provider on ARM64 and executes a command through
+its scoped `/workspace` binding. It also verifies private filesystem implementation identity,
+scoped settings/history/files, stale service rejection and persisted-selection restart. The
+other cases verify failed target allocation restores the old locked state and history, and
+scoped ADB rejection happens before authorization. Execution took 183.358 seconds.
+
+Existing instrumentation owner-access adaptations were compiled, not run in this phase. Full
+typed replacement, public Profile management SDK, declaration editing, external bundle import,
+credential-safe export and management/recovery UI remain outstanding. This evidence does not
+establish successful Shizuku/Root execution, full device-suite coverage or sudden power-loss
+durability. See [verification](verification.md) for evidence boundaries.

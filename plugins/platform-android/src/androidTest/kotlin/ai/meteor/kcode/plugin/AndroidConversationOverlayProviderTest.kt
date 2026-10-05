@@ -235,7 +235,7 @@ class AndroidConversationOverlayProviderTest {
                     try {
                         val turn = requireNotNull(runtime.conversationOverlayController).startTurn(emptyList())
                         turn.finish()
-                        assertTrue((runtime.owner as KcodePluginRuntime).inventory.snapshot().any {
+                        assertTrue((runtime.owner as KcodeProfileHost).diagnostics().plugins.any {
                             it.id == "provider.conversation-overlay.platform"
                         })
                     } finally { runtime.close() }

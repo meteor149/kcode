@@ -14,9 +14,17 @@ The factory's `profileId` selects named startup; otherwise it uses saved selecti
 `native` template. The Activity forwards its `profile` intent extra. Metadata lives in
 `filesDir/cordis_profiles`. Settings scopes select separate encrypted MMKV identities;
 history scopes select separate Room database paths. The native template retains legacy
-locations. Android workspace scope enforcement and runtime Profile switching remain pending.
+locations. `createAndroidProfileHost` creates the stable coordinator; the existing runtime
+factory returns its chat/manager/overlay/application facades. Each product allocation receives
+fresh host-input leases. Switching stages the target, joins admitted work, closes the old
+product and publishes generation/selection together. Failure reconstructs the old locked
+intent; failed closure/restoration refuses execution.
 Privately loaded storage providers accept their legacy Unit defaults or machine-supplied
 String identities/paths; those machine values are not copied into portable Profile intent.
+Explicit workspace scopes bind filesystem, App system shell and local Ubuntu `/workspace`
+to `filesDir/workspaces/<scope>`. Unit/default and `legacy` retain their previous locations.
+The current ADB worlds cannot access app-private scoped workspaces and reject those requests
+before requesting authorization; they must not silently reuse the shared ADB workspace.
 
 `AndroidDynamicPluginController.prepareProfilePackages` uses the shared native transaction
 protocol with Android descriptors and candidate dex exports. The managed runtime owns the
@@ -34,3 +42,6 @@ the settings-owned execution policy rather than a caller mode reader.
 Desktop package tests do not establish APK/dex resource identity. Run this module's relevant
 `connectedDebugAndroidTest` classes on API 35+; privileged execution additionally requires
 separate real Shizuku/root evidence described in the verification guide.
+`AndroidProfileHostTest` covers real bundled APK providers, scope switching, stale references,
+saved-selection restart, failed target reconstruction and scoped ADB rejection. Device results
+are recorded separately from build evidence in `docs/profiles-implementation.md`.

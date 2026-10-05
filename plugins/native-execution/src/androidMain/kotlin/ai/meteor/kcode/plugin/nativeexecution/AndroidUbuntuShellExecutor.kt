@@ -50,6 +50,7 @@ class AndroidUbuntuShellExecutor(
     context: Context,
     private val modeProvider: suspend () -> ShellExecutionMode,
     private val codeOrigin: PluginCodeOrigin? = null,
+    private val workspaceRoot: Path? = null,
 ) : AgentShellExecutor, AutoCloseable {
     constructor(context: Context, modeProvider: suspend () -> ShellExecutionMode) : this(
         context, modeProvider, null,
@@ -59,7 +60,7 @@ class AndroidUbuntuShellExecutor(
     private val artifacts = codeOrigin?.let { origin ->
         NativeExecutionArtifacts(appContext, (listOf(origin.artifact) + origin.dependencies).map { File(it.artifactPath) })
     }
-    private val environment = AndroidUbuntuEnvironment(appContext, artifacts)
+    private val environment = AndroidUbuntuEnvironment(appContext, artifacts, workspaceRoot)
 
     override fun close() {
         val failures = mutableListOf<Throwable>()
@@ -74,6 +75,7 @@ class AndroidUbuntuShellExecutor(
     ): AgentShellExecutor.ExecutionResult {
         val request = normalizeUbuntuShellCommandRequest(command, workingDirectory)
         val mode = modeProvider()
+        require(workspaceRoot == null || mode != ShellExecutionMode.Adb) { "ADB Ubuntu shell cannot access the Profile's app-private workspace" }
         return try {
             when (mode) {
                 ShellExecutionMode.App,
@@ -388,10 +390,10 @@ internal class AndroidUbuntuEnvironment private constructor(
     private val workspaceDirectory: Path,
     private val artifacts: NativeExecutionArtifacts?,
 ) : AutoCloseable {
-    constructor(context: Context, artifacts: NativeExecutionArtifacts? = null) : this(
+    constructor(context: Context, artifacts: NativeExecutionArtifacts? = null, workspaceRoot: Path? = null) : this(
         context = context,
         runtimeDirectory = context.filesDir.toPath().resolve(RUNTIME_DIRECTORY_NAME),
-        workspaceDirectory = context.filesDir.toPath().resolve("agent_workspace"),
+        workspaceDirectory = workspaceRoot ?: context.filesDir.toPath().resolve("agent_workspace"),
         artifacts = artifacts,
     )
 

@@ -27,6 +27,6 @@ the previous intent without rewriting history; failed closure/restoration refuse
 retains the new runtime. Native factories must provide fresh resources through `ProfileRuntimeFactory`
 and keep candidate facades private. Public Profile management and recovery UI remain separate.
 
-Named startup, manager mutations and the host coordinator are implemented. Declaration editing,
-Android switch integration, external bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
+Named startup, manager mutations and native switching on Desktop and Android are implemented.
+Declaration editing, external bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
 `docs/profiles-implementation.md` for behavior and evidence limits.
