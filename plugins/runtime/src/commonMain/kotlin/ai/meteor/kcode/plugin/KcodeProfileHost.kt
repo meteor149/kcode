@@ -236,6 +236,11 @@ class KcodeProfileHost(
     suspend fun diagnostics(): KcodePluginDiagnostics = call {
         checkNotNull(it.owner as? KcodePluginRuntime) { "Native plugin diagnostics are unavailable" }.diagnostics()
     }
+
+    suspend fun selectProfileModule(packageId: String, moduleId: String, expected: ProfileCompositionState): ProfileCompositionState = call {
+        checkNotNull(it.owner as? KcodePluginRuntime) { "Native module selection is unavailable" }
+            .selectProfileModule(packageId, moduleId, expected)
+    }
     @Composable
     override fun Render(options: ApplicationHostOptions) {
         val active by view.collectAsState()

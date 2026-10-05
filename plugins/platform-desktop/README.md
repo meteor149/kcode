@@ -28,3 +28,11 @@ Management UI and recovery UI remain pending; see the Profile guide.
 After failed restoration, the retained host admits metadata/preview and explicit SDK activation
 without a product runtime. recoverTo(id) retries normal recipe activation after retiring any
 owner whose cleanup previously failed. Further closure failure prevents new allocation.
+
+Both runtime/host factories accept moduleFactories keyed by distinct stable module IDs. These
+factories return lazy definitions per product allocation and never add default Bundle instances.
+selectProfileModule(packageId, moduleId, expected) on the stable host retains instance intent
+through the Profile transaction and checks expected active identity/generation. Supply the same
+catalogue after restart; missing selected code rejects preparation. Default/package collisions
+and factory descriptor mismatch reject before product allocation. Host code is borrowed and
+does not claim verified archive identity; resources still allocate/close in provider effects.

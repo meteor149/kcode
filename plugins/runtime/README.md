@@ -45,5 +45,7 @@ mode. It records distinct module references through Replace operations, preserve
 configuration/context/enable state and publishes through the normal tree/generation transaction.
 Failed validation, allocation or publication retains the old implementation and module directory.
 Restart must supply the selected alternate ID; arbitrary implementation objects are not persisted.
-Same-ID in-process overwrite is rejected in Profile mode. Native alternate module factories and
-stable host command exposure remain required; verified external release replacement is separate.
+Same-ID in-process overwrite is rejected in Profile mode. profileModuleFactories creates a
+separate available-code catalogue for each runtime, rejecting collisions and factory ID mismatch.
+Native hosts expose selectProfileModule(packageId, moduleId, expected), with active identity/
+generation checks through the existing transaction. Verified external release replacement is separate.

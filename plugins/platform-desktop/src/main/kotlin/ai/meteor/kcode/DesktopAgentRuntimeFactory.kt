@@ -16,6 +16,7 @@ import ai.meteor.kcode.plugin.DesktopDynamicPluginController
 import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
 import ai.meteor.kcode.plugin.FilePluginCompositionStore
 import ai.meteor.kcode.plugin.KcodePluginProfile
+import ai.meteor.kcode.plugin.KcodePluginMount
 import ai.meteor.kcode.plugin.KcodePluginRuntime
 import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.KcodeProfileHost
@@ -53,8 +54,9 @@ fun createDesktopKoogChatRuntime(
     applicationWindow: () -> Frame? = { null },
     profileId: String? = null,
     homeDirectory: Path = Path.of(System.getProperty("user.home"), ".kcode"),
+    moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
 ): KcodeAgentRuntime {
-    return runBlocking { createDesktopProfileHost(settingsStore, historyRepository, profile, applicationWindow, profileId, homeDirectory).runtime }
+    return runBlocking { createDesktopProfileHost(settingsStore, historyRepository, profile, applicationWindow, profileId, homeDirectory, moduleFactories).runtime }
 }
 
 /** Suspends while constructing the initial product; later switches reuse only host inputs/catalogue. */
@@ -65,7 +67,9 @@ suspend fun createDesktopProfileHost(
     applicationWindow: () -> Frame? = { null },
     profileId: String? = null,
     homeDirectory: Path = Path.of(System.getProperty("user.home"), ".kcode"),
+    moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
 ): KcodeProfileHost {
+    val availableModuleFactories = moduleFactories.toMap()
     val workspace = Files.createDirectories(
         homeDirectory.resolve("workspace"),
     ).toRealPath()
@@ -88,7 +92,7 @@ suspend fun createDesktopProfileHost(
     }.filter { it.id != "provider.settings.platform" || settingsStore == null }
         .filter { it.id != "provider.history.platform" || historyRepository == null }
     suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
-        val bundles = nativeProfileBundles((catalogue + bundled.map { it.id }).toList())
+        val bundles = nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList())
         return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
             NativePluginPackageResolver(pluginDirectory, desktopPackageHost()),
             bundled.associate { it.id to ProfilePackageOffer(it.release) }, catalogue,
@@ -127,6 +131,7 @@ suspend fun createDesktopProfileHost(
     val configuration = KcodePluginRuntimeConfig(
         bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
         profileStartup = startup,
+        profileModuleFactories = availableModuleFactories,
         interactionPolicy = InteractionPolicy(
             approver = ToolCallApprover { false },
         ),
@@ -164,7 +169,7 @@ suspend fun createDesktopProfileHost(
         override suspend fun prepare(request: ProfileActivationRequest) = prepared(request.target.profileId, request)
     }
     val management = ProfileManagement(repository,
-        { nativeProfileBundles((catalogue + bundled.map { it.id }).toList()) },
+        { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management)
 }

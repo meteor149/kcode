@@ -368,3 +368,41 @@ Native factories still require explicit alternate-module catalogue factories and
 command exposure to retain these choices across native switching/restart. This runtime phase
 does not supply that integration, public management/recovery UI, Bundle import/export or the
 overall goal's final validation.
+
+## Native alternate-module catalogue and stable selection evidence
+
+Desktop and Android host/runtime factories now accept a detached moduleFactories map. Each
+product allocation produces fresh lazy module definitions, validates keys against descriptor IDs
+and rejects collisions with default code, native releases and infrastructure. Alternates are
+available code only: shipped Bundle definitions exclude those IDs and startup does not create
+implicit alternate instances. Factory functions must keep resource allocation inside provider
+apply. Host-supplied code remains borrowed and does not claim verified archive identity.
+
+KcodeProfileHost.selectProfileModule(packageId, moduleId, expected) admits selection through
+the current runtime and checks active Profile identity/generation while holding its mutation
+boundary. Selection uses the existing typed tree/generation transaction. Native switching,
+restoration and restart reconstruct definitions through the same factory catalogue instead of
+retaining old runtime mounts. The catalogue must be supplied again on restart; absent selected
+code rejects preparation before provider allocation. Runtime and native factory implementation
+APIs changed; the shared Plugin API remains 66.
+
+The final phase build passed 79 focused desktop runtime/native/Profile/package tests, with zero
+failures/errors/skipped cases. Two added native tests verify factory-map detachment, no implicit
+instances, multiple configured instance selection, stale generation rejection, scoped clone/
+switching, persisted selection restart, missing selected code, factory ID/default collisions and
+failed selection rollback. Desktop app compilation, Android app assembly and the final Android
+instrumentation APK assembly passed against Cordis f08918d.
+
+The final instrumentation APK was installed on the ARM64 API 36 physical device and the added
+typedAlternateCatalogueRetainsSelectionAndApkDataAcrossSwitchingAndRestart case passed:
+OK (1 test), 88.686 seconds. It verifies no implicit alternate instance, stable selection,
+stale generation refusal, actual APK filesystem implementation identity, App shell workspace IO,
+scoped history isolation, stale filesystem rejection, missing-code preparation refusal and
+persisted selection/data restoration with a freshly supplied factory catalogue. Only this new
+case ran in this phase; the four earlier device cases retain their separately recorded evidence.
+This does not establish privileged Root/Shizuku execution, device recovery after failed
+restoration, full instrumentation-suite coverage or sudden power-loss durability.
+
+Plugin-facing catalogue/command services, management and independent recovery UI, initial startup
+failure recovery, verified Bundle import and credential-safe export remain outstanding. Focused
+phase checks do not replace the final requirement audit and platform validation.

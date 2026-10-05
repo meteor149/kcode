@@ -48,8 +48,11 @@ used by another. Portable edits, machine configuration and launch policy use the
 The runtime's typed alternate-module command replaces a package reference with a distinct stable
 module ID while retaining instance intent. Supply that selected module on restart; the declaration
 cannot serialize implementation objects. Same-ID code upgrades use verified package replacement.
-Native factory catalogue/command support remains pending; do not bypass it with retained runtime
-owners or assume a runtime-only mount will be available after a native Profile switch.
+Native factories accept moduleFactories keyed by distinct exported module IDs. Return lazy
+module definitions; allocate resources during apply. Factories run for every product allocation
+and must not shadow default/native package identities. The stable host's selectProfileModule
+checks the expected active Profile/generation before changing all references to a selected module.
+Supply the catalogue again on restart; do not bypass it with retained runtime owners or mounts.
 
 When changing a shared public ABI, review exports and package tests, update
 `CurrentPluginApiVersion`, regenerate package metadata and document the change. This applies

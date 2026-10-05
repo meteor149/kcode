@@ -140,6 +140,7 @@ data class KcodePluginRuntimeConfig(
     val profileActivation: ai.meteor.kcode.plugin.profiles.ProfileActivation? = null,
     val profileStartup: ProfileStartupFactory? = null,
     val profileBuiltinModules: List<KcodePluginMount> = emptyList(),
+    val profileModuleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
     val settingsStore: AppSettingsStore? = null,
     val settingsStoreFactory: SettingsStoreFactory? = null,
     val historyRepositoryFactory: HistoryRepositoryFactory? = null,
@@ -790,6 +791,27 @@ class KcodePluginRuntime private constructor(
         replaceLegacyPlugin(replacement)
     }
 
+    suspend fun selectProfileModule(
+        packageId: String,
+        moduleId: String,
+        expected: ProfileCompositionState,
+    ): ProfileCompositionState {
+        PluginOperationOwner.requireOutsideCall()
+        ChatGenerationRunner.requireOutsideCall()
+        return lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            val activation = checkNotNull(activeProfile) { "Runtime has no active Profile" }
+            check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
+            val current = activation.session.currentCompositionState()
+            require(expected.definition.id == current.definition.id && expected.generation == current.generation) {
+                "Active Profile changed; refresh before selecting a module"
+            }
+            val replacement = requireNotNull(profileModules[moduleId]) { "Unknown Profile module '$moduleId'" }
+            replaceProfileModuleLocked(activation, packageId, replacement)
+            activation.session.currentCompositionState()
+        }
+    }
+
     private suspend fun tryReplaceProfileModule(packageId: String, replacement: KcodePluginMount): Boolean {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
@@ -797,35 +819,39 @@ class KcodePluginRuntime private constructor(
             check(!closed) { "plugin runtime is closed" }
             val activation = activeProfile ?: return@withLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
-            require(packageId in profileModules && activation.resolved.packages.none { it.id == packageId }) {
-                "Profile module '$packageId' is not an in-process module"
-            }
-            val replacementId = replacement.descriptor.id
-            require(replacementId.isNotBlank() && replacementId !in BootstrapIds && replacementId !in records) {
-                "Invalid replacement module identity"
-            }
-            require(replacementId != packageId) {
-                "Profile typed replacement requires a distinct stable module ID; use a verified package for same-ID release upgrades"
-            }
-            require(activation.resolved.packages.none { it.id == replacementId }) { "Replacement identity belongs to an external release" }
-            val existing = profileModules[replacementId]
-            require(existing == null || existing === replacement) { "Replacement module ID already identifies different code" }
-            val operations = mutableListOf<ProfileOperation>()
-            fun visit(entries: List<EntryOptions>) {
-                entries.forEach { entry ->
-                    if (entry.group == true) visit((entry.config as List<*>).map { it as EntryOptions })
-                    else if (entry.name == packageId) operations += ProfileOperation.Replace(entry.id, replacementId, packageId)
-                }
-            }
-            visit(activation.resolved.composition.entries)
-            require(operations.isNotEmpty()) { "Profile module '$packageId' has no configured instances" }
-            val modules = profileModules.toMap() + (replacementId to replacement)
-            val candidate = resolveProfileCandidate(activation,
-                activation.resolved.definition.copy(patches = activation.resolved.definition.patches + operations),
-                activation.resolved.packages.associateBy { it.id }, modules)
-            applyProfileChange(activation, candidate, modules)
+            replaceProfileModuleLocked(activation, packageId, replacement)
             true
         }
+    }
+
+    private suspend fun replaceProfileModuleLocked(activation: ProfileActivation, packageId: String, replacement: KcodePluginMount) {
+        require(packageId in profileModules && activation.resolved.packages.none { it.id == packageId }) {
+            "Profile module '$packageId' is not an in-process module"
+        }
+        val replacementId = replacement.descriptor.id
+        require(replacementId.isNotBlank() && replacementId !in BootstrapIds && replacementId !in records) {
+            "Invalid replacement module identity"
+        }
+        require(replacementId != packageId) {
+            "Profile typed replacement requires a distinct stable module ID; use a verified package for same-ID release upgrades"
+        }
+        require(activation.resolved.packages.none { it.id == replacementId }) { "Replacement identity belongs to an external release" }
+        val existing = profileModules[replacementId]
+        require(existing == null || existing === replacement) { "Replacement module ID already identifies different code" }
+        val operations = mutableListOf<ProfileOperation>()
+        fun visit(entries: List<EntryOptions>) {
+            entries.forEach { entry ->
+                if (entry.group == true) visit((entry.config as List<*>).map { it as EntryOptions })
+                else if (entry.name == packageId) operations += ProfileOperation.Replace(entry.id, replacementId, packageId)
+            }
+        }
+        visit(activation.resolved.composition.entries)
+        require(operations.isNotEmpty()) { "Profile module '$packageId' has no configured instances" }
+        val modules = profileModules.toMap() + (replacementId to replacement)
+        val candidate = resolveProfileCandidate(activation,
+            activation.resolved.definition.copy(patches = activation.resolved.definition.patches + operations),
+            activation.resolved.packages.associateBy { it.id }, modules)
+        applyProfileChange(activation, candidate, modules)
     }
 
     /** Typed in-process legacy replacement. Restore the previous implementation if apply fails. */
@@ -1272,7 +1298,7 @@ class KcodePluginRuntime private constructor(
                 packagedProviderIds = config.bundledPackages.map { it.id }.toSet(),
             ))) else emptyList()
             val profileModules = linkedMapOf<String, KcodePluginMount>()
-            if (config.profileStartup != null) {
+            if (config.profileStartup != null || config.profileActivation != null) {
                 defaults.filterNot { it.descriptor.id == "provider.plugin-installations.platform" }.forEach { module ->
                     profileModules[module.descriptor.id] = module
                 }
@@ -1286,7 +1312,18 @@ class KcodePluginRuntime private constructor(
                     }
                     profileModules[module.descriptor.id] = module
                 }
-            } else if (config.profileActivation == null) defaults.forEach(::add)
+                config.profileModuleFactories.forEach { (id, factory) ->
+                    require(id.isNotBlank() && id !in BootstrapIds && id != "provider.plugin-installations.platform" &&
+                        id !in profileModules && config.featurePlugins.none { it.descriptor.id == id } &&
+                        config.bundledPackages.none { it.id == id }) { "Alternate module '$id' conflicts with the native catalogue" }
+                    val module = factory()
+                    require(module.descriptor.id == id) { "Alternate module factory identity mismatch for '$id'" }
+                    profileModules[id] = module
+                }
+            } else {
+                require(config.profileModuleFactories.isEmpty()) { "Alternate modules require declarative Profile startup" }
+                defaults.forEach(::add)
+            }
             val activation = config.profileActivation ?: config.profileStartup?.prepare(profileModules.values.toList())
             val compositionStore = activation?.session ?: config.pluginCompositionStore
             config.featurePlugins.forEach(::add)
@@ -1337,7 +1374,7 @@ class KcodePluginRuntime private constructor(
                     if (activation != null) {
                         it.profileStartupOpen = true
                         it.pluginManager.activateProfile(activation,
-                            if (config.profileStartup != null) profileModules.values.toList() else config.profileBuiltinModules)
+                            profileModules.values.toList())
                     } else {
                         it.restoreInstalledComposition(bundled, config.profile.disabled)
                         it.settle()

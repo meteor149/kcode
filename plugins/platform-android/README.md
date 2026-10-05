@@ -53,3 +53,13 @@ Management UI and independent recovery UI remain pending.
 The common host exposes metadata and explicit activation in RecoveryRequired, independently
 of the withdrawn product tree. Desktop recovery tests do not prove this path on an Android
 device or recover failures that happen before initial host construction.
+
+The runtime/host factories accept moduleFactories for distinct lazy in-process alternates.
+They provide available code without automatic instances and run again per product allocation.
+The stable host's selectProfileModule checks expected Profile/generation and records explicit
+module references through the managed transaction. Supplying the catalogue on restart restores
+selection; missing selected code rejects preparation. Factory keys must match descriptor IDs
+and cannot shadow native packages/default modules. Provider resources allocate during apply.
+The added typed-alternate instrumentation case passed on ARM64 API 36 with actual APK filesystem/
+history providers, scoped App workspace IO, stale-reference rejection, switching and restart.
+It was run separately from the four previously validated Profile cases; see implementation evidence.

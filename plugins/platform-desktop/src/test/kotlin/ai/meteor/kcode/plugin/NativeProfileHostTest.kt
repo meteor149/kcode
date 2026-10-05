@@ -31,6 +31,116 @@ import kotlinx.serialization.json.JsonPrimitive
 
 class NativeProfileHostTest {
     @Test
+    fun alternateCatalogueDoesNotMountDefaultsAndRetainsSelectionAcrossSwitchingAndRestart(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-native-alternate-catalogue")
+        val live = mutableListOf<String>()
+        var created = 0
+        lateinit var history: ConversationHistoryRepository
+        fun mount(id: String, label: String) = kcodePlugin(PluginDescriptor(id, label, "test", emptySet()),
+            plugin<String>(inject = dependencies(KcodeHistory.Key)) { context, config ->
+                val value = "$label:$config"
+                live += value
+                collect { live.remove(value) }
+                history = context.require(KcodeHistory.Key).repository
+            }, "default")
+        val original = mount("provider.ui.compose", "original")
+        val profile = KcodePluginProfile(overrides = listOf(original))
+        fun factories() = mutableMapOf<String, () -> KcodePluginMount>("example.ui.alternate" to {
+            created++
+            mount("example.ui.alternate", "alternate")
+        })
+        val input = factories()
+        val host = createDesktopProfileHost(homeDirectory = home, profile = profile, moduleFactories = input)
+        input.clear()
+        try {
+            assertEquals(listOf("original:default"), live)
+            assertEquals(1, created)
+            assertTrue(host.diagnostics().plugins.none { it.id == "example.ui.alternate" })
+            val before = assertNotNull(host.pluginManager.currentProfile())
+            val configured = host.pluginManager.editProfile(ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit(
+                before.definition.id, before.generation, listOf(
+                    ProfileOperation.Configure("provider.ui.compose", JsonPrimitive("one"), "string"),
+                    ProfileOperation.Insert(listOf(ai.meteor.kcode.plugin.api.profiles.ProfileEntry("second-ui", "provider.ui.compose",
+                        JsonPrimitive("two"), configurationKind = "string"))),
+                )))
+            val selected = host.selectProfileModule("provider.ui.compose", "example.ui.alternate", configured)
+            assertEquals(configured.generation + 1, selected.generation)
+            assertEquals(listOf("alternate:one", "alternate:two"), live)
+            assertFailsWith<IllegalArgumentException> { host.selectProfileModule("example.ui.alternate", "provider.ui.compose", configured) }
+            assertEquals(selected, host.pluginManager.currentProfile())
+            history.appendMessage(1, "Alternate", 1, "User", "native alternate data")
+            val catalogue = host.pluginManager.profileCatalogue()
+            host.pluginManager.cloneProfile(ProfileCloneRequest(ProfileTarget("native"), "other", catalogue.revision))
+            host.switchTo("other")
+            assertEquals(listOf("alternate:one", "alternate:two"), live)
+            assertTrue(history.loadAll().isEmpty())
+            host.switchTo("native")
+            assertEquals("native alternate data", history.loadAll().single().messages.single().content)
+            assertEquals(3, created)
+        } finally { host.close() }
+        try {
+            assertTrue(live.isEmpty())
+            val missing = assertFailsWith<IllegalStateException> { createDesktopProfileHost(homeDirectory = home, profile = profile) }
+            assertTrue(missing.message.orEmpty().contains("No package release available for 'example.ui.alternate'"))
+            assertTrue(live.isEmpty())
+            val restarted = createDesktopKoogChatRuntime(homeDirectory = home, profile = profile, moduleFactories = factories())
+            try {
+                assertEquals(listOf("alternate:one", "alternate:two"), live)
+                assertEquals(4, created)
+                assertEquals("native alternate data", history.loadAll().single().messages.single().content)
+                assertEquals("native", (restarted.owner as KcodeProfileHost).state.value.profileId)
+            } finally { restarted.close() }
+        } finally { home.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun alternateFactoriesRejectCollisionsAndFailedSelectionKeepsNativeIntent(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-native-alternate-failure")
+        var originalLive = 0
+        var alternateLive = 0
+        var refuse = true
+        val original = kcodePlugin(PluginDescriptor("provider.ui.compose", "test", "test", emptySet()), plugin<Unit> { _, _ ->
+            originalLive++
+            collect { originalLive-- }
+        }, Unit)
+        val profile = KcodePluginProfile(overrides = listOf(original))
+        val factory = {
+            kcodePlugin(PluginDescriptor("example.ui.alternate", "test", "test", emptySet()), plugin<Unit> { _, _ ->
+                alternateLive++
+                collect { alternateLive-- }
+                check(!refuse) { "alternate refused" }
+            }, Unit)
+        }
+        try {
+            assertFailsWith<IllegalArgumentException> {
+                createDesktopProfileHost(homeDirectory = home, profile = profile,
+                    moduleFactories = mapOf("provider.ui.compose" to { original }))
+            }
+            assertFailsWith<IllegalArgumentException> {
+                createDesktopProfileHost(homeDirectory = home, profile = profile,
+                    moduleFactories = mapOf("example.wrong" to factory))
+            }
+            assertEquals(0, originalLive)
+            assertEquals(0, alternateLive)
+            val host = createDesktopProfileHost(homeDirectory = home, profile = profile,
+                moduleFactories = mapOf("example.ui.alternate" to factory))
+            try {
+                val before = assertNotNull(host.pluginManager.currentProfile())
+                assertFailsWith<IllegalArgumentException> { host.selectProfileModule("provider.ui.compose", "missing", before) }
+                assertFailsWith<IllegalStateException> { host.selectProfileModule("provider.ui.compose", "example.ui.alternate", before) }
+                assertEquals(before, host.pluginManager.currentProfile())
+                assertEquals(1, originalLive)
+                assertEquals(0, alternateLive)
+                assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+                refuse = false
+                host.selectProfileModule("provider.ui.compose", "example.ui.alternate", before)
+                assertEquals(0, originalLive)
+                assertEquals(1, alternateLive)
+            } finally { host.close() }
+        } finally { home.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun metadataAndSdkActivationRemainAvailableAfterFailedRestoration(): Unit = runBlocking {
         val home = Files.createTempDirectory("kcode-profile-sdk-recovery")
         var refuseAllocation = false

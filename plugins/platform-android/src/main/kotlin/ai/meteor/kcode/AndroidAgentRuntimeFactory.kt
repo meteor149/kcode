@@ -16,6 +16,7 @@ import ai.meteor.kcode.plugin.AndroidDynamicPluginController
 import ai.meteor.kcode.plugin.DynamicPluginControllerFactory
 import ai.meteor.kcode.plugin.FilePluginCompositionStore
 import ai.meteor.kcode.plugin.KcodePluginProfile
+import ai.meteor.kcode.plugin.KcodePluginMount
 import ai.meteor.kcode.plugin.KcodePluginRuntime
 import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.KcodeProfileHost
@@ -87,10 +88,11 @@ suspend fun createAndroidKoogChatRuntime(
     permissionHost: AndroidPermissionHost? = null,
     confirmationDialogs: ConfirmationDialogHost? = null,
     profileId: String? = null,
+    moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
 ): KcodeAgentRuntime {
     return createAndroidProfileHost(activity, modeProvider, permissionModeProvider, toolCallApprover,
         settingsStore, historyRepository, profile, settingsBackedInteraction, settingsBackedShell,
-        permissionHost, confirmationDialogs, profileId).runtime
+        permissionHost, confirmationDialogs, profileId, moduleFactories).runtime
 }
 
 suspend fun createAndroidProfileHost(
@@ -106,7 +108,9 @@ suspend fun createAndroidProfileHost(
     permissionHost: AndroidPermissionHost? = null,
     confirmationDialogs: ConfirmationDialogHost? = null,
     profileId: String? = null,
+    moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
 ): KcodeProfileHost {
+    val availableModuleFactories = moduleFactories.toMap()
     val nativeOverrides = if (profile.includeDefaults) buildList {
         if (toolCallApprover == null && !settingsBackedInteraction && profile.overrides.none { it.descriptor.id == "provider.interaction.platform" }) {
             val descriptor = PluginDescriptor("provider.interaction.platform", "builtin", "native", setOf("interaction"))
@@ -140,7 +144,7 @@ suspend fun createAndroidProfileHost(
     lateinit var catalogue: Set<String>
     lateinit var initialActivation: ProfileActivation
     suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
-        val bundles = nativeProfileBundles((catalogue + bundled.map { it.id }).toList())
+        val bundles = nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList())
         return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
             NativePluginPackageResolver(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity)),
             bundled.associate { it.id to ProfilePackageOffer(it.release) }, catalogue,
@@ -186,6 +190,7 @@ suspend fun createAndroidProfileHost(
         bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
         profileStartup = startup,
         profileBuiltinModules = nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" },
+        profileModuleFactories = availableModuleFactories,
         interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover ?: ToolCallApprover { false }),
         settingsBackedInteraction = settingsBackedInteraction,
         profile = nativeProfile,
@@ -220,7 +225,7 @@ suspend fun createAndroidProfileHost(
         override suspend fun prepare(request: ProfileActivationRequest) = prepared(request.target.profileId, request)
     }
     val management = ProfileManagement(repository,
-        { nativeProfileBundles((catalogue + bundled.map { it.id }).toList()) },
+        { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management)
 }

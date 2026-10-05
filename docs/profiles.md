@@ -194,16 +194,28 @@ The Profile stores the selected module reference, never a Kotlin implementation 
 requires the host to supply that alternate module again; missing code is rejected before provider
 allocation. Same-ID typed code overwrite is rejected because it cannot record a distinct code
 selection; use verified release replacement for package upgrades. Borrowed in-process modules
-are host-supplied code and do not claim archive hashes or portable binary verification. Native
-factories still need a selectable alternate-module catalogue and stable host command exposure;
-this runtime method alone does not complete native typed replacement across switching/restart.
+are host-supplied code and do not claim archive hashes or portable binary verification.
 
-External bundle import, credential-safe export, native alternate-module catalogue/exposure and
+Desktop and Android factory entry points accept moduleFactories: a map from stable module IDs
+to functions producing lazy KcodePluginMount definitions. The map is detached at construction;
+each runtime allocation invokes the factories again. Keys must match exported descriptor IDs
+and cannot shadow default modules, packaged releases or infrastructure. Factory functions must
+not allocate provider resources; providers allocate and collect cleanup during apply.
+
+Alternates contribute available code without changing shipped Bundle templates or creating
+default instances. The host's selectProfileModule(packageId, moduleId, expected) checks active
+Profile identity/generation and applies the existing typed transaction. Its expected value comes
+from currentProfile(). Selection is retained through native switching and restart when the same
+catalogue is supplied. Hosts do not serialize functions or retain previous runtime mounts to
+recreate products. Plugin-facing command submission and public catalogue UI remain pending.
+
+External bundle import, credential-safe export, plugin-facing management service integration and
 management/recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
-actual package startup, switching, persistence, rollback and restart. Four Android tests on
+actual package startup, switching, persistence, rollback and restart. Android tests on
 an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu
-workspace binding, stale services, selection restart, failed allocation recovery and scoped
+workspace binding, stale services, selection restart, failed allocation recovery, typed alternate
+catalogue selection/restart and scoped
 ADB rejection. They do not establish root or Shizuku authorization. See [verification](verification.md)
 for evidence boundaries; management and independent recovery UI are still required. Explicit
 recovery commands are tested on Desktop and compiled for Android; device recovery-after-restoration-

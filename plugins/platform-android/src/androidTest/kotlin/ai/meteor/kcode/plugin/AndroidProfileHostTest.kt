@@ -50,6 +50,63 @@ import kotlin.test.assertTrue
 @RunWith(AndroidJUnit4::class)
 class AndroidProfileHostTest {
     @Test(timeout = 300_000)
+    fun typedAlternateCatalogueRetainsSelectionAndApkDataAcrossSwitchingAndRestart(): Unit = runBlocking {
+        val fixture = Fixture()
+        var created = 0
+        val factories = mapOf<String, () -> KcodePluginMount>("example.ui.alternate" to {
+            created++
+            fixture.alternate()
+        })
+        val host = fixture.start(factories)
+        try {
+            assertEquals(1, fixture.live)
+            assertEquals(1, created)
+            assertTrue(host.diagnostics().plugins.none { it.id == "example.ui.alternate" })
+            val manager = host.pluginManager
+            val catalogue = manager.profileCatalogue()
+            val scopedId = "typed-${System.nanoTime()}"
+            manager.cloneProfile(ProfileCloneRequest(ProfileTarget("native"), scopedId, catalogue.revision))
+            host.switchTo(scopedId)
+            val before = assertNotNull(manager.currentProfile())
+            val selected = host.selectProfileModule("provider.ui.compose", "example.ui.alternate", before)
+            assertEquals(before.generation + 1, selected.generation)
+            assertEquals(1, fixture.live)
+            assertEquals(2, created)
+            assertFailsWith<IllegalArgumentException> { host.selectProfileModule("example.ui.alternate", "provider.ui.compose", before) }
+            fixture.history.appendMessage(1, "Typed alternate", 1, "User", "alternate APK data")
+            fixture.fs.writeBytes("/workspace/alternate.txt", "alternate workspace".encodeToByteArray())
+            assertEquals(0, fixture.shell.run(ShellRequest("cat alternate.txt")).exitCode)
+            assertNotSame(FileSystemBackend::class.java.classLoader, fixture.fs.javaClass.classLoader)
+            val oldFs = fixture.fs
+            val otherId = "other-${System.nanoTime()}"
+            manager.cloneProfile(ProfileCloneRequest(ProfileTarget(scopedId), otherId, manager.profileCatalogue().revision))
+            host.switchTo(otherId)
+            assertTrue(fixture.history.loadAll().isEmpty())
+            assertFailsWith<IllegalStateException> { oldFs.readBytes("/workspace/alternate.txt") }
+            host.switchTo(scopedId)
+            assertEquals("alternate APK data", fixture.history.loadAll().single().messages.single().content)
+            assertEquals("alternate workspace", fixture.fs.readBytes("/workspace/alternate.txt").decodeToString())
+            assertEquals(4, created)
+            host.close()
+            assertEquals(0, fixture.live)
+            val missing = assertFailsWith<IllegalStateException> { fixture.start() }
+            assertTrue(missing.message.orEmpty().contains("No package release available for 'example.ui.alternate'"))
+            assertEquals(0, fixture.live)
+            val restarted = fixture.start(factories)
+            try {
+                assertEquals(scopedId, restarted.state.value.profileId)
+                assertEquals(5, created)
+                assertEquals(1, fixture.live)
+                assertEquals("alternate APK data", fixture.history.loadAll().single().messages.single().content)
+                assertEquals("alternate workspace", fixture.fs.readBytes("/workspace/alternate.txt").decodeToString())
+                assertTrue(assertNotNull(restarted.pluginManager.currentProfile()).definition.patches.any {
+                    it is ProfileOperation.Replace && it.packageId == "example.ui.alternate"
+                })
+            } finally { restarted.close() }
+        } finally { host.close(); fixture.remove() }
+    }
+
+    @Test(timeout = 300_000)
     fun sdkActivatesDraftAndHistoricalRecipesWithActualApkProviders(): Unit = runBlocking {
         val fixture = Fixture()
         val host = fixture.start()
@@ -203,7 +260,7 @@ class AndroidProfileHostTest {
         var ubuntu: ShellBackend? = null
         var mode = ShellExecutionMode.App
         var live = 0
-        private val capture = kcodePlugin(PluginDescriptor("provider.ui.compose", "test", "test", emptySet()),
+        private fun captureModule(id: String) = kcodePlugin(PluginDescriptor(id, "test", "test", emptySet()),
             plugin<String>(validator = ConfigValidator { it }, inject = dependencies(*buildList<ServiceKey<*>> {
                 add(KcodeSettings.Key)
                 add(KcodeHistory.Key)
@@ -221,7 +278,10 @@ class AndroidProfileHostTest {
                 ubuntu = ctx[KcodeUbuntuShell.Key]?.executor
             }, "okay")
 
-        suspend fun start(): KcodeProfileHost = withContext(Dispatchers.Main.immediate) {
+        private val capture = captureModule("provider.ui.compose")
+        fun alternate(): KcodePluginMount = captureModule("example.ui.alternate")
+
+        suspend fun start(moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap()): KcodeProfileHost = withContext(Dispatchers.Main.immediate) {
             val activity = object : Activity() {
                 init { attachBaseContext(isolated) }
                 override fun getApplicationContext(): android.content.Context = isolated
@@ -230,7 +290,7 @@ class AndroidProfileHostTest {
                 override fun getResources() = context.resources
             }
             createAndroidProfileHost(activity = activity, modeProvider = { mode }, toolCallApprover = ToolCallApprover { true },
-                profile = KcodePluginProfile(overrides = listOf(capture)))
+                profile = KcodePluginProfile(overrides = listOf(capture)), moduleFactories = moduleFactories)
         }
 
         fun remove() {
