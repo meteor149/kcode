@@ -26,6 +26,13 @@ cannot become recovery candidates. Removing a Profile withdraws its authority re
 retaining unreachable metadata for separate reclamation; recreation starts a new history.
 Runtime switching still needs to coordinate staged activation with this atomic publisher.
 
+Native preparation can opt into `stageSwitch` for an explicit target. The session stages
+startup intent/snapshots without saving drafts, advancing history or changing selection.
+`publishPreparedSwitch` performs joint publication after allocation/settlement/frame preparation;
+later writes use the ordinary durable path. Rejected publication remains retryable, while
+discarded sessions reject further writes. Hosts own candidate closure, task admission and
+stable facade switching; those obligations are not implemented by the metadata session.
+
 The package lock has no artifact paths or credentials; runtime snapshots retain local paths.
 Selection only references committed profiles, and deleting the selected profile is refused.
 Package caches and provider data are outside this repository and are never deleted with it.

@@ -23,8 +23,13 @@ suspend fun prepareNativeProfileActivation(
     launchOverrides: List<ProfileOperation> = emptyList(),
     machineConfiguredPackages: Set<String> = emptySet(),
     builtinOverrides: Set<String> = emptySet(),
+    stageSwitch: Boolean = false,
 ): ProfileActivation {
-    val prepared = prepareProfileBootstrap(repository, template, bundles, legacyStore, aliases, requestedId, machineConfiguredPackages)
+    val switchRevision = if (stageSwitch) {
+        require(requestedId != null) { "A staged switch requires an explicit target Profile" }
+        requireNotNull(repository as? ProfileGenerationRepository) { "Repository does not support atomic Profile switching" }.state().revision
+    } else null
+    val prepared = prepareProfileBootstrap(repository, template, bundles, legacyStore, aliases, requestedId, machineConfiguredPackages, switchRevision)
     val committed = repository.loadCommitted(prepared.definition.id)
     val frozenBundles = committed?.bundles?.takeIf { it.isNotEmpty() } ?: bundles
     val snapshot = prepared.session.load()

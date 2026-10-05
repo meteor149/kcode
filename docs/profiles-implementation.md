@@ -167,3 +167,16 @@ actual immutable files. Phase validation passed 78 tests: 30 Profile tests and t
 desktop runtime/native/package tests. Android platform compilation passed against the same
 Cordis worktree. Runtime switching, recovery UI and Android device/power-loss behavior are
 not established by this repository implementation.
+
+## Prepared switch publication phase evidence
+
+Profile sessions can stage candidate startup and definition updates until the host explicitly
+publishes generation and selection together. Repeated staging advances once, rejection permits
+retry, discard prevents later writes, and successful publication returns the session to normal
+durable operation. Native staging captures the authority revision before target preparation and
+does not save a migration draft. Four runtime tests cover allocated candidate invisibility,
+refused publication/retry, concurrent authority conflict/discard and allocation cleanup. Two
+repository/preparation tests cover target history and draft-free native staging. Phase validation
+passed 84 tests (32 Profile tests and 52 desktop runtime/native/package tests), plus Android
+platform compilation against Cordis `f08918d`. Stable host facades, old-runtime shutdown/recreation, turn admission and recovery UI
+remain necessary before this becomes a complete live switching feature.

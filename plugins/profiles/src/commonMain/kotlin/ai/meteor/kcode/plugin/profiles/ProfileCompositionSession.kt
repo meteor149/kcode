@@ -14,12 +14,15 @@ class ProfileCompositionSession private constructor(
     definition: ProfileDefinition,
     initialSnapshot: PluginCompositionSnapshot,
     initialBundles: List<ProfileBundle>,
+    private var switchRevision: Long? = null,
 ) : PluginCompositionStore {
     private val mutex = Mutex()
     private var generation = initial?.generation
     private var definition = definition
     private var snapshot = initial?.composition ?: initialSnapshot
     private var bundles = initial?.bundles?.takeIf { initial.formatVersion == 2 || it.isNotEmpty() } ?: initialBundles
+    private var staged: CommittedProfileGeneration? = null
+    private var discarded = false
 
     override suspend fun load(): PluginCompositionSnapshot = mutex.withLock { snapshot }
 
@@ -37,6 +40,7 @@ class ProfileCompositionSession private constructor(
 
     private suspend fun publish(candidate: ProfileDefinition, snapshot: PluginCompositionSnapshot,
         bundles: List<ProfileBundle> = this.bundles) {
+        check(!discarded) { "Prepared Profile session was discarded" }
         snapshot.validate()
         val next = CommittedProfileGeneration(
             generation = (generation ?: 0L) + 1L,
@@ -45,13 +49,37 @@ class ProfileCompositionSession private constructor(
             composition = snapshot,
             bundles = bundles,
         )
+        next.validate()
         withContext(NonCancellable) {
-            repository.commit(next, generation)
+            if (switchRevision != null) staged = next else {
+                repository.commit(next, generation)
+                generation = next.generation
+            }
             this@ProfileCompositionSession.snapshot = snapshot
             definition = candidate
-            generation = next.generation
             this@ProfileCompositionSession.bundles = bundles
         }
+    }
+
+    /** Publish only after candidate allocation, settling and frame preparation have succeeded. */
+    suspend fun publishPreparedSwitch(): CommittedProfileGeneration = mutex.withLock {
+        check(!discarded) { "Prepared Profile session was discarded" }
+        val revision = checkNotNull(switchRevision) { "Profile session is not preparing a switch" }
+        val candidate = checkNotNull(staged) { "Target runtime has not prepared a generation" }
+        withContext(NonCancellable) {
+            (repository as ProfileGenerationRepository).commitAndSelect(candidate, generation, revision)
+            generation = candidate.generation
+            switchRevision = null
+            staged = null
+        }
+        candidate
+    }
+
+    /** The host must close candidate resources; discarding metadata does not dispose a runtime. */
+    suspend fun discardPreparedSwitch() = mutex.withLock {
+        check(switchRevision != null) { "Profile session is not preparing a switch" }
+        discarded = true
+        staged = null
     }
 
     companion object {
@@ -61,6 +89,17 @@ class ProfileCompositionSession private constructor(
             definition.validate()
             val previous = repository.loadCommitted(definition.id)
             return ProfileCompositionSession(repository, previous, previous?.definition ?: definition, initialSnapshot, initialBundles)
+        }
+
+        /** Capture expectedRevision before reading/resolving the target, not after allocation. */
+        suspend fun prepareSwitch(repository: ProfileGenerationRepository, definition: ProfileDefinition,
+            expectedRevision: Long,
+            initialSnapshot: PluginCompositionSnapshot = PluginCompositionSnapshot(),
+            initialBundles: List<ProfileBundle> = emptyList()): ProfileCompositionSession {
+            definition.validate()
+            require(expectedRevision >= 0) { "Invalid Profile repository revision" }
+            val previous = repository.loadCommitted(definition.id)
+            return ProfileCompositionSession(repository, previous, previous?.definition ?: definition, initialSnapshot, initialBundles, expectedRevision)
         }
     }
 }

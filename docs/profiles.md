@@ -39,6 +39,17 @@ authority corruption fails closed rather than falling back to those legacy docum
 the new generation and selection in one operation. Runtime switching must still coordinate
 this publisher with staged activation, failure recovery and stable host facades.
 
+`prepareNativeProfileActivation(stageSwitch = true)` requires an explicit target and captures
+the authority revision before resolving it. Its session keeps startup publication in memory;
+it does not save a migration draft or advance a committed generation. After the target runtime
+has settled and prepared its frames, `publishPreparedSwitch()` commits the prepared generation
+and selection together. It then becomes an ordinary durable session for later mutations.
+Repeated preparation advances only one generation. A failed publisher can be retried; a stale
+authority must be discarded and prepared again. `discardPreparedSwitch()` withdraws metadata
+publication but the host must still close candidate resources. The host must keep candidate
+facades private until publication and coordinate old-runtime shutdown/recovery; this preparation
+protocol alone does not provide a live Profile switch.
+
 History APIs expose only published documents. Removing an unselected Profile withdraws its
 record atomically; retained files cannot resurrect it on restart or recreation. Physical
 metadata reclamation is separate from that publication. Provider data and package caches

@@ -18,12 +18,21 @@ suspend fun prepareProfileBootstrap(
     aliases: Map<String, Set<String>> = emptyMap(),
     requestedId: String? = null,
     machineConfiguredPackages: Set<String> = emptySet(),
+    switchRevision: Long? = null,
 ): PreparedProfileBootstrap {
+    suspend fun session(definition: ProfileDefinition, snapshot: PluginCompositionSnapshot = PluginCompositionSnapshot()): ProfileCompositionSession {
+        val referenced = bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } }
+        return if (switchRevision == null) ProfileCompositionSession.open(repository, definition, snapshot, referenced)
+        else ProfileCompositionSession.prepareSwitch(
+            requireNotNull(repository as? ProfileGenerationRepository) { "Repository does not support atomic Profile switching" },
+            definition, switchRevision, snapshot, referenced,
+        )
+    }
     val selected = repository.selected()
     val id = requestedId ?: selected ?: template.id
     val committed = repository.loadCommitted(id)
     if (committed != null) return PreparedProfileBootstrap(
-        committed.definition, ProfileCompositionSession.open(repository, committed.definition, initialBundles = bundles.filter { bundle -> committed.definition.bundles.any { it.id == bundle.id } }), migrating = false,
+        committed.definition, session(committed.definition), migrating = false,
     )
     val draft = repository.loadDraft(id)
     if (draft != null) {
@@ -31,15 +40,15 @@ suspend fun prepareProfileBootstrap(
         // Keep legacy installation state until the first generation actually commits.
         val legacy = if (id == template.id) legacyStore?.load() else null
         return PreparedProfileBootstrap(
-            draft, ProfileCompositionSession.open(repository, draft, legacy ?: PluginCompositionSnapshot(), bundles.filter { bundle -> draft.bundles.any { it.id == bundle.id } }),
+            draft, session(draft, legacy ?: PluginCompositionSnapshot()),
             migrating = legacy != null,
         )
     }
     require(id == template.id) { "Selected profile has no restorable definition" }
     val legacy = legacyStore?.load() ?: PluginCompositionSnapshot()
     val migrated = migrateLegacyProfile(template, bundles, legacy, aliases, machineConfiguredPackages)
-    repository.saveDraft(migrated)
+    if (switchRevision == null) repository.saveDraft(migrated)
     return PreparedProfileBootstrap(
-        migrated, ProfileCompositionSession.open(repository, migrated, legacy, bundles.filter { bundle -> migrated.bundles.any { it.id == bundle.id } }), migrating = legacyStore != null,
+        migrated, session(migrated, legacy), migrating = legacyStore != null,
     )
 }
