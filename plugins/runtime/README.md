@@ -19,6 +19,14 @@ instance retains packages still referenced by another instance or deployment dep
 binding keys are ephemeral host details and never enter portable intent. The module protocol is
 host implementation, not part of the independently loaded plugin SDK.
 
-Named startup and manager mutations are implemented. Declaration editing, runtime switching,
-external bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
+`KcodeProfileHost` supplies stable facades and serializes complete runtime switches. Preparation
+verifies the target and retains a locked old-runtime recipe before withdrawal. Active calls and
+overlay leases require explicit cancellation/join. Failed target allocation/publication restores
+the previous intent without rewriting history; failed closure/restoration refuses new work in
+`RecoveryRequired`. Callback reentry is rejected, and cancellation after durable publication
+retains the new runtime. Native factories must provide fresh resources through `ProfileRuntimeFactory`
+and keep candidate facades private. Public Profile management and recovery UI remain separate.
+
+Named startup, manager mutations and the host coordinator are implemented. Declaration editing,
+native switch integration, external bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
 `docs/profiles-implementation.md` for behavior and evidence limits.

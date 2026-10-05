@@ -23,6 +23,7 @@ class ProfileCompositionSession private constructor(
     private var bundles = initial?.bundles?.takeIf { initial.formatVersion == 2 || it.isNotEmpty() } ?: initialBundles
     private var staged: CommittedProfileGeneration? = null
     private var discarded = false
+    private val original = initial
 
     override suspend fun load(): PluginCompositionSnapshot = mutex.withLock { snapshot }
 
@@ -62,6 +63,10 @@ class ProfileCompositionSession private constructor(
     }
 
     /** Publish only after candidate allocation, settling and frame preparation have succeeded. */
+    suspend fun requirePreparedSwitch() = mutex.withLock {
+        check(!discarded && switchRevision != null) { "Profile session is not preparing a switch" }
+    }
+
     suspend fun publishPreparedSwitch(): CommittedProfileGeneration = mutex.withLock {
         check(!discarded) { "Prepared Profile session was discarded" }
         val revision = checkNotNull(switchRevision) { "Profile session is not preparing a switch" }
@@ -80,6 +85,21 @@ class ProfileCompositionSession private constructor(
         check(switchRevision != null) { "Profile session is not preparing a switch" }
         discarded = true
         staged = null
+    }
+
+    /** Reconstructed old resources resume without publishing a new generation or selection. */
+    suspend fun resumePreparedRestoration() = mutex.withLock {
+        check(!discarded && switchRevision != null) { "Profile session is not preparing restoration" }
+        val previous = checkNotNull(original) { "Restoration requires a committed Profile" }
+        val candidate = checkNotNull(staged) { "Restored runtime has not prepared a generation" }
+        check(candidate.definition == previous.definition && candidate.lock == previous.lock && candidate.bundles == previous.bundles) {
+            "Restoration changed locked Profile intent"
+        }
+        withContext(NonCancellable) {
+            check(repository.loadCommitted(previous.definition.id) == previous) { "Restoration generation changed" }
+            switchRevision = null
+            staged = null
+        }
     }
 
     companion object {

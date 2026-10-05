@@ -180,3 +180,22 @@ repository/preparation tests cover target history and draft-free native staging.
 passed 84 tests (32 Profile tests and 52 desktop runtime/native/package tests), plus Android
 platform compilation against Cordis `f08918d`. Stable host facades, old-runtime shutdown/recreation, turn admission and recovery UI
 remain necessary before this becomes a complete live switching feature.
+
+## Host coordinator phase evidence
+
+`KcodeProfileHost` owns stable chat, plugin-manager, overlay and application facades around
+replaceable complete runtimes. Admission closes before preparation, default switching refuses
+active calls/overlay leases, and explicit cancellation joins admitted work before withdrawal.
+The old locked preparation is retained before closure. Allocation or publication failure
+reconstructs that exact committed intent without advancing history or changing selection.
+Failed old closure or failed reconstruction enters `RecoveryRequired` and refuses execution.
+Callback-initiated switch/closure is rejected. Post-publication cancellation leaves the
+committed candidate live. Overlay withdrawal joins finishing leases and rejects stale updates;
+foreground updates serialize with switches.
+
+Eleven coordinator tests use real Cordis runtimes/providers and file-backed Profile sessions,
+covering success, preflight failure, allocation/publication failure, cancellation/join, recovery
+failure, old closure failure, callbacks, committed-boundary cancellation and overlay leases.
+The phase build passed 95 tests (32 Profile and 63 desktop runtime/native/package tests), plus
+Android platform compilation. Native factory integration, public management SDK, recovery UI
+and Android device evidence are still required; this evidence does not claim those features.
