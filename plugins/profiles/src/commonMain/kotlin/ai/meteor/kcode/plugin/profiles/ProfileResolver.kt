@@ -16,6 +16,8 @@ data class ResolvedProfile(
     val packages: List<DynamicPluginSpec>,
     val lock: ProfileLock,
     val bundles: List<ProfileBundle> = emptyList(),
+    val machineOverrides: List<ProfileOperation> = emptyList(),
+    val launchOverrides: List<ProfileOperation> = emptyList(),
 )
 
 /** Dependency hints locate archives; the native resolver still verifies the real manifest graph. */
@@ -80,7 +82,8 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         val snapshot = PluginCompositionSnapshot(external = resolved.map(StoredDynamicPlugin::from)).also { it.validate() }
         val ordered = snapshot.orderedExternal().map { available.getValue(it.id) }
         ordered.forEach { packages.verify(it) }
-        return ResolvedProfile(definition, composition, ordered, profileLock(snapshot), bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } })
+        return ResolvedProfile(definition, composition, ordered, profileLock(snapshot),
+            bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } }, machineOverrides, launchOverrides)
     }
 }
 

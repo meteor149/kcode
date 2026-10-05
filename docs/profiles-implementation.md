@@ -43,7 +43,8 @@ The runtime now accepts ProfileActivation through its managed startup facade. Na
 register modules without creating package-level instances; the Cordis tree retains instance
 IDs, groups, per-instance configuration and code origins. Configurations, inventories, settling
 and application frame preparation precede the atomic generation publisher. Legacy manager
-mutations currently reject declarative mode pending Profile transaction routing.
+enable mutations now use Profile transactions. Code upserts, imports and removals still
+reject declarative mode pending joint module-generation and tree transaction routing.
 
 The shipped hosts now select this mode through ProfileStartupFactory. Native bundle layers,
 explicit IDs, saved selection, machine configuration and committed restart are wired. Settings
@@ -110,3 +111,14 @@ locks on restart. Tests cover omitted-version format 1 recovery/upgrade and refu
 incomplete frozen bundles. JSON null configuration survives serialization; machine overlays
 apply to every matching instance without copying host paths into portable definitions.
 These tests do not establish Android device persistence or complete mutation/switch semantics.
+
+## Enable transaction phase evidence
+
+The next phase build passed 61 tests: the same 21 Profile tests, 10 Profile runtime tests,
+1 real native host test, 14 legacy runtime tests and 15 package integration tests. Desktop
+compilation and Android APK assembly passed. Four new tests verify independent instance
+withdrawal/recovery with a pending consumer, failed generation publication and successful
+retry, rejection of an invalid batch before withdrawal, and launch-layer precedence over
+saved Enable intent. The legacy manager routes individual and enable-only batch operations
+through managed Profile tree transactions. Release imports/upserts/removals, configuration
+changes, Profile switching and recovery UI remain pending.

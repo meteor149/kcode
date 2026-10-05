@@ -37,6 +37,114 @@ import org.cordis.plugin
 
 class ProfileRuntimeTest {
     @Test
+    fun enableTransactionsWithdrawAndRecoverOnlyTheSelectedInstance() = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-enabled").toFile()
+        val repository = FileProfileRepository(root)
+        val observed = mutableListOf<String>()
+        val released = mutableListOf<String>()
+        val answer = ServiceKey<String>("profileEnableAnswer")
+        val provider = kcodePlugin(descriptor("example.provider"),
+            plugin<String>(validator = ConfigValidator { it }) { context, value ->
+                context.provide(answer, value)
+                collect { released += value }
+            }, "default")
+        val consumer = kcodePlugin(descriptor("example.consumer"),
+            plugin<Unit>(inject = dependencies(answer)) { context, _ -> observed += context.require(answer) }, Unit)
+        fun group(id: String, value: String) = ProfileEntry(id, "core.group", children = listOf(
+            ProfileEntry("$id-provider", "example.provider", JsonPrimitive(value), configurationKind = "string"),
+            ProfileEntry("$id-consumer", "example.consumer"),
+        ), isolate = mapOf(answer.name to null))
+        val runtime = start(repository, definition(group("first", "one"), group("second", "two")), listOf(provider, consumer))
+        try {
+            runtime.pluginManager.setEnabled("first-provider", false)
+            assertEquals(listOf("one"), released)
+            assertEquals(PluginState.Pending, runtime.inventory.snapshot().single { it.id == "first-consumer" }.state)
+            assertEquals(PluginState.Active, runtime.inventory.snapshot().single { it.id == "second-provider" }.state)
+            assertEquals(ProfileOperation.Disable("first-provider"), repository.loadCommitted("test")!!.definition.patches.last())
+            runtime.pluginManager.applyChanges(PluginCompositionChange(enabled = mapOf("first-provider" to true)))
+            assertEquals(listOf("one", "two", "one"), observed)
+            assertEquals(PluginState.Active, runtime.inventory.snapshot().single { it.id == "first-consumer" }.state)
+            assertEquals(3L, repository.loadCommitted("test")!!.generation)
+        } finally {
+            runtime.close()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun failedEnablePublicationRestoresRuntimeAndCommittedIntent() = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-enabled-failure").toFile()
+        val storage = FileProfileRepository(root)
+        var refuse = false
+        val repository = object : ProfileRepository by storage {
+            override suspend fun commit(value: CommittedProfileGeneration, expectedGeneration: Long?) {
+                check(!refuse) { "publication refused" }
+                storage.commit(value, expectedGeneration)
+            }
+        }
+        var allocations = 0
+        var releases = 0
+        val provider = kcodePlugin(descriptor("example.provider"), plugin<Unit> { _, _ ->
+            allocations++
+            collect { releases++ }
+        }, Unit)
+        val runtime = start(repository, definition(ProfileEntry("provider", "example.provider")), listOf(provider))
+        try {
+            val before = storage.loadCommitted("test")
+            refuse = true
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("provider", false) }
+            assertEquals(before, storage.loadCommitted("test"))
+            assertEquals(PluginState.Active, runtime.inventory.snapshot().single { it.id == "provider" }.state)
+            assertEquals(1, allocations - releases)
+            refuse = false
+            runtime.pluginManager.setEnabled("provider", false)
+            assertEquals(2L, storage.loadCommitted("test")!!.generation)
+            assertEquals(allocations, releases)
+        } finally {
+            runtime.close()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun invalidEnableBatchCannotPartiallyWithdrawProviders() = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-enabled-invalid").toFile()
+        val repository = FileProfileRepository(root)
+        var releases = 0
+        val provider = kcodePlugin(descriptor("example.provider"), plugin<Unit> { _, _ -> collect { releases++ } }, Unit)
+        val runtime = start(repository, definition(ProfileEntry("provider", "example.provider")), listOf(provider))
+        try {
+            assertFailsWith<IllegalArgumentException> {
+                runtime.pluginManager.applyChanges(PluginCompositionChange(enabled = mapOf("provider" to false, "missing" to false)))
+            }
+            assertEquals(0, releases)
+            assertEquals(1L, repository.loadCommitted("test")!!.generation)
+        } finally {
+            runtime.close()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun launchDisableStillOutranksCommittedEnableIntent() = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-enabled-overlay").toFile()
+        val repository = FileProfileRepository(root)
+        var allocations = 0
+        val provider = kcodePlugin(descriptor("example.provider"), plugin<Unit> { _, _ -> allocations++ }, Unit)
+        val runtime = start(repository, definition(ProfileEntry("provider", "example.provider")), listOf(provider),
+            launchOverrides = listOf(ProfileOperation.Disable("provider")))
+        try {
+            runtime.pluginManager.setEnabled("provider", true)
+            assertEquals(0, allocations)
+            assertEquals(PluginState.Disabled, runtime.inventory.snapshot().single { it.id == "provider" }.state)
+            assertEquals(ProfileOperation.Enable("provider"), repository.loadCommitted("test")!!.definition.patches.last())
+        } finally {
+            runtime.close()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun legacyRuntimeCannotEnterDeclarativeStartupAfterCreation() = runBlocking {
         val root = Files.createTempDirectory("kcode-profile-startup-boundary").toFile()
         val repository = FileProfileRepository(root)
@@ -187,9 +295,10 @@ class ProfileRuntimeTest {
 
     private suspend fun start(repository: ProfileRepository, definition: ProfileDefinition,
         modules: List<KcodePluginMount> = emptyList(), packages: List<DynamicPluginSpec> = emptyList(),
-        trusted: File? = null): KcodePluginRuntime {
+        trusted: File? = null, launchOverrides: List<ProfileOperation> = emptyList()): KcodePluginRuntime {
         val activation = ProfileActivation(
-            ResolvedProfile(definition, ProfileCompiler().compile(definition, emptyList()), packages, ProfileLock()),
+            ResolvedProfile(definition, ProfileCompiler().compile(definition, emptyList(), launchOverrides = launchOverrides),
+                packages, ProfileLock(), launchOverrides = launchOverrides),
             ProfileCompositionSession.open(repository, definition),
         )
         return KcodePluginRuntime.create(KcodePluginRuntimeConfig(

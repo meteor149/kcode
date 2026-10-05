@@ -57,3 +57,9 @@ The shipped factories now bind settings/history scopes on both native platforms 
 directories on desktop. Caller-supplied stores remain borrowed. Profile update/switching,
 Android workspace scope enforcement and management UI remain under development. See
 `docs/profiles.md` and `docs/profiles-implementation.md`.
+
+Resolved profiles retain machine and launch operations separately from portable definitions.
+Runtime enable transactions recompile with those original layers, so saved user changes
+cannot displace a launch policy. `AgentPluginManager.setEnabled` and enable-only
+`applyChanges` publish Profile operations and the local snapshot together. Code replacement,
+imports and removals still require joint module-generation transactions.

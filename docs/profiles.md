@@ -58,9 +58,17 @@ storage location. Closing a provider or deleting Profile metadata does not delet
 
 Managed startup validates configuration before allocating product resources, settles the
 tree and prepares application snapshots before publishing the committed generation. Failed
-publication restores resources and leaves the previous generation readable. Legacy plugin
-manager mutations are currently rejected in declarative mode until Profile transaction
-routing is implemented.
+publication restores resources and leaves the previous generation readable. The plugin
+manager's `setEnabled` and enable-only `applyChanges` target Profile entry IDs and publish
+portable Enable/Disable operations through the tree transaction. Missing IDs reject the
+whole batch before withdrawal. Machine and launch layers retain their precedence; a saved
+Enable cannot override a launch Disable. Group enable changes use the same compiler.
+Package IDs and `package:` inventory rows are code availability, not enable targets.
+
+Package imports, upserts and removals are still rejected in declarative mode pending joint
+module-generation and tree transactions. Code availability and locked releases do not
+change during an enable transaction. Publication failure restores the previous tree and
+inventory state while preserving the previous committed intent.
 
 Profile editing/activation commands, package update transactions, live selection/switching,
 external bundle import, credential-safe export and management/recovery UI remain incomplete.

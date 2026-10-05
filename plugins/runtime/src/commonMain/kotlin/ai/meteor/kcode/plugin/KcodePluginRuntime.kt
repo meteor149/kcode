@@ -98,6 +98,8 @@ import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.profiles.profileConfiguration
 import ai.meteor.kcode.plugin.profiles.profileLock
 import ai.meteor.kcode.plugin.profiles.ProfileStartupFactory
+import ai.meteor.kcode.plugin.profiles.ProfileCompiler
+import ai.meteor.kcode.plugin.profiles.ProfileOperation
 
 interface DynamicPluginController : AgentPluginManager {
     /** Apply a resolved Profile through the host's managed startup boundary. */
@@ -342,8 +344,9 @@ class KcodePluginRuntime private constructor(
             }
         }
 
-        override suspend fun applyChanges(changes: PluginCompositionChange) = mutate {
-            applyCompositionChange(changes)
+        override suspend fun applyChanges(changes: PluginCompositionChange) {
+            if (changes.upserts.isEmpty() && changes.removals.isEmpty() && trySetProfileEnabled(changes.enabled)) return
+            mutate { applyCompositionChange(changes) }
         }
 
         override suspend fun install(spec: DynamicPluginSpec) = mutate {
@@ -385,7 +388,12 @@ class KcodePluginRuntime private constructor(
             }
         }
 
-        override suspend fun setEnabled(id: String, enabled: Boolean) = mutate {
+        override suspend fun setEnabled(id: String, enabled: Boolean) {
+            if (trySetProfileEnabled(mapOf(id to enabled))) return
+            setLegacyEnabled(id, enabled)
+        }
+
+        private suspend fun setLegacyEnabled(id: String, enabled: Boolean) = mutate {
             if (!restoring) validatePackageDependencies(external?.installed().orEmpty().map { if (it.id == id) it.copy(enabled = enabled) else it })
             if (external?.installed()?.any { it.id == id } == true) {
                 if (enabled) validateInstallation(external.installed().single { it.id == id })
@@ -418,6 +426,58 @@ class KcodePluginRuntime private constructor(
     }
 
     val dynamicPlugins: DynamicPluginController? get() = if (external == null) null else pluginManager
+
+    /** Entry enable state is portable intent; release availability and instance identity stay fixed. */
+    private suspend fun trySetProfileEnabled(changes: Map<String, Boolean>): Boolean {
+        PluginOperationOwner.requireOutsideCall()
+        ChatGenerationRunner.requireOutsideCall()
+        return lock.withLock {
+            check(!closed) { "plugin runtime is closed" }
+            val activation = activeProfile ?: return@withLock false
+            check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
+            if (changes.isEmpty()) return@withLock true
+            val previous = activation.resolved
+            val definition = previous.definition.copy(patches = previous.definition.patches + changes.map { (id, enabled) ->
+                if (enabled) ProfileOperation.Enable(id) else ProfileOperation.Disable(id)
+            })
+            val composition = ProfileCompiler().compile(definition, previous.bundles,
+                previous.machineOverrides, previous.launchOverrides).requireValid()
+            val flags = linkedMapOf<String, Boolean?>()
+            fun index(items: List<EntryOptions>) {
+                items.forEach { entry ->
+                    flags[entry.id] = entry.disabled
+                    if (entry.group == true) index((entry.config as List<*>).map { it as EntryOptions })
+                }
+            }
+            index(composition.entries)
+            val loader = context.require(Loader.Key)
+            // Keep the exact configured module exports and per-instance code origins. Only
+            // enable flags change; machine/launch layers still outrank user intent.
+            fun bind(items: List<EntryOptions>): List<EntryOptions> = items.map { entry ->
+                require(entry.id in flags) { "Profile runtime tree differs from committed intent" }
+                entry.copy(disabled = flags.getValue(entry.id), config = if (entry.group == true)
+                    bind((entry.config as List<*>).map { it as EntryOptions }) else entry.config)
+            }
+            val tree = bind(loader.root.data)
+            try {
+                loader.withTreeTransaction(tree) {
+                    settle(publishView = false)
+                    val prepared = prepareApplicationView()
+                    val snapshot = compositionSnapshot().copy(
+                        external = previous.packages.map(StoredDynamicPlugin::from),
+                        builtinsEnabled = records.mapValues { it.value.enabled } + profileDescriptors.mapValues { (id, _) -> !loader.resolve(id).disabled },
+                    )
+                    activation.session.commitDefinition(definition, snapshot, previous.bundles)
+                    activeProfile = activation.copy(resolved = previous.copy(definition = definition, composition = composition))
+                    commitApplicationView(prepared)
+                }
+            } catch (error: Throwable) {
+                runCatching { settle(publishView = false) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                throw error
+            }
+            true
+        }
+    }
 
     private suspend fun applyCompositionChange(changes: PluginCompositionChange) {
         require(changes.upserts.map { it.id }.distinct().size == changes.upserts.size) { "Duplicate composition upsert" }
