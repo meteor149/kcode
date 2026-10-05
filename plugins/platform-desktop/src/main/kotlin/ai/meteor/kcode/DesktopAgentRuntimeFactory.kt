@@ -16,6 +16,10 @@ import ai.meteor.kcode.plugin.FilePluginCompositionStore
 import ai.meteor.kcode.plugin.KcodePluginProfile
 import ai.meteor.kcode.plugin.KcodePluginRuntime
 import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
+import ai.meteor.kcode.plugin.KcodeProfileHost
+import ai.meteor.kcode.plugin.PreparedProfileRuntime
+import ai.meteor.kcode.plugin.ProfileRuntimeFactory
+import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.api.DesktopPluginHostInputs
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.settings.AppSettingsStore
@@ -48,6 +52,18 @@ fun createDesktopKoogChatRuntime(
     profileId: String? = null,
     homeDirectory: Path = Path.of(System.getProperty("user.home"), ".kcode"),
 ): KcodeAgentRuntime {
+    return runBlocking { createDesktopProfileHost(settingsStore, historyRepository, profile, applicationWindow, profileId, homeDirectory).runtime }
+}
+
+/** Suspends while constructing the initial product; later switches reuse only host inputs/catalogue. */
+suspend fun createDesktopProfileHost(
+    settingsStore: AppSettingsStore? = null,
+    historyRepository: ConversationHistoryRepository? = null,
+    profile: KcodePluginProfile = KcodePluginProfile(),
+    applicationWindow: () -> Frame? = { null },
+    profileId: String? = null,
+    homeDirectory: Path = Path.of(System.getProperty("user.home"), ".kcode"),
+): KcodeProfileHost {
     val workspace = Files.createDirectories(
         homeDirectory.resolve("workspace"),
     ).toRealPath()
@@ -61,67 +77,87 @@ fun createDesktopKoogChatRuntime(
             NativePluginPackagesPlugin(pluginDirectory, desktopPackageHost()), Unit,
         ),
     )
-    val pluginRuntime = runBlocking {
-        val legacyStore = FilePluginCompositionStore(pluginDirectory)
-        val repository = FileProfileRepository(homeDirectory.resolve("profiles").toFile())
-        val bundled = if (!profile.includeDefaults) emptyList() else stageBundledPackageCatalog(pluginDirectory, host = desktopPackageHost()) { name ->
-            checkNotNull(NativePluginPackagesPlugin::class.java.classLoader.getResourceAsStream(name)) { "Missing bundled plugin resource '$name'" }
-        }.filter { it.id != "provider.settings.platform" || settingsStore == null }
-            .filter { it.id != "provider.history.platform" || historyRepository == null }
-        KcodePluginRuntime.create(
-            KcodePluginRuntimeConfig(
-                bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
-                profileStartup = ProfileStartupFactory { modules ->
-                    val bundles = nativeProfileBundles((modules.map { it.descriptor.id } + bundled.map { it.id }).distinct())
-                    prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
-                        NativePluginPackageResolver(pluginDirectory, desktopPackageHost()),
-                        bundled.associate { it.id to ProfilePackageOffer(it.release) }, modules.map { it.descriptor.id }.toSet(),
-                        legacyStore, NativeBuiltinAliases + NativeProfileInfrastructureAliases, profileId,
-                        machineOverrides = { definition, frozen ->
-                            fun dataFile(scope: String, filename: String): String {
-                                val key = profileDataScopeKey(definition.id, scope)
-                                return (if (key == "legacy") homeDirectory.resolve(filename)
-                                    else homeDirectory.resolve("profile-data").resolve(key).resolve(filename)).toAbsolutePath().toString()
-                            }
-                            val workspaceKey = profileDataScopeKey(definition.id, definition.dataScope.workspace)
-                            val cwd = if (definition.dataScope.workspace == "default") workspace else
-                                Files.createDirectories(homeDirectory.resolve("workspaces").resolve(workspaceKey)).toRealPath()
-                            val configs = mapOf(
-                                "provider.settings.platform" to dataFile(definition.dataScope.settings, "settings.preferences_pb"),
-                                "provider.history.platform" to dataFile(definition.dataScope.history, "history.db"),
-                                "provider.shell.platform" to cwd.toString(),
-                                "provider.fs.platform" to cwd.toString(),
-                            ).filterKeys { id -> bundled.any { it.id == id } }.mapValues { StoredPluginConfiguration.encode(it.value) }
-                            profileMachineConfiguration(definition, frozen, configs)
-                        },
-                        launchOverrides = profile.disabled.map { ProfileOperation.Disable(it) },
-                        machineConfiguredPackages = setOf("provider.settings.platform", "provider.history.platform", "provider.shell.platform", "provider.fs.platform"),
-                        builtinOverrides = profile.overrides.map { it.descriptor.id }.toSet() + buildSet {
-                            if (settingsStore != null) add("provider.settings.platform")
-                            if (historyRepository != null) add("provider.history.platform")
-                        },
-                    )
-                },
-                interactionPolicy = InteractionPolicy(
-                    approver = ToolCallApprover { false },
-                ),
-                hostInputs = DesktopPluginHostInputs(applicationWindow),
-                settingsBackedInteraction = true,
-                profile = nativeProfile,
-                settingsStore = settingsStore,
-                historyRepository = historyRepository,
-                featurePlugins = featurePlugins,
-                pluginCompositionStore = legacyStore,
-                dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
-                    DesktopDynamicPluginController(context, loader, inventory, pluginDirectory)
-                },
-            ),
+    var requestedId = profileId
+    var staging = false
+    lateinit var catalogue: Set<String>
+    lateinit var initialActivation: ProfileActivation
+    val legacyStore = FilePluginCompositionStore(pluginDirectory)
+    val repository = FileProfileRepository(homeDirectory.resolve("profiles").toFile())
+    val bundled = if (!profile.includeDefaults) emptyList() else stageBundledPackageCatalog(pluginDirectory, host = desktopPackageHost()) { name ->
+        checkNotNull(NativePluginPackagesPlugin::class.java.classLoader.getResourceAsStream(name)) { "Missing bundled plugin resource '$name'" }
+    }.filter { it.id != "provider.settings.platform" || settingsStore == null }
+        .filter { it.id != "provider.history.platform" || historyRepository == null }
+    suspend fun prepare(): ProfileActivation {
+        val bundles = nativeProfileBundles((catalogue + bundled.map { it.id }).toList())
+        return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
+            NativePluginPackageResolver(pluginDirectory, desktopPackageHost()),
+            bundled.associate { it.id to ProfilePackageOffer(it.release) }, catalogue,
+            legacyStore, NativeBuiltinAliases + NativeProfileInfrastructureAliases, requestedId,
+            machineOverrides = { definition, frozen ->
+                fun dataFile(scope: String, filename: String): String {
+                    val key = profileDataScopeKey(definition.id, scope)
+                    return (if (key == "legacy") homeDirectory.resolve(filename)
+                        else homeDirectory.resolve("profile-data").resolve(key).resolve(filename)).toAbsolutePath().toString()
+                }
+                val workspaceKey = profileDataScopeKey(definition.id, definition.dataScope.workspace)
+                val cwd = if (definition.dataScope.workspace == "default") workspace else
+                    Files.createDirectories(homeDirectory.resolve("workspaces").resolve(workspaceKey)).toRealPath()
+                val configs = mapOf(
+                    "provider.settings.platform" to dataFile(definition.dataScope.settings, "settings.preferences_pb"),
+                    "provider.history.platform" to dataFile(definition.dataScope.history, "history.db"),
+                    "provider.shell.platform" to cwd.toString(),
+                    "provider.fs.platform" to cwd.toString(),
+                ).filterKeys { id -> bundled.any { it.id == id } }.mapValues { StoredPluginConfiguration.encode(it.value) }
+                profileMachineConfiguration(definition, frozen, configs)
+            },
+            launchOverrides = profile.disabled.map { ProfileOperation.Disable(it) },
+            machineConfiguredPackages = setOf("provider.settings.platform", "provider.history.platform", "provider.shell.platform", "provider.fs.platform"),
+            builtinOverrides = profile.overrides.map { it.descriptor.id }.toSet() + buildSet {
+                if (settingsStore != null) add("provider.settings.platform")
+                if (historyRepository != null) add("provider.history.platform")
+            },
+            stageSwitch = staging,
         )
     }
-    return KcodeAgentRuntime(
-        chatService = pluginRuntime.chatService,
-        pluginManager = pluginRuntime.pluginManager,
-        owner = pluginRuntime,
-        applicationContent = pluginRuntime,
+    val startup = ProfileStartupFactory { modules ->
+        catalogue = modules.map { it.descriptor.id }.toSet()
+        prepare().also { initialActivation = it }
+    }
+    val configuration = KcodePluginRuntimeConfig(
+        bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
+        profileStartup = startup,
+        interactionPolicy = InteractionPolicy(
+            approver = ToolCallApprover { false },
+        ),
+        settingsBackedInteraction = true,
+        profile = nativeProfile,
+        settingsStore = settingsStore,
+        historyRepository = historyRepository,
+        featurePlugins = featurePlugins,
+        pluginCompositionStore = legacyStore,
+        dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
+            DesktopDynamicPluginController(context, loader, inventory, pluginDirectory)
+        },
     )
+    fun facade(runtime: KcodePluginRuntime) = KcodeAgentRuntime(
+        chatService = runtime.chatService,
+        pluginManager = runtime.pluginManager,
+        owner = runtime,
+        applicationContent = runtime,
+    )
+    val initial = KcodePluginRuntime.create(configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow)))
+    staging = true
+    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, ProfileRuntimeFactory { id ->
+        requestedId = id
+        val activation = prepare()
+        PreparedProfileRuntime(activation) {
+            facade(KcodePluginRuntime.create(configuration.copy(
+                hostInputs = DesktopPluginHostInputs(applicationWindow),
+                profileStartup = ProfileStartupFactory { modules ->
+                    check(modules.map { it.descriptor.id }.toSet() == catalogue) { "Native module catalogue changed" }
+                    activation
+                },
+            )))
+        }
+    })
 }

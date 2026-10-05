@@ -14,6 +14,16 @@ Native factories choose an explicit `profileId`, the repository selection, or th
 the `profile` Activity intent extra. These choose startup; they do not perform a live switch
 or save selection by themselves.
 
+Desktop factories return stable facades owned by `KcodeProfileHost`.
+`createDesktopProfileHost` is the suspending construction entry point; `switchTo(id)` performs
+an in-process switch and saves selection only after successful target activation. Active calls
+and overlay leases must finish first, or the caller must request `cancelActive = true` to cancel
+and join them. Target preflight precedes old-runtime withdrawal; failed allocation/publication
+reconstructs the old locked generation without rewriting history. Failed old closure or failed
+restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's admitted current
+runtime rather than a retained old owner. Android factory integration and recovery UI remain
+pending. These controls are currently native runtime APIs, not an exported Profile management SDK.
+
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
 are allocated only after package and configuration preparation. A custom composition can

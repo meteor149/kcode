@@ -188,6 +188,10 @@ class KcodeProfileHost(
     override suspend fun modelCatalog(): ModelCatalogSnapshot = call {
         it.applicationContent?.modelCatalog() ?: ModelCatalogSnapshot()
     }
+    /** Native diagnostics are read through admission; callers do not retain retired runtimes. */
+    suspend fun diagnostics(): KcodePluginDiagnostics = call {
+        checkNotNull(it.owner as? KcodePluginRuntime) { "Native plugin diagnostics are unavailable" }.diagnostics()
+    }
     @Composable
     override fun Render(options: ApplicationHostOptions) {
         val active by view.collectAsState()

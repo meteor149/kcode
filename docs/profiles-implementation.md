@@ -199,3 +199,17 @@ failure, old closure failure, callbacks, committed-boundary cancellation and ove
 The phase build passed 95 tests (32 Profile and 63 desktop runtime/native/package tests), plus
 Android platform compilation. Native factory integration, public management SDK, recovery UI
 and Android device evidence are still required; this evidence does not claim those features.
+
+## Desktop native host integration evidence
+
+Desktop factories now retain only the module ID catalogue and host configuration, create fresh
+host inputs for each product allocation, and return the coordinator's stable facades. Native
+preparation supplies both target and old locked recipes before withdrawal. Existing factory
+tests inspect admitted host diagnostics rather than retaining the raw product owner. Two new
+native tests exercise live settings/history scope changes, stale store rejection, saved-selection
+restart and failed target allocation followed by restoration of actual locked package providers.
+Phase validation passed 97 tests (32 Profile and 65 desktop runtime/native/package tests),
+including all three actual native factory tests. Desktop application compilation and Android
+platform compilation passed against Cordis `f08918d`. Android factory integration, the exported
+management SDK/UI and recovery UI remain outstanding; no Android device switching evidence is
+claimed.

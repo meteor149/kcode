@@ -14,4 +14,10 @@ Caller stores are borrowed and keep their caller-defined scope and lifetime.
 Committed bundle snapshots and release locks govern restart. Edited drafts do not replace
 successful generations. `AgentPluginManager` updates active Profile intent through native
 module/tree transactions, including verified archive import and independent instance removal.
-Runtime Profile switching and the management UI remain pending; see the Profile guide.
+`createDesktopProfileHost` constructs a stable `KcodeProfileHost`; the existing runtime factory
+returns its chat/manager/application facades with the host as owner. `switchTo` stages the target,
+closes the previous product, publishes generation/selection together and changes the delegates.
+Failed target activation restores the old locked generation. Active work requires explicit
+cancellation/join, and failed closure/restoration closes execution admission. Each allocation
+receives fresh host inputs; the retained catalogue contains IDs rather than old mounts/resources.
+The management SDK/UI and recovery UI remain pending; see the Profile guide.
