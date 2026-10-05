@@ -45,6 +45,12 @@ Do not edit the Loader or composition document directly. In Profile mode, enable
 instance IDs. Releases and instance trees are separate; removing one instance can retain code
 used by another. Portable edits, machine configuration and launch policy use the same compiler.
 
+The runtime's typed alternate-module command replaces a package reference with a distinct stable
+module ID while retaining instance intent. Supply that selected module on restart; the declaration
+cannot serialize implementation objects. Same-ID code upgrades use verified package replacement.
+Native factory catalogue/command support remains pending; do not bypass it with retained runtime
+owners or assume a runtime-only mount will be available after a native Profile switch.
+
 When changing a shared public ABI, review exports and package tests, update
 `CurrentPluginApiVersion`, regenerate package metadata and document the change. This applies
 to callbacks, default methods and configuration types as well as service keys.

@@ -39,3 +39,11 @@ Failure/cancellation leaves admission closed and does not publish a generation. 
 construction failures and independent recovery presentation still require implementation.
 External bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
 `docs/profiles-implementation.md` for behavior and evidence limits.
+
+replacePlugin(packageId, replacement) supports typed alternate modules in declarative runtime
+mode. It records distinct module references through Replace operations, preserves every instance's
+configuration/context/enable state and publishes through the normal tree/generation transaction.
+Failed validation, allocation or publication retains the old implementation and module directory.
+Restart must supply the selected alternate ID; arbitrary implementation objects are not persisted.
+Same-ID in-process overwrite is rejected in Profile mode. Native alternate module factories and
+stable host command exposure remain required; verified external release replacement is separate.

@@ -180,7 +180,25 @@ Code availability and locked releases do not change during an enable-only transa
 Publication failure preserves the previous committed intent. Repository generation CAS
 remains the authority for concurrent writers.
 
-External bundle import, credential-safe export, typed host-module replacement and
+### Typed alternate modules
+
+At the runtime implementation boundary, replacePlugin(packageId, replacement) selects a
+distinct stable in-process module ID for every configured instance of packageId. It appends
+ordinary Replace operations and uses the same composition, configuration validation, tree,
+application snapshot and generation publisher as other Profile edits. Instance IDs, groups,
+configuration, contexts and enable states stay intact. Candidate module availability publishes
+only after successful generation publication; failed attempts retain old bindings and allow
+retry with the same candidate ID.
+
+The Profile stores the selected module reference, never a Kotlin implementation object. Restart
+requires the host to supply that alternate module again; missing code is rejected before provider
+allocation. Same-ID typed code overwrite is rejected because it cannot record a distinct code
+selection; use verified release replacement for package upgrades. Borrowed in-process modules
+are host-supplied code and do not claim archive hashes or portable binary verification. Native
+factories still need a selectable alternate-module catalogue and stable host command exposure;
+this runtime method alone does not complete native typed replacement across switching/restart.
+
+External bundle import, credential-safe export, native alternate-module catalogue/exposure and
 management/recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Four Android tests on

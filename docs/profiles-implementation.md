@@ -339,3 +339,32 @@ new evidence for this recovery path; no device recovery-after-restoration-failur
 Independent recovery presentation, initial construction failure recovery, plugin-facing command
 submission ownership, full typed module replacement and Bundle import/export remain outstanding.
 This phase does not mark the overall Profile goal complete.
+
+## Typed alternate-module runtime transaction evidence
+
+KcodePluginRuntime.replacePlugin(packageId, replacement) supports declarative in-process
+alternates. It records a distinct stable module ID for every instance referencing the old
+module, without changing instance IDs, configuration, groups, context or enable state. It
+uses ordinary Replace operations and the existing candidate composition/tree/application/
+generation transaction. Candidate module availability is published only after generation
+publication, and failed validation/allocation/publication restores prior bindings and intent.
+Cancellation withdraws suspended candidate allocation before restoring the old instance.
+
+Selected code is a declaration reference, not a serialized Kotlin object. Restart without the
+selected module rejects before product allocation; supplying the alternate replays retained
+configuration and scopes. Same-ID typed overwrite rejects because it cannot record distinct
+code selection. Legacy non-Profile replacement retains its existing entry point and behavior.
+Borrowed in-process code remains host-authorized code, without claiming archive digest or ABI
+verification. The shared Plugin API remains 66; these runtime commands are implementation APIs.
+
+The final phase passed 77 focused desktop tests across runtime, Profile host/compiler integration
+and real package transactions, with zero failures/errors/skipped cases. Three added tests cover
+grouped multi-instance replacement, independent scopes, disabled/default configuration, retained
+unrelated providers, missing selected code on restart, candidate identity conflicts, validation/
+allocation/publication rollback and cancellation. Desktop app compilation and Android app
+assembly passed against Cordis f08918d. No Android typed-alternate device execution is claimed.
+
+Native factories still require explicit alternate-module catalogue factories and stable host
+command exposure to retain these choices across native switching/restart. This runtime phase
+does not supply that integration, public management/recovery UI, Bundle import/export or the
+overall goal's final validation.
