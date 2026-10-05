@@ -36,6 +36,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "kcode"
+providers.gradleProperty("cordisSource").orNull?.let { includeBuild(it) }
 include(":apps:androidApp")
 include(":apps:desktopApp")
 include(":plugins:agent-loop")
@@ -87,6 +88,7 @@ include(":plugins:package-provider")
 include(":plugins:conversation-overlay")
 
 include(":plugins:settings")
+include(":plugins:profiles")
 
 include(":plugins:history-repository")
 
