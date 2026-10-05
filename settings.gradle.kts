@@ -105,5 +105,6 @@ include(":plugins:localization")
 include(":plugins:markdown")
 
 include(":plugins:default-ui-api")
+include(":plugins:ui-profiles")
 
 include(":libraries:ui")

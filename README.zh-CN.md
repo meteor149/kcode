@@ -136,7 +136,7 @@ ADB 工作区与应用文件工具的工作区分离。Root 创建的文件可�
 | `plugins/installation-store` | 已安装包与启用状态持久化 |
 | `apps/*`、`plugins/platform-*` | 应用 Host、Loader 与平台适配 |
 
-产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 拥有可选的默认 UI 注册表与投影，`application` 协调默认应用根；`ui-pages`、`ui-messages`、`ui-shell` 和 `ui-theme` 分别提供会话页面、消息展示、布局与设置页面以及主题；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
+产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 拥有可选的默认 UI 注册表与投影，`application` 协调默认应用根；`ui-profiles` 提供可选 Profile 管理；`ui-pages`、`ui-messages`、`ui-shell` 和 `ui-theme` 分别提供会话页面、消息展示、布局与设置页面以及主题；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
 
 设置 schema、校验和表单由对应功能模块拥有：权限设置在 `interaction`，执行设置在 `native-execution`，模型设置在 `llm-core`；`settings` 模块负责通用存储与命令分发。
 
@@ -150,9 +150,9 @@ Profile 支持指定位置插入、排序，以及在分组和根节点之间移
 
 发行 Bundle 显式声明模块成员，插件 ID 前缀不决定所属层；额外可用模块需要通过 Profile 显式选择。
 
-原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。管理和恢复界面仍在开发中。当前行为与限制见 [Profile 指南](docs/profiles.md)。
+原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。可选 ui-profiles 包提供首版设置管理界面，可视化树编辑和恢复界面仍在开发中。当前行为与限制见 [Profile 指南](docs/profiles.md)。
 
-运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。管理和独立恢复界面尚未完成。
+运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。首版管理界面支持草稿、预览和激活，可视化树编辑和独立恢复界面尚未完成。
 
 实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
 

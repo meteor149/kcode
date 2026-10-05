@@ -131,6 +131,8 @@ data class BundledProvider(val module: String, val id: String, val entry: String
     val androidEntry: String = entry, val desktop: Boolean = true,
     val android: Boolean = true, val androidPackageSuffix: String = module, val androidArm64Only: Boolean = false)
 val bundledProviders = listOf(
+    BundledProvider("ui-profiles", "provider.ui.settings.profiles",
+        "ai.meteor.kcode.plugin.profileui.DefaultProfileUiPlugin", "uiSlots,profiles"),
     BundledProvider("message-codec", "provider.message-codec.envelope",
         "ai.meteor.kcode.plugin.messagecodec.MessageCodecProviderPlugin", "messageCodec"),
     BundledProvider("native-execution", "provider.shell.platform", "ai.meteor.kcode.plugin.nativeexecution.DesktopNativeShellPlugin", "shell",

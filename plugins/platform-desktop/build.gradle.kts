@@ -20,6 +20,7 @@ dependencies {
     // Native rendering belongs to the desktop host, rather than neutral shared contracts.
     runtimeOnly(compose.desktop.currentOs)
     testImplementation(project(":plugins:default-ui-api"))
+    testImplementation(project(":plugins:ui-profiles"))
     testImplementation("org.jetbrains.compose.material3:material3:1.8.2")
     testImplementation(project(":plugins:markdown"))
     testImplementation(project(":plugins:agent-loop"))

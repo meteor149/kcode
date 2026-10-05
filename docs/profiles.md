@@ -80,12 +80,35 @@ composition/preparation path without mounting providers or publishing metadata. 
 structural/package preparation diagnostics, entries and field origins. `packagesVerified`
 does not establish ConfigValidator success, service readiness or provider allocation; those
 remain activation checks. Effective preview entries may contain machine paths, while its
-portable definition does not. Public management UI and recovery UI remain outstanding.
+portable definition does not. The initial default management surface is described below;
+visual tree editing and independent recovery UI remain outstanding.
 
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
 are allocated only after package and configuration preparation. A custom composition can
 omit default UI or leave consumers waiting for required providers.
+
+## Default management surface
+
+The optional [ui-profiles package](../plugins/ui-profiles/README.md) contributes a settings
+section through KcodeProfiles and KcodeUiSlots. New native templates select kcode.default-ui
+version 2 with this package. Frozen version 1 commits keep their original composition and
+can explicitly insert provider.ui.settings.profiles when available; startup does not silently
+upgrade their instance trees.
+
+The initial screen supports creation, cloning, source selection, JSON definition editing,
+revision-checked draft saving, discard, preview, effective tree/diagnostics, module catalogue,
+history activation, confirmed deletion and host command status. Editing a definition can change
+Bundle order, name, operations and data scopes. Refresh retains unsaved input and its original
+authority revision; it cannot authorize overwriting another writer. Deletion confirmation is
+bound to the selected target and revision. Activation requires a saved, verified diagnostic-free
+preview. The package follows the configured app language and owns resource fallbacks.
+
+Queries and observers are cancelled/joined on withdrawal. Accepted activation remains owned
+by the host, and recent command state survives UI reconstruction. This screen does not supply
+the independent recovery entry point when the product root fails. Visual tree-operation forms,
+navigation-away confirmation, import/export and rendered desktop/device acceptance remain
+outstanding. Session and actual JAR contribution tests do not establish visual acceptance.
 
 ## Documents and restart
 
@@ -235,16 +258,16 @@ new calls after withdrawal. The queue accepts at most 32 pending/running command
 bounded recent status history. At initial allocation the service reports Starting and rejects
 requests until host binding; plugin apply must not wait for readiness. Native hosts retain
 `profileCommands` for metadata/activation in RecoveryRequired when no product tree is available.
-The public catalogue UI remains pending.
+The initial default catalogue UI consumes this service through the optional ui-profiles package.
 
 External bundle import, credential-safe export and
-management/recovery UI remain incomplete.
+visual tree editing and independent recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Android tests on
 an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu
 workspace binding, stale services, selection restart, failed allocation recovery, typed alternate
 catalogue selection/restart and scoped
 ADB rejection. They do not establish root or Shizuku authorization. See [verification](verification.md)
-for evidence boundaries; management and independent recovery UI are still required. Explicit
+for evidence boundaries; rendered management acceptance and independent recovery UI are still required. Explicit
 recovery commands are tested on Desktop and compiled for Android; device recovery-after-restoration-
 failure behavior requires its own instrumentation evidence.

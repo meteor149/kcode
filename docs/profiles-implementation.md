@@ -504,3 +504,40 @@ earlier physical-device evidence remains recorded separately.
 Management/recovery UI, initial startup failure recovery, verified Bundle import,
 credential-safe export and the final requirement/platform audit remain outstanding. Explicit
 native Bundle membership is now implemented; the overall goal remains active.
+
+## Initial default management surface
+
+The new optional ui-profiles package exports DefaultProfileUiPlugin as the private native
+provider.ui.settings.profiles release. A child waits for KcodeProfiles/KcodeUiSlots and
+registers one settings section. Its session owns metadata queries and command observers;
+withdrawal cancels and joins those calls without cancelling accepted host work. No SDK ABI
+change is required. Fresh templates use kcode.default-ui version 2; frozen older generations
+retain their previous Bundle content rather than gaining a new instance implicitly.
+
+The initial screen supports catalogue/source selection, creation, cloning, JSON definition
+editing, revision-checked draft saving, explicit discard, verified preview, effective trees,
+diagnostics, module catalogue, history activation, confirmed deletion and host command state.
+Refresh retains unsaved documents and their original authority revision. Confirmation binds
+deletion to the selected target/revision. English/Chinese resource defaults follow app language
+and allow translation catalogue overrides; spacing/colors use shared design tokens.
+
+The concentrated integration build passed 38 Desktop tests: 3 Bundle, 7 native host, 12 Profile
+runtime, 15 package integration and 1 new actual private-JAR UI contribution test. Six initial
+session tests passed as part of that build. The first attempt exposed two static fallback tests
+missing the new compile-only implementation from their test classpath; the test-only dependency
+was corrected without adding that implementation to the production host classpath.
+
+After strengthening deletion confirmation and reading the durable host command stream, the
+final focused build passed all 7 session tests and the actual-JAR contribution test, with zero
+failures, errors or skipped cases. Desktop compilation and Android app assembly passed again.
+The session tests cover stale revisions/retained edits, invalid documents/identity changes,
+save-before-preview, explicit discard/history targets, isolated creation/cloning, deletion
+selection changes, command-observer withdrawal, pending-query cleanup and unverified activation
+refusal. The actual native test covers private package registration, SDK-backed clone/preview,
+version 2 selection, withdrawal and fresh contribution recovery.
+
+No desktop/device rendering or Android instrumentation ran for this UI phase. These checks
+establish session behavior, registration and build compatibility, not visual acceptance or
+actual APK UI resource rendering. Visual tree forms, navigation-away confirmation, rendered
+acceptance, independent recovery UI, initial startup failure recovery, verified Bundle import,
+credential-safe export and the final requirement/platform audit remain outstanding.

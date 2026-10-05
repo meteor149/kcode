@@ -14,6 +14,11 @@ compiles portable intent and owns metadata/locks. Cordis owns generic combinatio
 service realms and tree lifecycle. `plugins/runtime` owns the agent-turn boundary, committed
 application projections and coordinated native module/tree publication.
 
+`plugins/ui-profiles` is an optional default settings contribution consuming the neutral
+KcodeProfiles management service. It owns presentation sessions and resource defaults;
+accepted composition commands remain host-owned across withdrawal. Alternative roots and
+independent recovery entry points do not depend on this package.
+
 Package IDs identify available code. Entry IDs identify configured instances. Multiple
 instances may borrow one release export while retaining independent configuration, context,
 effects and disposers. Group entries preserve parent contexts and service isolation. Package

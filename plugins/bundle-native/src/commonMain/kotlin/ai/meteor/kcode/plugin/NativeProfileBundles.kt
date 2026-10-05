@@ -75,6 +75,7 @@ private val nativeProfileLayers = listOf(
         "provider.ui.chat",
         "provider.ui.conversation.standalone",
         "provider.ui.settings",
+        "provider.ui.settings.profiles",
         "provider.ui.theme",
         "provider.ui.navigation.chat",
         "provider.ui.message.user",
@@ -95,7 +96,7 @@ fun nativeProfileBundles(moduleIds: List<String>): List<ProfileBundle> {
         "Native default modules require explicit Bundle declarations: ${moduleIds.filterNot { it in declared }}"
     }
     return nativeProfileLayers.map { layer ->
-        ProfileBundle(id = layer.id, version = "1", patches = listOf(ProfileOperation.Insert(
+        ProfileBundle(id = layer.id, version = if (layer.id == "kcode.default-ui") "2" else "1", patches = listOf(ProfileOperation.Insert(
             moduleIds.filter { it in layer.modules }.map { ProfileEntry(it, it) },
         )))
     }
