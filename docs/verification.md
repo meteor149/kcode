@@ -893,3 +893,77 @@ with no skips. Its tool-enable loop was updated to use the feature ID, and its r
 assertion now compares complete installed ID sets rather than an obsolete package count.
 It covers private production APK loading, feature withdrawal/recovery, stale search
 references, persistence and uninstall recovery.
+
+## Cordis Gradle packaging integration (2026-10-05)
+
+The default distribution now registers Cordis releases on the existing KMP source
+modules. The former Android wrapper modules and manual private desktop JAR tasks are
+removed. Kcode's metadata adapter preserves API 60, SDK ABI hashes, capabilities and
+portable Unit configuration. Host SDK dependency traversal stops at SDK boundaries;
+private model clients retain only their selected vendor dependencies.
+
+Initial JDK 21 verification, before snapshot publication and removal of the distribution
+module, used `-PcordisSource=../cordis-kotlin`, `--offline` and `--no-daemon`.
+
+- `:distribution:packager:stageBundledPlugins`, `:distribution:packager:packageNativeSystemShell`
+  and `:distribution:packager:packageNativeUbuntu` passed. The staged catalog contains
+  68 releases / 127 variants (61 desktop and 66 Android). Archive SHA-256 values,
+  API/ABI extensions and resolved content versions were independently inspected.
+- `allTests` passed. `:plugins:platform-desktop:test` passed all 140 tests, including
+  production-classpath package loading and private model/history implementations.
+  `:plugins:package-provider:desktopTest` passed 13 tests, including content-versioned
+  catalog filenames; `:distribution:packager:test` passed four tests.
+- `:apps:desktopApp:compileKotlin` and `:apps:androidApp:assembleDebug` passed.
+- Shell APKs exclude Ubuntu assets/JNI. The Ubuntu APK retains its arm64 libraries,
+  licenses and rootfs; JNI payload hashes match the source libraries. Ordinary desktop
+  providers exclude SDK-only Ktor/native payloads; Azure OpenAI and Anthropic exclude
+  AWS dependencies, while Bedrock retains AWS and Anthropic dependencies.
+- In the sibling Cordis repository, `:packager:test :packager:validatePlugins` passed
+  all 11 tests. They cover JVM/Android KMP artifacts, independent resources and private
+  dependencies, configuration-cache reuse, deterministic content versions, extension
+  and payload changes, compiler metadata removal and merged license notices.
+
+This run did not repeat Android device instrumentation, Shizuku authorization or root
+execution. APK construction and payload inspection do not establish those capabilities.
+
+### Published snapshot and removal of the distribution module
+
+Cordis commit `d359bac` was published by the successful
+[snapshot workflow](https://github.com/meteor149/cordis-kotlin/actions/runs/37298114957).
+The implementation and plugin marker resolve to `0.0.1-20261005.104323-2`; the matching
+`packages-jvm` publication is `0.0.1-20261005.104323-7`. Downloaded artifact checksums
+were compared with the Maven snapshot repository. Dependency refresh was followed by
+offline execution using those repository artifacts, with no `cordisSource` argument.
+
+`settings.gradle.kts` no longer declares any distribution module. Its source, custom CLI
+and wrapper tests are removed. The root build selects source-module Cordis releases and
+uses the upstream `PluginCatalogTask` to generate `build/bundled/kcode/plugins/`.
+Each source module owns its archives under `build/cordis/packages/`; Android fixtures
+consume the same releases as the product instead of separate preparation archives.
+
+- `:stageBundledPlugins` passed: 68 releases / 127 variants, with archive hashes,
+  API 60, ABI extensions and content versions independently checked.
+- `:plugins:platform-desktop:test` passed all 140 tests, including actual production
+  package loading, withdrawal/recovery and private implementation identity.
+- `:apps:desktopApp:compileKotlin`, `:apps:androidApp:assembleDebug` and
+  `:plugins:platform-android:compileDebugAndroidTestKotlin` passed.
+- `allTests` passed against the repository dependencies. Android instrumentation asset
+  merging and `:apps:androidApp:compileDebugAndroidTestKotlin` also passed; fixtures use
+  the source-module package artifacts directly.
+- Rebuilt payload inspection confirmed system Shell assets/JNI exclusion, both Ubuntu
+  JNI hashes, no loose native libraries in the filesystem JAR, and vendor AWS isolation.
+
+These checks do not add Android device or privileged execution evidence.
+
+### Removal of buildSrc
+
+The Kcode metadata task and SDK export/exclusion policy now live in the root build.
+The `buildSrc` plugin source and build directory are removed; previous generated caches
+were retained under the ignored root `build/` directory. No separate buildSrc compilation
+or custom metadata plugin application remains.
+
+Using the published snapshot without `cordisSource`, `:stageBundledPlugins`,
+`:plugins:platform-desktop:test`, `:apps:desktopApp:compileKotlin` and
+`:apps:androidApp:assembleDebug` passed. All 140 desktop tests passed. SHA-256 comparison
+with the preceding verified build confirmed all 68 plugin archives are byte-for-byte
+unchanged, including API/ABI extensions and private dependency boundaries.

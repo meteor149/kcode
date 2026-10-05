@@ -91,39 +91,3 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
-
-// The distribution and private-loading fixtures use the same vendor-owned dependency closure.
-val modelVendors = mapOf(
-    "OpenAI" to "openai", "AzureOpenAI" to "openai", "GLM" to "openai",
-    "Anthropic" to "anthropic", "Google" to "google", "DeepSeek" to "deepseek",
-    "OpenRouter" to "openrouter", "Bedrock" to "bedrock", "Mistral" to "mistralai",
-    "Alibaba" to "dashscope", "Ollama" to "ollama",
-)
-val hostExportsFile = project(":plugins:api").file("src/commonMain/kotlin/ai/meteor/kcode/platform/PluginHostApiPackages.kt")
-val hostExports = providers.provider {
-    Regex("(?m)^\\s*\"([^\"]+)\"").findAll(hostExportsFile.readText())
-        .map { it.groupValues[1].replace("\\$", "$").replace('.', '/') }.toList()
-}
-modelVendors.forEach { (provider, vendor) ->
-    val privateDependencies = configurations.create("private${provider}Desktop")
-    val version = if (vendor in setOf("google", "deepseek", "mistralai", "dashscope")) "1.1.1-beta" else "1.1.1"
-    dependencies { add(privateDependencies.name, "ai.koog:prompt-executor-$vendor-client-jvm:$version") }
-    tasks.register<Jar>("packaged${provider}DesktopJar") {
-        dependsOn("desktopJar")
-        archiveClassifier.set("$provider-packaged-desktop")
-        isPreserveFileTimestamps = false
-        isReproducibleFileOrder = true
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-        inputs.file(hostExportsFile)
-        from({ zipTree((tasks.getByName("desktopJar") as Jar).archiveFile.get().asFile) })
-        from({ privateDependencies.files.sortedBy { it.name }.map { zipTree(it) } }) {
-            exclude { entry ->
-                val name = entry.relativePath.pathString
-                hostExports.get().any { path ->
-                    name.startsWith("$path/") || name == "$path.class" || name.startsWith("$path$")
-                }
-            }
-        }
-        exclude("META-INF/MANIFEST.MF", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "**/module-info.class")
-    }
-}

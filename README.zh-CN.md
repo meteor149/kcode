@@ -152,7 +152,7 @@ WebContainer 拥有默认浮层实现，默认页面仅消费其可选 UI 插槽
 
 实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
 
-[跨平台插件包格式](docs/plugin-package-format.md)按平台和架构声明变体。原生构建从可独立替换的 `.kplugin` 包加载默认实现，并保留配置、禁用状态、用户替换和卸载选择。Artifact、Web 搜索、Goal、Schedule、Subagent、本地化、Markdown、对话导出和 WebContainer 各自作为一个功能包，包含相关工具、命令、设置和可选界面贡献；模型适配器与可复用基础设施保留独立发布边界。`:distribution:packager:stageBundledPlugins` 导出可信清单及包文件；当前模块和平台变体以 `settings.gradle.kts` 及清单为准。宿主保留 SDK 契约、组合／安装基础设施及仅依赖 SDK 的输入适配器。iOS 当前仅支持元数据；运行时支持桌面 JAR 和 Android APK 变体导入、SDK 校验、依赖批次事务和重启恢复。
+[跨平台插件包格式](docs/plugin-package-format.md)按平台和架构声明变体。原生构建从可独立替换的 `.kplugin` 包加载默认实现，并保留配置、禁用状态、用户替换和卸载选择。Artifact、Web 搜索、Goal、Schedule、Subagent、本地化、Markdown、对话导出和 WebContainer 各自作为一个功能包，包含相关工具、命令、设置和可选界面贡献；模型适配器与可复用基础设施保留独立发布边界。Cordis Gradle 打包插件直接从 KMP 源码模块生成独立 JAR/APK，`:stageBundledPlugins` 消费这些包产物并导出可信清单及包文件；当前模块和平台变体以 `settings.gradle.kts` 及清单为准。宿主保留 SDK 契约、组合／安装基础设施及仅依赖 SDK 的输入适配器。iOS 当前仅支持元数据；运行时支持桌面 JAR 和 Android APK 变体导入、SDK 校验、依赖批次事务和重启恢复。
 
 显式交互回调通过仅依赖 SDK 的宿主输入适配器接入。生产宿主不再链接旧 interaction 实现模块；默认设置策略从独立插件包运行。
 

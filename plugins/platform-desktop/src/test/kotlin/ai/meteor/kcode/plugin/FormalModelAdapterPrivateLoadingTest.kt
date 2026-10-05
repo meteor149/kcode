@@ -66,7 +66,7 @@ class FormalModelAdapterPrivateLoadingTest {
         try {
             for ((provider, entry) in entries) {
                 val id = "provider.llm.koog.${provider.name}"
-                val source = File(System.getProperty("kcode.llm.packaged.dir"), "llm-${provider.name}-packaged-desktop.jar")
+                val source = File(System.getProperty("kcode.llm.packaged.dir"), "provider-llm-koog-${provider.name}/desktop/plugin.jar")
                 val artifact = File(directory, "${provider.name}.jar").also { source.copyTo(it); check(it.setReadOnly()) }
                 val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
                 val spec = DynamicPluginSpec(
@@ -146,7 +146,7 @@ class FormalModelAdapterPrivateLoadingTest {
             "Ollama" to "ai/koog/prompt/executor/ollama/client/OllamaClient.class",
         )
         clients.forEach { (provider, client) ->
-            java.util.zip.ZipFile(File(System.getProperty("kcode.llm.packaged.dir"), "llm-$provider-packaged-desktop.jar")).use { archive ->
+            java.util.zip.ZipFile(File(System.getProperty("kcode.llm.packaged.dir"), "provider-llm-koog-$provider/desktop/plugin.jar")).use { archive ->
                 assertTrue(archive.getEntry(client) != null, "$provider must own $client")
                 // Bedrock uses Anthropic's model definitions and wire serializers upstream.
                 val required = setOf(client) + if (provider == "Bedrock") setOf(clients.getValue("Anthropic")) else emptySet()

@@ -171,7 +171,7 @@ class AndroidSettingsShellTest {
         val context = instrumentation.targetContext
         val directory = File(context.cacheDir, "native-shell-apk-${System.nanoTime()}").apply { mkdirs() }
         val apk = File(directory, "native-shell.kplugin")
-        instrumentation.context.assets.open("native-system-shell.kplugin").use { input -> apk.outputStream().use { input.copyTo(it) } }
+        instrumentation.context.assets.open("provider.shell.platform-1.0.0.kplugin").use { input -> apk.outputStream().use { input.copyTo(it) } }
         check(apk.setReadOnly())
         val modeArchive = File(directory, "mode.kplugin")
         instrumentation.context.assets.open("policy.shell-mode.platform-1.0.0.kplugin").use { input -> modeArchive.outputStream().use { input.copyTo(it) } }
@@ -329,7 +329,7 @@ class AndroidSettingsShellTest {
         val context = instrumentation.targetContext
         val directory = File(context.cacheDir, "native-shell-apk-${System.nanoTime()}").apply { mkdirs() }
         val archive = File(directory, "native-ubuntu.kplugin")
-        instrumentation.context.assets.open("native-ubuntu.kplugin").use { input -> archive.outputStream().use { input.copyTo(it) } }
+        instrumentation.context.assets.open("provider.shell.ubuntu-1.0.0.kplugin").use { input -> archive.outputStream().use { input.copyTo(it) } }
         check(archive.setReadOnly())
         val modeArchive = File(directory, "mode.kplugin")
         instrumentation.context.assets.open("policy.shell-mode.platform-1.0.0.kplugin").use { input -> modeArchive.outputStream().use { input.copyTo(it) } }
@@ -361,7 +361,7 @@ class AndroidSettingsShellTest {
             },
         ))
         try {
-            val sha = instrumentation.context.assets.open("native-ubuntu.kplugin.sha256").use { it.readBytes().decodeToString().trim() }
+            val sha = packageFileSha256(archive)
             runtime.pluginManager.importPackages(listOf(
                 PluginPackageImport(modeArchive.absolutePath, packageFileSha256(modeArchive)),
                 PluginPackageImport(archive.absolutePath, sha),

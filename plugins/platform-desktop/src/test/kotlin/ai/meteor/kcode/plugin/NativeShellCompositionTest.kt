@@ -38,7 +38,7 @@ class NativeShellCompositionTest {
         check(artifact.setReadOnly())
         val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
         val archive = File(directory, "shell.kplugin")
-        checkNotNull(javaClass.classLoader.getResourceAsStream("kcode/plugins/provider.shell.platform-1.0.0.kplugin"))
+        javaClass.classLoader.bundledArchive("provider.shell.platform")
             .use { input -> archive.outputStream().use { input.copyTo(it) } }
         check(archive.setReadOnly())
         val workspace = File(directory, "workspace").apply { mkdirs() }

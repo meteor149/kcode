@@ -23,9 +23,26 @@ class BundledPackageCatalogTest {
     private val digest = MessageDigest.getInstance("SHA-256").digest(payload).joinToString("") { "%02x".format(it.toInt() and 255) }
     private fun variant(target: PackageTarget = PackageTarget("windows", listOf("arm", "x86")), runtime: String = "jvm") =
         PackageVariant("entry", listOf(target), PackageRuntime(runtime, "example.Plugin", "1"), "payload.bin")
-    private fun record(id: String, variants: String = Json.encodeToString(listOf(variant()))) =
-        """{"id":"$id","file":"$id.kplugin","sha256":"$digest","variants":$variants}"""
+    private fun record(id: String, variants: String = Json.encodeToString(listOf(variant())), filename: String = "$id.kplugin") =
+        """{"id":"$id","file":"$filename","sha256":"$digest","variants":$variants}"""
     private val windows = PackageHost("windows", "x86_64", runtimes = mapOf("jvm" to "21"))
+
+    @Test
+    fun stagesContentVersionedCatalogFilenames(): Unit = runBlocking {
+        val directory = Files.createTempDirectory("bundled-content-version").toFile()
+        val filename = "example.release-1.0.0+content.$digest.kplugin"
+        val catalog = "[${record("example.release", filename = filename)}]"
+        val opened = mutableListOf<String>()
+        try {
+            val result = stageBundledPackageCatalog(directory, windows) { name ->
+                opened += name
+                ByteArrayInputStream(if (name.endsWith("index.json")) catalog.encodeToByteArray() else payload)
+            }
+            assertEquals(listOf("kcode/plugins/index.json", "kcode/plugins/$filename"), opened)
+            assertEquals("example.release", result.single().id)
+            assertTrue(java.io.File(result.single().release.archivePath).readBytes().contentEquals(payload))
+        } finally { directory.deleteRecursively() }
+    }
 
     @Test
     fun selectsEachSystemAndMinimumBeforeOpeningPayload(): Unit = runBlocking {

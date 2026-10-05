@@ -35,7 +35,7 @@ class NativeWebContainerCompositionTest {
     fun actualJarMountsOwnIndependentBrowsersAndServersAcrossWithdrawal(): Unit = runBlocking {
         val directory = Files.createTempDirectory("native-web-jar").toFile()
         val archive = File(directory, "web.kplugin")
-        requireNotNull(javaClass.classLoader.getResourceAsStream("kcode/plugins/feature.web-container-1.0.0.kplugin"))
+        javaClass.classLoader.bundledArchive("feature.web-container")
             .use { input -> archive.outputStream().use { input.copyTo(it) } }
         check(archive.setReadOnly())
         val digest = packageFileSha256(archive)

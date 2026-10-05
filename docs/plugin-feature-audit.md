@@ -35,7 +35,7 @@ Module names are relative to `plugins/`. Test names identify entry points; consu
 | Conversation image export, rendering, saving and presentation | `conversation-export`; one `feature.conversation-export` release owns all three services, optional controls, notices and operation state | ConversationExportLifecycleTest, ChatExportStateTest, ExportUiPrivateLifecycleTest, ImageSavingCompositionTest, AndroidNativeImageSavingTest |
 | System conversation overlays and standalone conversation presentation | `conversation-overlay`; `ui-pages` provides transcript/standalone slots | ConversationOverlayCompositionTest, AndroidConversationOverlayProviderTest |
 | Plugin installation, enabling, replacement, and recovery | `inventory`, `installation-store`, `runtime`, platform Loaders | KcodePluginRuntimeTest, AndroidPluginCompositionTest, PluginCodeOriginTest |
-| Cross-platform archives and bundled release upgrades | `package-provider`, `runtime`; `distribution/packager` and native host resources | PluginPackageIntegrationTest, AndroidPluginPackageIntegrationTest, BundledPluginDistributionTest (desktop and Android app) |
+| Cross-platform archives and bundled release upgrades | `package-provider`, `runtime`; the root Gradle build and native host resources | PluginPackageIntegrationTest, AndroidPluginPackageIntegrationTest, BundledPluginDistributionTest (desktop and Android app) |
 
 ## Host and composition boundaries
 

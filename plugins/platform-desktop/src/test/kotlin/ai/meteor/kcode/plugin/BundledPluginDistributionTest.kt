@@ -259,10 +259,10 @@ object BundledDesktopProcess {
             hostInputs = DesktopPluginHostInputs({ null }, ConfirmationDialogHost { request -> confirmation = request; false }),
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { false }),
             bundledPackages = stageBundledPackageCatalog(directory, host = desktopPackageHost()) { name ->
-                check(name != "kcode/plugins/policy.notifications.permission.android-1.0.0.kplugin")
-                check(name != "kcode/plugins/provider.generation.foreground.android-1.0.0.kplugin")
-                check(name != "kcode/plugins/consumer.tools.android-shell-1.0.0.kplugin")
-                check(name != "kcode/plugins/consumer.tools.ubuntu-shell-1.0.0.kplugin")
+                check(!name.startsWith("kcode/plugins/policy.notifications.permission.android-"))
+                check(!name.startsWith("kcode/plugins/provider.generation.foreground.android-"))
+                check(!name.startsWith("kcode/plugins/consumer.tools.android-shell-"))
+                check(!name.startsWith("kcode/plugins/consumer.tools.ubuntu-shell-"))
                 checkNotNull(classLoader.getResourceAsStream(name))
             }
                 .map {

@@ -56,9 +56,8 @@ its persisted identity without carrying endpoint policy.
 
 Native distributions now ship each model adapter as an independent package. Ten providers
 offer desktop JAR and Android APK variants; Bedrock is desktop-only. Native hosts exclude
-this module from their production classpaths. Koog vendor clients are shared SDK/framework
-peers; the adapter factories, generated dictionaries and catalogs stay private to each
-package. Production fixtures exercise every supported adapter's client allocation boundary
+this module from their production classpaths. Koog framework contracts preserve host identity; vendor clients, adapter factories,
+generated dictionaries and catalogs stay private to each package. Production fixtures exercise every supported adapter's client allocation boundary
 without model requests, withdrawal/recovery, and actual desktop Bedrock construction.
 
 The fallback `defaultModelAdapterPlugins` composition helper lives in `bundle-native`.
@@ -71,5 +70,7 @@ base, and desktop AWS/Smithy types load privately from the owning archive. Provi
 an OpenAI-compatible endpoint share that implementation as a build dependency, while
 retaining independent deployment and lifecycle. Unrelated vendor client jars are omitted. Bedrock includes the Anthropic dependency used
 by its upstream model definitions and wire serializers.
-`packaged<Provider>DesktopJar` tasks are also used by actual private-loading fixtures.
-Android release APKs use `distribution:llm-<provider>-android`; Bedrock remains desktop-only.
+Cordis `prepareProviderLlmKoog<Provider>DesktopJar` tasks also supply the actual private-loading
+fixtures. `prepareProviderLlmKoog<Provider>AndroidApk` builds APKs directly from the existing
+Android library AAR. `packageProviderLlmKoog<Provider>` produces each logical release;
+Bedrock remains desktop-only. The distribution catalog selects vendor component exclusions.

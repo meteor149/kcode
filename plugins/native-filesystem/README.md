@@ -30,8 +30,8 @@ and a true private APK file/workspace provider test verify the migration.
 Native builds now distribute `provider.fs.platform` as a dual-target `.kplugin`. The desktop
 variant uses `DesktopNativeFileSystemPlugin` with an absolute workspace String supplied by
 the host on first install; Android uses `AndroidNativeFileSystemPlugin`, Unit configuration
-and a host-input lease. `packagedDesktopJar` includes the private `capability-providers`
-adapter with deterministic entry order and duplicate rejection. The Android distribution
+and a host-input lease. Cordis `prepareProviderFsPlatformDesktopJar` includes the private `capability-providers`
+adapter with deterministic entry order and duplicate class rejection. The Android distribution
 includes that same private project explicitly, with shared SDK/framework code excluded.
 The host no longer links this module or its `capability-providers` implementation adapter
 into its production classpath; legacy adapter fixtures remain test dependencies. Default composition

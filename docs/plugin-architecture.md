@@ -173,7 +173,9 @@ currently persists history; the full Harness session event log remains a reserve
 
 Default product implementations execute from independent packages. Native hosts retain SDK
 contracts, composition/installation infrastructure and SDK-only input adapters. The
-distribution catalog in `distribution/packager` defines the current release boundaries.
+distribution catalog in the root Gradle build defines release boundaries and registers
+Cordis Gradle releases on the owning KMP modules. The packager builds private JAR/APK
+closures from existing compilation outputs and stages consumable package artifacts.
 Artifact, Web Search, Goal, Schedule, Subagent, Localization, Markdown, Conversation Export and WebContainer include their domain providers and consumers within
 one feature release, including their optional settings/presentation. The neutral UI contribution registry
 and default UI projection have separate infrastructure releases; concrete pages consume

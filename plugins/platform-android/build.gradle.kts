@@ -18,19 +18,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    sourceSets.getByName("androidTest").assets.srcDir(project(":distribution:packager").layout.buildDirectory.dir("packages"))
-    sourceSets.getByName("androidTest").assets.srcDir(project(":distribution:packager").layout.buildDirectory.dir("bundled"))
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.layout.buildDirectory.dir("bundled"))
 }
 
 tasks.matching { it.name == "mergeDebugAndroidTestAssets" }.configureEach {
-    dependsOn(":distribution:packager:packageMessageCodec")
-    dependsOn(":distribution:packager:stageBundledPlugins")
+    dependsOn(":stageBundledPlugins")
 }
 
 val nativeExecutionTestAssets = layout.buildDirectory.dir("generated/nativeExecutionTestAssets")
 val stageNativeExecutionTestApk = tasks.register<Copy>("stageNativeExecutionTestApk") {
-    dependsOn(":distribution:native-execution-android:assembleDebug")
-    from(rootProject.layout.buildDirectory.file("distribution/android/native-execution/outputs/apk/debug/native-execution-android-debug.apk"))
+    dependsOn(":plugins:native-execution:prepareProviderShellUbuntuAndroidApk")
+    from(project(":plugins:native-execution").layout.buildDirectory.file("cordis/artifacts/provider-shell-ubuntu/android/plugin.apk"))
     into(nativeExecutionTestAssets)
     rename { "native-execution.apk" }
 }
@@ -39,27 +37,14 @@ tasks.matching { it.name == "mergeDebugAndroidTestAssets" }.configureEach {
     dependsOn(stageNativeExecutionTestApk)
 }
 
-val stageNativeUbuntuTestPackage = tasks.register<Copy>("stageNativeUbuntuTestPackage") {
-    dependsOn(":distribution:packager:packageNativeUbuntu")
-    val packageFile = project(":distribution:packager").layout.buildDirectory.file("preparation/provider.shell.ubuntu-1.0.0.kplugin")
-    from(packageFile) { rename { "native-ubuntu.kplugin" } }
-    from(packageFile.map { it.asFile.resolveSibling(it.asFile.name + ".sha256") }) {
-        rename { "native-ubuntu.kplugin.sha256" }
-    }
-    into(nativeExecutionTestAssets)
+val bundledTestPackages = layout.buildDirectory.dir("generated/bundledTestPackages")
+val stageBundledTestPackages = tasks.register<Sync>("stageBundledTestPackages") {
+    from(rootProject.configurations.getByName("bundledPlugins"))
+    into(bundledTestPackages)
 }
-val stageNativeSystemShellTestPackage = tasks.register<Copy>("stageNativeSystemShellTestPackage") {
-    dependsOn(":distribution:packager:packageNativeSystemShell")
-    val packageFile = project(":distribution:packager").layout.buildDirectory.file("preparation/provider.shell.platform-1.0.0.kplugin")
-    from(packageFile) { rename { "native-system-shell.kplugin" } }
-    from(packageFile.map { it.asFile.resolveSibling(it.asFile.name + ".sha256") }) {
-        rename { "native-system-shell.kplugin.sha256" }
-    }
-    into(nativeExecutionTestAssets)
-}
+android.sourceSets.getByName("androidTest").assets.srcDir(bundledTestPackages)
 tasks.matching { it.name == "mergeDebugAndroidTestAssets" }.configureEach {
-    dependsOn(stageNativeUbuntuTestPackage)
-    dependsOn(stageNativeSystemShellTestPackage)
+    dependsOn(stageBundledTestPackages)
 }
 
 kotlin {
@@ -131,7 +116,7 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
-android.sourceSets.getByName("main").assets.srcDir(project(":distribution:packager").layout.buildDirectory.dir("bundled"))
+android.sourceSets.getByName("main").assets.srcDir(rootProject.layout.buildDirectory.dir("bundled"))
 tasks.matching { it.name == "mergeDebugAssets" || it.name == "mergeReleaseAssets" }.configureEach {
-    dependsOn(":distribution:packager:stageBundledPlugins")
+    dependsOn(":stageBundledPlugins")
 }

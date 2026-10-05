@@ -7,14 +7,14 @@ owns SDK compatibility, configuration, native checks and the `pluginPackages` se
 does not become part of Cordis core.
 
 Archive import is implemented for desktop JVM and Android. Native builds embed a trusted
-catalog and 86 real packages under `kcode/plugins`: Message Codec, Tools,
+catalog and 68 real packages under `kcode/plugins`: Message Codec, Tools,
 System Prompt, Continuations, Model Settings, Goal, Schedule, Subagent, Settings Commands,
 Application, pages, settings, Markdown, Goal UI, Localization, Sessions, Conversation Execution,
 Agent Loop, Native Filesystem, Skills, Notifications, Schedule Dispatch, Conversation Export and filesystem/skill/artifact/Web Search/Shell tool consumers and native tool approvals and the LLM service registry, model adapters and the complete Web Search feature and settings-driven interaction, settings storage, history storage and Artifact storage  and Web container providers/tools and the overlay registry/Android overlay provider and native Shell/Ubuntu providers and settings mode policy. Both factories stage and load them at startup. Their
 implementations are excluded from host runtime dependencies. Native system Shell
 and Ubuntu entries execute from their verified independent artifacts.
-Desktop supports 83 of these packages; Android supports 88. On ARM64 Android all 88 are
-selectable; other supported Android architectures select 87, with the Ubuntu provider absent
+Desktop supports 61 of these packages; Android supports 66. On ARM64 Android all 66 are
+selectable; other supported Android architectures select 65, with the Ubuntu provider absent
 and its declared consumers Pending. Notification permission UI and generation foreground
 execution are Android-only packages. Desktop Shell tools are
 desktop-only; Android Shell and Ubuntu tools are Android-only. Trusted catalog records copy the actual manifest `variants`, including runtime, system,
@@ -35,11 +35,11 @@ The Android-only `provider.shell.ubuntu` uses the same policy and declares ARM w
 hosts skip this package; its service-dependent tool consumer remains Pending. Shell tool
 consumer packages retain their existing platform support.
 
-Android preparation releases now separate system Shell (ARM/x86, 32/64 bits, no assets/JNI) from
+The source-module releases separate the Android system Shell payload (ARM/x86, 32/64 bits, no assets/JNI) from
 Ubuntu (ARM, 64 bits, its verified PRoot libraries/rootfs). Build them with
-`:distribution:packager:packageNativeSystemShell` and `packageNativeUbuntu`. Their outputs
-are under `distribution/packager/build/preparation`. The trusted catalog also contains the
-dual-target system Shell release and Android-only ARM64 Ubuntu release.
+`:plugins:native-execution:packageProviderShellPlatform` and `:plugins:native-execution:packageProviderShellUbuntu`. Their outputs
+are under `plugins/native-execution/build/cordis/packages`. The catalog and device fixtures
+consume the same dual-target system Shell release and Android-only ARM64 Ubuntu release.
 The device Shell fixture imports both through normal package transactions.
 See [native execution](../plugins/native-execution/README.md) for entry points and limitations.
 
@@ -185,7 +185,7 @@ boolean, int/long, or finite float/double. No arbitrary Kotlin objects or plaint
 Entry adapters decode the portable representation and use `ConfigValidator` to validate it.
 Capabilities are diagnostic labels, not permissions or proof of services.
 
-`pluginApi` exactly matches `CurrentPluginApiVersion`, currently 54. Generated ABI descriptors
+`pluginApi` exactly matches `CurrentPluginApiVersion`, currently 60. Generated ABI descriptors
 hash actual shared compile artifact contents, exported SDK/framework prefixes, compiler
 versions and entry convention. Contents are sorted independently of ZIP timestamps. SHA-256
 of `sdk-abi-<platform>.txt` is `runtimeAbi`; authors use the matching host descriptor. Matching
@@ -205,33 +205,49 @@ semantics. New cross-plugin binary contracts require reviewed SDK exports/API ch
 Build the independent Message Codec JAR/APK archive on Windows:
 
 ```powershell
-.\gradlew.bat :distribution:packager:packageMessageCodec
+.\gradlew.bat :plugins:message-codec:packageProviderMessageCodecEnvelope
 ```
 
-Output: `distribution/packager/build/packages/provider.message-codec.envelope-1.0.0.kplugin`
-with an external `.sha256` sidecar. Its APK compiles common source against the SDK without
-bundling SDK/Kotlin classes; it is not a host APK or wrapped AAR.
+Output: `plugins/message-codec/build/cordis/packages/provider.message-codec.envelope-1.0.0.kplugin`
+with an external `.sha256` sidecar. Cordis consumes the existing KMP desktop JAR and Android
+library AAR, merges private dependencies, and emits a standalone unsigned APK with its
+own resources. Common source is compiled once by the source module; Android application
+wrapper modules are no longer needed. SDK classes/resources/JNI stay in the host.
 
-`:distribution:packager:packagePlugin` takes `-PpackageId`, `-PpackageVersion`, `-PpackageEntry`,
-`-PpackageOutput`, optional `-PdesktopArtifact`/`-PdesktopSdkAbi`, and optional
-`-PandroidArtifact`/`-PandroidPackageName`/`-PandroidSdkAbi`. Optional `-PpackageConfiguration`
-points to a portable configuration JSON file. This convenience exporter defaults to portable
-variants. APKs containing native libraries require explicit `packageTargets` with matching
-family/bitness coverage; declarations cannot claim native ABIs absent from the APK.
-`-PpackageCapabilities=capabilityA,capabilityB` sets their advertised capabilities.
-`-PandroidEntry` overrides the Android entry class when it differs from the desktop entry.
-The bundled filesystem release uses this option and includes its private provider adapter
-in each artifact. Native hosts supply the desktop workspace String on initial installation;
-Android uses Unit configuration and a native host-input lease. Saved configuration takes
-precedence over bundled defaults during upgrades.
-Pass `-PpackageTargets=<targets.json>` to the convenience exporter to declare exact system,
-family, bitness, system-version ranges, distribution and feature targets. The file contains a JSON array in the target
-format above. Default desktop targets cover Windows/macOS/Linux; default Android targets
-require release 15 and API 35. Native ABI coverage is checked. Use the generic Cordis packer for other loaders, iOS
-artifacts or custom entries/dependencies.
-`:distribution:packager:packageNativeUbuntu` builds a preparation release at
-`distribution/packager/build/preparation/provider.shell.ubuntu-1.0.0.kplugin` with an
-Android ARM64 variant. The same provider also ships in the trusted default catalog;
+The `io.github.meteor149.cordis.packager` plugin resolves from the Maven Central snapshot
+repository in `pluginManagement`. Use `'-PcordisSource=../cordis-kotlin'` to substitute the
+local Cordis runtime and packager together. Packager changes must be published to the
+snapshot repository before standalone builds can consume them.
+
+`build.gradle.kts` owns the product release catalog and registers
+`cordisPackages.releases` on the source modules. Each module exposes `packagePlugins`,
+per-release `package<Id>` tasks and consumable `cordis<Id>Elements`. For example,
+`:plugins:message-codec:packageProviderMessageCodecEnvelope` packages Message Codec.
+The root `packagePlugins` aggregates the selected releases; `stageBundledPlugins` consumes these artifacts
+through Cordis `PluginCatalogTask`, verifies archives, removes stale catalog files and writes
+`index.json` under `build/bundled/kcode/plugins/`.
+
+The root build metadata task reads `CurrentPluginApiVersion`, SDK exports and the generated
+SDK ABI descriptors to supply variant ABI/capability extensions. Cordis has no Kcode type
+dependency. `-PreleaseVersion=1.0.0` selects a base version; `contentVersion` adds a digest of
+the resolved manifest and payload to preserve immutable upgrade identities. Working archives are under each source module's `build/cordis/packages/` with the base-version filename; staged filenames include the
+resolved content version. Ubuntu advertises ARM64 only; system Shell excludes assets/JNI.
+Vendor releases exclude other vendor clients; Bedrock keeps its Anthropic dependency.
+
+Kcode explicitly sets `ignoreMultiReleaseEntries` to select dependency base classes.
+The adapters omit versioned implementations and compiler module metadata, merge service
+registrations and license notices, and reject conflicting private classes/ordinary resources.
+
+Third-party modules declare their releases with the Cordis Gradle plugin instead of a
+Kcode-specific CLI. Set entries, target selectors, SDK exclusions and extension files
+through `cordisPackages.releases`; native ABI coverage is validated by the upstream plugin.
+The bundled filesystem release declares separate platform entries and includes its private
+provider adapter through the source module dependency graph. Native hosts supply the desktop
+workspace String on initial installation; Android uses Unit configuration and a native
+host-input lease. Saved configuration takes precedence over bundled defaults during upgrades.
+`:plugins:native-execution:packageProviderShellUbuntu` builds the Android ARM64 release at
+`plugins/native-execution/build/cordis/packages/provider.shell.ubuntu-1.0.0.kplugin`.
+The same release is used by instrumentation fixtures and the trusted default catalog;
 host-aware staging skips it on incompatible Android architectures.
 SDK descriptors are under `plugins/package-provider/build/generated/packageAbi/<platform>/`.
 `-PcordisSource=<checkout>` optionally substitutes a local Cordis composite build for development.
@@ -293,11 +309,10 @@ packages before activation. Unreplaced incompatible user packages still fail sta
 API numbers are never rewritten to claim compatibility.
 
 `stageBundledPlugins` embeds `index.json` and archives in Android assets and desktop resources.
-The SDK-only provider exports reuse compiled Android library AARs through isolated application
-targets declared in `settings.gradle.kts`. Their dependencies are non-transitive: the SDK is
-compile-only and is not copied into the plugin. Providers needing private libraries require
-an explicit packaging dependency plan before joining this path.
-The native package staging helper reads only this trusted embedded catalog. Message Codec's
+Cordis prepares provider payloads directly from the source modules' Android library AARs
+and desktop JARs. SDK/framework components are excluded; private dependency closures are
+merged into the independent payloads. No Android application wrapper targets are required.
+The native package staging helper reads only this trusted embedded catalog. Each release's
 manifest version includes a content hash of artifacts, SDK descriptors and configuration, so
 changed builds do not republish the same immutable release. The stable output filename is not
 the authoritative release version; `plugin.json` is.
@@ -305,7 +320,7 @@ the authoritative release version; `plugin.json` is.
 The default product uses the catalog's independent provider/consumer releases and the existing
 startup/upgrade transaction. Additional providers must preserve their configuration, SDK
 identity and resource ownership when joining this path. Production-classpath and APK DEX
-checks cover all 83 desktop and 88 Android entry classes; see the current acceptance record
+checks cover the selected desktop and Android entry classes; see the current acceptance record
 in [verification](verification.md).
 
 See [plugin development](plugin-development.md), [architecture](plugin-architecture.md) and

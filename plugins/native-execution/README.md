@@ -18,7 +18,7 @@ execution implementation classes.
 
 ## Independent Android artifact
 
-`:distribution:native-execution-android:assembleDebug` builds a separate APK from the
+`:plugins:native-execution:prepareProviderShellUbuntuAndroidApk` builds a separate APK from the
 real provider module. It carries private archive codecs (Commons Compress and its
 dependencies, plus XZ), the ARM64 PRoot executables, Ubuntu rootfs and licenses.
 SDK, Cordis, Kotlin/coroutines and Shizuku classes are compile-only host identities.
@@ -35,13 +35,13 @@ Shizuku UID-2000 authorization or root execution. The framework/class and resour
 checks both entries, private codecs, absence of shared defined types, and exact hashes
 for the two executables, Ubuntu archive and both licenses.
 
-`:distribution:native-shell-android` builds the ordinary Shell APK from the same compiled
+`:plugins:native-execution:prepareProviderShellPlatformAndroidApk` builds the ordinary Shell APK from the same compiled
 provider AAR after removing deployment-only assets and JNI. Private provider classes and
 archive codecs remain intact; this is a resource split, not a second source implementation.
 The resulting APK carries neither Ubuntu rootfs/licenses nor PRoot executables and declares
 the separate package name `ai.meteor.kcode.external.nativeshell`.
-`:distribution:packager:packageNativeSystemShell` wraps it as an Android-only ARM/x86, 32/64-bit
-release, using the Unit-configured `AndroidPackagedShellPlugin` entry.
+`:plugins:native-execution:packageProviderShellPlatform` packages desktop and Android ARM/x86, 32/64-bit
+variants in one release, with the Android variant using the Unit-configured `AndroidPackagedShellPlugin` entry.
 The real device fixture imports the archive, checks resource independence, shares Shizuku
 SDK identities, executes an app-UID shell, rebinds settings and waits for process cancellation
 before uninstall.
@@ -57,11 +57,11 @@ The trusted `provider.shell.ubuntu` package is Android-only ARM64. Host-aware st
 its payload on unsupported architectures before reading resources, leaving service-dependent
 tool consumers Pending. The Android host no longer links this implementation module.
 
-`:distribution:packager:packageNativeUbuntu` wraps the built APK as an Android-only ARM64
-preparation archive. Its SDK ABI/configuration and payload are verified through normal
+`:plugins:native-execution:packageProviderShellUbuntu` wraps the built APK as an Android-only ARM64
+release. Its SDK ABI/configuration and payload are verified through normal
 `AgentPluginManager.importPackages`; the Ubuntu device test now exercises that archive
 path, including variant selection, before starting private PRoot/Python and revoking it.
-The same entry/payload is also published in the default catalog with the explicit ARM64
+The same release is consumed by the default catalog with the explicit ARM64
 selector. Explicit imports on incompatible hosts still fail normal manifest validation.
 
 ## Independent desktop release

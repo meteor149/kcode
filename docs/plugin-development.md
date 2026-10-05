@@ -36,6 +36,16 @@ failures to callers. A provider callback must not unload itself or close its run
 Track borrowed and owned resources separately. Failure to clean up one resource must not
 skip release of the others.
 
+## Gradle packaging
+
+Native releases use Cordis's Gradle packager on their existing KMP source modules.
+The catalog in `build.gradle.kts` declares release identities, entries,
+targets and platform support. The root build supplies Kcode SDK extensions and shared export
+rules. Private Android project dependencies also apply the packager to expose complete
+AARs. Do not add an application wrapper or copy common source for packaging. See
+[build and import](plugin-package-format.md#build-and-import) for tasks, output paths and
+local `cordisSource` development.
+
 ## Dynamic JARs/APKs
 
 The [cross-platform package format](plugin-package-format.md) wraps platform-specific JAR/APK

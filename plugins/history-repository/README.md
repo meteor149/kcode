@@ -38,10 +38,10 @@ and its Okio types preserve the host SDK identity.
 
 ## Distribution artifacts
 
-`:plugins:history-repository:packagedDesktopJar` produces a reproducible JAR containing
-this module and private Room runtime/common and collection classes. Duplicate archive
-entries fail the build. `:distribution:history-repository-android:assembleRelease`
-produces the equivalent APK with explicit non-transitive private dependencies. Neither
+`:plugins:history-repository:prepareProviderHistoryPlatformDesktopJar` produces a reproducible JAR containing
+this module and private Room runtime/common and collection classes. Conflicting private classes/resources fail the build.
+`:plugins:history-repository:prepareProviderHistoryPlatformAndroidApk` produces the equivalent
+APK from the existing Android library AAR and its private dependencies. Neither
 artifact includes SDK, Cordis, Kotlin, coroutines or SQLite/JNI implementations.
 
 `DesktopNativeStorageTest` loads the built history JAR, checks private Room/collection

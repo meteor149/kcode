@@ -1,5 +1,12 @@
 pluginManagement {
+    providers.gradleProperty("cordisSource").orNull?.let { includeBuild(it) }
     repositories {
+        maven("https://central.sonatype.com/repository/maven-snapshots/") {
+            content {
+                includeGroup("io.github.meteor149")
+                includeGroup("io.github.meteor149.cordis.packager")
+            }
+        }
         mavenCentral()
         google()
         gradlePluginPortal()
@@ -29,7 +36,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "kcode"
-providers.gradleProperty("cordisSource").orNull?.let { includeBuild(it) }
 include(":apps:androidApp")
 include(":apps:desktopApp")
 include(":plugins:agent-loop")
@@ -69,18 +75,6 @@ include(":plugins:web-search")
 include(":plugins:bundle-native")
 include(":plugins:installation-store")
 include(":plugins:package-provider")
-include(":distribution:packager")
-include(":distribution:message-codec-android")
-include(":distribution:native-shell-android")
-project(":distribution:native-shell-android").projectDir = file("distribution/android-plugin")
-listOf("tools", "system-prompt", "continuations", "model-settings", "goal", "schedule", "subagents", "settings-commands", "application", "ui-pages", "markdown", "localization", "session-history", "conversation-execution", "agent-loop", "native-filesystem", "skills", "native-notifications", "conversation-export", "filesystem", "skill-tools", "artifact-tools", "web-search", "shell", "native-tool-approvals", "llm-service", "llm", "interaction-settings", "settings-repository", "history-repository", "artifact-repository", "native-execution", "web-container", "conversation-overlay", "execution-settings").forEach { provider ->
-    val path = ":distribution:$provider-android"
-    include(path)
-    project(path).projectDir = file("distribution/android-plugin")
-}
-
-
-
 include(":plugins:conversation-overlay")
 
 include(":plugins:settings-commands")
@@ -106,16 +100,3 @@ include(":plugins:markdown")
 include(":plugins:default-ui-api")
 
 include(":libraries:ui")
-
-listOf("ui-contributions", "default-ui-bridge").forEach { provider ->
-    val path = ":distribution:$provider-android"
-    include(path)
-    project(path).projectDir = file("distribution/android-plugin")
-}
-
-// Vendor APKs carry only their own Koog client closure.
-listOf("openai", "azureopenai", "glm", "anthropic", "google", "deepseek", "openrouter", "mistral", "alibaba", "ollama").forEach { vendor ->
-    val path = ":distribution:llm-$vendor-android"
-    include(path)
-    project(path).projectDir = file("distribution/android-plugin")
-}

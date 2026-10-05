@@ -6,7 +6,7 @@ and desktop. Runtime lifecycle implementation belongs to `plugins/runtime`.
 `KcodePluginProfile` controls inclusion, disabling and overrides.
 
 This composition layer may reference concrete implementations. Feature consumers depend
-on SDK contracts instead. The trusted catalog in `distribution/packager` defines release
+on SDK contracts instead. The trusted catalog in the root Gradle build defines release
 boundaries and platform variants; static mounts are omitted when those packages are
 offered. Product dependencies are compile-only. Production hosts retain SDK contracts,
 composition/installation infrastructure and platform input adapters.

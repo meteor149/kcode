@@ -55,25 +55,3 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
-
-// Package all search implementations together; only SDK/framework types are shared.
-val privateDesktopTransport = configurations.create("privateDesktopTransport")
-dependencies {
-    privateDesktopTransport("io.ktor:ktor-client-cio-jvm:3.3.3")
-    privateDesktopTransport("io.ktor:ktor-client-content-negotiation-jvm:3.3.3")
-    privateDesktopTransport("io.ktor:ktor-serialization-kotlinx-json-jvm:3.3.3")
-}
-tasks.register<Jar>("packagedDesktopJar") {
-    dependsOn("desktopJar")
-    archiveClassifier.set("packaged-desktop")
-    isPreserveFileTimestamps = false
-    isReproducibleFileOrder = true
-    duplicatesStrategy = DuplicatesStrategy.FAIL
-    from({ zipTree((tasks.getByName("desktopJar") as Jar).archiveFile.get().asFile) })
-    from({
-        privateDesktopTransport.resolvedConfiguration.resolvedArtifacts
-            .filter { it.moduleVersion.id.group in setOf("io.ktor", "org.slf4j") }
-            .sortedBy { it.moduleVersion.id.toString() }.map { zipTree(it.file) }
-    })
-    exclude("META-INF/MANIFEST.MF", "META-INF/versions/9/module-info.class")
-}

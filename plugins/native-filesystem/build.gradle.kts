@@ -3,17 +3,6 @@ plugins {
     id("com.android.library")
 }
 
-// This release carries its private provider adapter; SDK/framework identities stay in the host.
-tasks.register<Jar>("packagedDesktopJar") {
-    dependsOn("desktopJar", ":plugins:capability-providers:desktopJar")
-    archiveClassifier.set("packaged-desktop")
-    isPreserveFileTimestamps = false
-    isReproducibleFileOrder = true
-    duplicatesStrategy = DuplicatesStrategy.FAIL
-    from({ zipTree((tasks.getByName("desktopJar") as Jar).archiveFile.get().asFile) })
-    from({ zipTree((project(":plugins:capability-providers").tasks.getByName("desktopJar") as Jar).archiveFile.get().asFile) })
-    exclude("META-INF/MANIFEST.MF")
-}
 kotlin {
     jvm("desktop") {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }

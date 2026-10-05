@@ -81,13 +81,13 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
-    dependsOn(":plugins:history-repository:packagedDesktopJar")
+    dependsOn(":plugins:history-repository:prepareProviderHistoryPlatformDesktopJar")
     listOf("OpenAI", "AzureOpenAI", "GLM", "Anthropic", "Google", "DeepSeek", "OpenRouter", "Bedrock", "Mistral", "Alibaba", "Ollama").forEach {
-        dependsOn(":plugins:llm:packaged${it}DesktopJar")
+        dependsOn(":plugins:llm:prepareProviderLlmKoog${it}DesktopJar")
     }
-    systemProperty("kcode.llm.packaged.dir", project(":plugins:llm").layout.buildDirectory.dir("libs").get().asFile.absolutePath)
+    systemProperty("kcode.llm.packaged.dir", project(":plugins:llm").layout.buildDirectory.dir("cordis/artifacts").get().asFile.absolutePath)
     systemProperty("kcode.history.packaged.jar", project(":plugins:history-repository")
-        .layout.buildDirectory.file("libs/history-repository-packaged-desktop.jar").get().asFile.absolutePath)
+        .layout.buildDirectory.file("cordis/artifacts/provider-history-platform/desktop/plugin.jar").get().asFile.absolutePath)
     val productionClasspath = layout.buildDirectory.file("test-inputs/production-classpath.txt")
     systemProperty("kcode.production.classpath.file", productionClasspath.get().asFile.absolutePath)
     doFirst {
@@ -103,6 +103,6 @@ tasks.test {
 }
 
 sourceSets.main {
-    resources.srcDir(project(":distribution:packager").layout.buildDirectory.dir("bundled"))
+    resources.srcDir(rootProject.layout.buildDirectory.dir("bundled"))
 }
-tasks.processResources { dependsOn(":distribution:packager:stageBundledPlugins") }
+tasks.processResources { dependsOn(":stageBundledPlugins") }

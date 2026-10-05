@@ -46,7 +46,7 @@ suspend fun stageBundledPackageCatalog(
         val digest = field("sha256")
         require(id.isNotBlank() && digest.matches(Regex("[0-9a-f]{64}"))) { "Invalid bundled package identity" }
         require(identities.add(id)) { "Duplicate bundled plugin identity" }
-        require(name.matches(Regex("[a-zA-Z0-9._-]+\\.kplugin")) && !name.startsWith('.')) { "Invalid bundled resource name" }
+        require(name.matches(Regex("[a-zA-Z0-9._+-]+\\.kplugin")) && !name.startsWith('.')) { "Invalid bundled resource name" }
         val variants = Json.decodeFromJsonElement<List<PackageVariant>>(record.getValue("variants"))
         require(variants.isNotEmpty() && variants.map { it.id }.distinct().size == variants.size) { "Invalid bundled variants" }
         variants.forEach { it.validate() }
