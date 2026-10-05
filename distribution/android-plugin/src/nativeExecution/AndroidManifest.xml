@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:hasCode="true">
+        <!-- The installed host owns this bridge; an imported plugin does not publish it. -->
+        <provider android:name="rikka.shizuku.ShizukuProvider" tools:node="remove" />
+    </application>
+</manifest>

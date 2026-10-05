@@ -4,6 +4,7 @@ import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.KcodeLocalization
+import ai.meteor.kcode.localization.configuredLanguage
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.plugin.api.PluginCleanupException
 import ai.meteor.kcode.plugin.api.PluginHostInputs
@@ -74,7 +75,7 @@ class LocalizedAndroidGenerationForegroundPlugin : Plugin<Unit> {
         val catalog = ctx.require(KcodeLocalization.Key).catalog
         val settings = ctx.require(KcodeSettings.Key).store
         applyGenerationForeground(ctx, effect) {
-            val language = checkNotNull(catalog.snapshot()).selectLanguage(settings.load().language)
+            val language = catalog.configuredLanguage(settings.load())
             ForegroundStrings(
                 catalog.translate(language, UiText.GenerationNotificationChannel),
                 catalog.translate(language, UiText.GenerationNotificationTitle),

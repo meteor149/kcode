@@ -71,14 +71,16 @@ class MessageCodecPrivateLoadingTest {
             assertEquals(message.content, original.decode(encoded).text)
             assertEquals(message.toolUses, original.decode(encoded).toolUses)
             runtime.pluginManager.setEnabled("provider.message-codec.envelope", false)
-            for (id in listOf("provider.sessions.history", "provider.conversation-execution.history", "provider.ui.compose")) {
+            for (id in listOf("provider.sessions.history", "provider.conversation-execution.history")) {
                 assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == id }.state, id)
             }
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             assertFailsWith<IllegalStateException> { original.encode(message) }
             assertFailsWith<IllegalStateException> { original.decode(encoded) }
             runtime.close()
             runtime = KcodePluginRuntime.create(configuration())
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.sessions.history" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             runtime.pluginManager.setEnabled("provider.message-codec.envelope", true)
             assertNotSame(original, codec)
             assertEquals(message.toolUses, codec.decode(encoded).toolUses)
@@ -90,6 +92,7 @@ class MessageCodecPrivateLoadingTest {
             runtime.pluginManager.uninstall("provider.message-codec.envelope")
             assertFailsWith<IllegalStateException> { restored.decode(encoded) }
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.sessions.history" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             runtime.pluginManager.setEnabled("provider.message-codec.envelope", true)
             assertEquals(message.toolUses, codec.decode(encoded).toolUses)
             assertNotSame(restored, codec)

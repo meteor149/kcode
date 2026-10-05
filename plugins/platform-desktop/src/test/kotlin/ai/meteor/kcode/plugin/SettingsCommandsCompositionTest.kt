@@ -3,12 +3,16 @@ package ai.meteor.kcode.plugin
 import ai.meteor.kcode.model.ModelCatalogSnapshot
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeSettingsCommands
+import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.SettingsCommandHandler
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.SettingsUpdate
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.language
+import ai.meteor.kcode.settings.SettingsPatch
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import kotlin.test.Test
@@ -18,6 +22,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -27,6 +32,47 @@ import org.cordis.dependencies
 import org.cordis.plugin
 
 class SettingsCommandsCompositionTest {
+    @Test
+    fun commandAndUiPatchShareThePublishedStoreTransaction() = runTest {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var persisted = StoredAppSettings()
+        var saves = 0
+        val backend = object : AppSettingsStore {
+            override val protection = SettingsProtection.Transient
+            override suspend fun load() = persisted
+            override suspend fun save(settings: StoredAppSettings) {
+                if (++saves == 1) { entered.complete(Unit); release.await() }
+                persisted = settings
+            }
+        }
+        lateinit var store: AppSettingsStore
+        val capture = kcodePlugin(PluginDescriptor("test.settings-store", "test", "test", emptySet()), plugin<Unit>(
+            name = "capture-settings-store", inject = dependencies(KcodeSettings.Key),
+        ) { ctx, _ -> store = ctx.require(KcodeSettings.Key).store }, Unit)
+        val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
+            interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
+            settingsStore = backend, featurePlugins = listOf(capture),
+        ))
+        try {
+            val draft = store.load()
+            val patch = SettingsPatch.between(draft, draft.copy(language = "en"))
+            val command = async { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))) }
+            entered.await()
+            var uiEntered = false
+            val ui = async(start = CoroutineStart.UNDISPATCHED) {
+                store.transaction { uiEntered = true; commit(patch.apply(current)) }
+            }
+            assertFalse(uiEntered)
+            release.complete(Unit)
+            command.await(); ui.await()
+            assertEquals(kotlinx.serialization.json.JsonPrimitive("exa"), persisted.namespaces["feature.web-search"]?.get("provider"))
+            assertEquals("en", persisted.language)
+            assertEquals(persisted, store.load())
+        } finally { release.complete(Unit); runtime.close() }
+        assertFailsWith<IllegalStateException> { store.transaction { commit(current) } }
+    }
+
     @Test
     fun providerCallbackCannotMutateOrCloseItsOwnRuntime() = runTest {
         lateinit var runtime: KcodePluginRuntime
@@ -52,12 +98,12 @@ class SettingsCommandsCompositionTest {
             settingsStore = store,
         ))
         try {
-            runtime.updateSettings(SettingsUpdate(searchProvider = "exa"))
+            runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa")))
             attemptReentry = false
-            runtime.updateSettings(SettingsUpdate(searchProvider = "google"))
+            runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "google")))
             assertEquals(2, saved)
             runtime.pluginManager.setEnabled("consumer.settings.commands", false)
-            assertFails { runtime.updateSettings(SettingsUpdate(searchProvider = "exa")) }
+            assertFails { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))) }
         } finally { runtime.close() }
     }
 
@@ -86,7 +132,7 @@ class SettingsCommandsCompositionTest {
         ))
         val old = handler
         try {
-            val writing = backgroundScope.async { runtime.updateSettings(SettingsUpdate(searchProvider = "exa")) }
+            val writing = backgroundScope.async { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))) }
             entered.await()
             val disabling = async { runtime.pluginManager.setEnabled("consumer.settings.commands", false) }
             cleaning.await()
@@ -95,8 +141,8 @@ class SettingsCommandsCompositionTest {
             disabling.await()
             writing.join()
             assertTrue(writing.isCancelled)
-            assertFailsWith<IllegalStateException> { old.apply(SettingsUpdate(searchProvider = "google"), ModelCatalogSnapshot()) }
-            assertFails { runtime.updateSettings(SettingsUpdate(searchProvider = "google")) }
+            assertFailsWith<IllegalStateException> { old.apply(SettingsUpdate(mapOf("search-provider" to "google")), ModelCatalogSnapshot()) }
+            assertFails { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "google"))) }
         } finally { release.complete(Unit); runtime.close() }
     }
 
@@ -112,9 +158,9 @@ class SettingsCommandsCompositionTest {
             interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }), settingsStore = store,
         ))
         try {
-            assertFailsWith<IllegalArgumentException> { runtime.updateSettings(SettingsUpdate(searchProvider = "unsupported")) }
+            assertFailsWith<IllegalArgumentException> { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "unsupported"))) }
             assertEquals(0, saved)
-            assertFailsWith<IllegalArgumentException> { runtime.updateSettings(SettingsUpdate(searchProvider = "exa")) }
+            assertFailsWith<IllegalArgumentException> { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))) }
             assertEquals(1, saved)
         } finally { runtime.close() }
     }

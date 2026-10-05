@@ -1,8 +1,14 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.model.ModelCatalogSnapshot
 import ai.meteor.kcode.settings.ModelSettingsPolicy
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.provider
+import ai.meteor.kcode.test.temperature
 import ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin
 import ai.meteor.kcode.plugin.api.KcodeModelSettings
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -10,7 +16,6 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlin.test.assertEquals
@@ -49,7 +54,7 @@ class AndroidModelSettingsPrivateLoadingTest {
         )
         var runtime = KcodePluginRuntime.create(configuration())
         val provider = runtime.modelCatalog().providers.first { it.models.isNotEmpty() }
-        val settings = StoredAppSettings(
+        val settings = LegacySettings(
             provider = provider.provider.name,
             modelId = provider.models.first().id,
             modelApiKeys = mapOf(provider.provider.name to "fixture"),
@@ -62,7 +67,7 @@ class AndroidModelSettingsPrivateLoadingTest {
                 id = "provider.model-settings.catalog",
                 version = "private-policy",
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 entryClass = ModelSettingsProviderPlugin::class.java.name,
                 packageName = instrumentation.context.packageName,
                 config = Json.parseToJsonElement("""{"maximumTemperature":2.0}"""),
@@ -76,7 +81,9 @@ class AndroidModelSettingsPrivateLoadingTest {
             ).classLoader)
             val resolved = checkNotNull(original.resolve(settings, runtime.modelCatalog()))
             assertEquals(1.75, resolved.temperature)
-            assertEquals(settings, original.update(settings, resolved))
+            val namespaced = original.update(settings, resolved)
+            assertEquals(true, namespaced.namespaces.containsKey("feature.model-settings"))
+            assertEquals(resolved, policy.resolve(namespaced, runtime.modelCatalog()))
             assertEquals(null, original.resolve(settings, ModelCatalogSnapshot()))
             assertFailsWith<IllegalStateException> {
                 runtime.pluginManager.replace(deployment.copy(config = Json.parseToJsonElement(
@@ -86,20 +93,21 @@ class AndroidModelSettingsPrivateLoadingTest {
             assertSame(original, policy)
             assertEquals(1.75, policy.resolve(settings, runtime.modelCatalog())?.temperature)
             runtime.pluginManager.setEnabled("provider.model-settings.catalog", false)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             assertFailsWith<IllegalStateException> { original.resolve(settings, runtime.modelCatalog()) }
             assertFailsWith<IllegalStateException> { original.update(settings, resolved) }
             runtime.close()
             runtime = KcodePluginRuntime.create(configuration())
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             runtime.pluginManager.setEnabled("provider.model-settings.catalog", true)
             assertNotSame(original, policy)
+            assertEquals(resolved, policy.resolve(namespaced, runtime.modelCatalog()))
             assertEquals(1.75, policy.resolve(settings, runtime.modelCatalog())?.temperature)
             assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             val restored = policy
             runtime.pluginManager.uninstall("provider.model-settings.catalog")
             assertFailsWith<IllegalStateException> { restored.resolve(settings, runtime.modelCatalog()) }
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             runtime.pluginManager.setEnabled("provider.model-settings.catalog", true)
             assertNotSame(restored, policy)
             assertEquals(1.0, policy.resolve(settings, runtime.modelCatalog())?.temperature)

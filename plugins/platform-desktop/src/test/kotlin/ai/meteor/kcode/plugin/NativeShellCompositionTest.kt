@@ -5,7 +5,10 @@ import ai.meteor.kcode.plugin.api.KcodeShell
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.ShellBackend
 import ai.meteor.kcode.plugin.api.ShellRequest
+import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
 import ai.meteor.kcode.plugin.nativeexecution.DesktopNativeShellPlugin
+import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
+import ai.meteor.kcode.plugin.packages.desktopPackageHost
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
 import java.nio.file.Files
@@ -16,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.cordis.dependencies
+import org.cordis.packages.packageFileSha256
 import org.cordis.plugin
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,12 +31,16 @@ import kotlin.test.assertTrue
 
 class NativeShellCompositionTest {
     @Test
-    fun actualJarOwnsProcessesAcrossIndependentActivationsAndFailedReplacement(): Unit = runBlocking {
+    fun actualArchiveOwnsProcessesAcrossIndependentActivationsAndFailedReplacement(): Unit = runBlocking {
         val directory = Files.createTempDirectory("native-shell-jar").toFile()
         val artifact = File(directory, "shell.jar")
         File(DesktopNativeShellPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
         check(artifact.setReadOnly())
         val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val archive = File(directory, "shell.kplugin")
+        checkNotNull(javaClass.classLoader.getResourceAsStream("kcode/plugins/provider.shell.platform-1.0.0.kplugin"))
+            .use { input -> archive.outputStream().use { input.copyTo(it) } }
+        check(archive.setReadOnly())
         val workspace = File(directory, "workspace").apply { mkdirs() }
         val captured = mutableMapOf<String, ShellBackend>()
         suspend fun create(id: String) = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
@@ -42,6 +50,9 @@ class NativeShellCompositionTest {
                 PluginDescriptor("provider.shell.platform", "builtin", "native", setOf("shell")),
                 DesktopNativeShellPlugin(), workspace.absolutePath,
             )) else emptyList()) + listOf(kcodePlugin(
+                PluginDescriptor("provider.plugin-packages.platform", "test", "test", emptySet()),
+                NativePluginPackagesPlugin(directory, desktopPackageHost()), Unit,
+            ), kcodePlugin(
                 PluginDescriptor("test.capture", "test", "test", emptySet()),
                 plugin<Unit>(name = "capture-shell", inject = dependencies(KcodeShell.Key)) { ctx, _ ->
                     captured[id] = ctx.require(KcodeShell.Key).executor
@@ -71,8 +82,12 @@ class NativeShellCompositionTest {
                 ))
             }
             assertSame(builtin, captured.getValue("a"))
-            a.pluginManager.replace(spec)
-            b.pluginManager.install(spec)
+            val packageImport = PluginPackageImport(
+                archive.absolutePath, packageFileSha256(archive),
+                configuration = StoredPluginConfiguration.encode(workspace.absolutePath),
+            )
+            a.pluginManager.importPackages(listOf(packageImport))
+            b.pluginManager.importPackages(listOf(packageImport))
             val first = captured.getValue("a")
             val other = captured.getValue("b")
             assertNotSame(DesktopNativeShellPlugin::class.java.classLoader, first.javaClass.classLoader)
@@ -124,7 +139,11 @@ class NativeShellCompositionTest {
             assertEquals(0, other.run(ShellRequest("echo still-b")).exitCode)
         } finally {
             try { a.close() } finally {
-                try { b.close() } finally { artifact.setWritable(true); directory.deleteRecursively() }
+                try { b.close() } finally {
+                    artifact.setWritable(true)
+                    archive.setWritable(true)
+                    directory.deleteRecursively()
+                }
             }
         }
     }

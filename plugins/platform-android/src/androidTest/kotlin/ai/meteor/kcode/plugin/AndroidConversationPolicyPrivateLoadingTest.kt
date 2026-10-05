@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ConversationExecution
 import ai.meteor.kcode.chat.ConversationSessionFactory
@@ -12,7 +14,6 @@ import ai.meteor.kcode.plugin.api.KcodeSessions
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlin.test.assertEquals
@@ -34,7 +35,7 @@ class AndroidConversationPolicyPrivateLoadingTest {
         val artifact = File(directory, "policy.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         fun artifactFor(entry: Class<*>): File = artifact
         fun digestFor(file: File): String = digest
         lateinit var factory: ConversationSessionFactory
@@ -74,6 +75,8 @@ class AndroidConversationPolicyPrivateLoadingTest {
             }
             val session = factory.create(CoroutineScope(coroutineContext))
             try {
+                session.load()
+                assertTrue(session.isLoaded)
                 assertNotSame(ConversationSessionFactory::class.java.classLoader, session.javaClass.classLoader)
                 assertNotSame(SessionHistoryProviderPlugin::class.java.classLoader, session.javaClass.classLoader)
                 val titleClass = Class.forName("ai.meteor.kcode.session.DefaultConversationTitleKt", false, session.javaClass.classLoader)
@@ -85,6 +88,20 @@ class AndroidConversationPolicyPrivateLoadingTest {
                 assertEquals(1L, conversation.reserveMessageIds(2))
                 conversation.messages += ChatMessage(50L, MessageRole.User, "restored")
                 assertEquals(51L, conversation.reserveMessageIds())
+                val background = factory.create(CoroutineScope(coroutineContext))
+                try {
+                    background.load()
+                    val standalone = background.createPendingStandaloneConversation("private scheduled")
+                    background.setPendingStandaloneResult(standalone.id, "private background result")
+                    background.appendPendingStandaloneResultMessage(standalone.id)
+                    background.revealStandaloneConversation(standalone.id)
+                    val visible = session.floatingConversations.single { it.id == standalone.id }
+                    assertEquals("private background result", visible.standaloneResult)
+                    assertEquals("private background result", visible.messages.last().content)
+                    assertSame(session.javaClass.classLoader, visible.javaClass.classLoader)
+                } finally {
+                    background.close()
+                }
                 assertNotSame(ConversationExecution::class.java.classLoader, execution.javaClass.classLoader)
                 assertNotSame(ConversationExecutionProviderPlugin::class.java.classLoader, execution.javaClass.classLoader)
                 assertNotSame(ChatService::class.java.classLoader, chat.javaClass.classLoader)

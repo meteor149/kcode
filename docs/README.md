@@ -10,6 +10,7 @@ and [Chinese README](../README.zh-CN.md).
 | --- | --- |
 | Understand the boundaries of the SDK, providers, consumers, platform hosts, and default UI | [Plugin architecture](plugin-architecture.md) |
 | Develop plugins, manage configuration and resource lifecycles, and package external JARs/APKs | [Plugin development](plugin-development.md) |
+| Build/import cross-platform archives, select variants and commit package dependency sets | [Plugin package format](plugin-package-format.md) |
 | Locate a feature's implementation module and test entry points | [Feature ownership](plugin-feature-audit.md) |
 | Build, verify revocation/replacement, and assess the scope of test evidence | [Verification guide](verification.md) |
 | Develop the default UI using design contracts and shared components | [UI design system](ui-design-system.md) |
@@ -42,3 +43,5 @@ current application implements those capabilities.
 
 Use current source code to determine module boundaries. Keep historical versions, migration
 details, and one-time verification records out of usage instructions.
+
+Feature-owned settings and command contribution boundaries are described in [plugin architecture](plugin-architecture.md#feature-owned-settings-api-45); current validation is recorded in [verification](verification.md#feature-owned-settings-api-45-2026-10-05).

@@ -7,6 +7,7 @@ import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ScheduledTaskCoordinator
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.ui.state.ConversationState
+import ai.meteor.kcode.ui.component.KcodeHazeState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -21,16 +22,31 @@ data class ConversationPageContext(
     val scheduledTaskCoordinator: ScheduledTaskCoordinator,
     val failureMessages: ChatFailureMessages,
     val followBottom: (ConversationState) -> Unit,
+    val hazeState: KcodeHazeState? = null,
+    /** Null means normal mode; an empty set means selection mode with no selected messages. */
+    val selectedMessageIds: Set<Long>? = null,
+    val clearSelection: () -> Unit = {},
+    val beforeAction: () -> Unit = {},
+    val settingsEditor: SettingsEditorProjection? = null,
 )
 
 fun interface ConversationDecorationPresenter {
     @Composable
-    fun Present(context: ConversationPageContext): ConversationDecorationContent?
+    fun Present(context: ConversationPageContext): List<ConversationDecorationContent>
+}
+
+/** Generic page anchors; feature packages decide what each contribution presents. */
+enum class ConversationDecorationPosition {
+    Header,
+    AboveComposer,
+    HeaderActions,
+    ComposerActions,
 }
 
 data class ConversationDecorationContent(
     val occupiedHeight: Dp,
     val renderer: UiRenderer<Modifier>,
+    val position: ConversationDecorationPosition = ConversationDecorationPosition.Header,
 ) {
     init { require(occupiedHeight.value.isFinite() && occupiedHeight.value >= 0f) }
 }
@@ -56,7 +72,7 @@ fun PresentConversationContributions(
     slots.conversationEffects.forEach { effect ->
         key(effect) { effect.renderer.Render(context) }
     }
-    return slots.conversationDecorations.mapNotNull { decoration ->
-        key(decoration) { decoration.presenter.Present(context) }?.let { decoration to it }
+    return slots.conversationDecorations.flatMap { decoration ->
+        key(decoration) { decoration.presenter.Present(context) }.map { decoration to it }
     }
 }

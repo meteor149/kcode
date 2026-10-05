@@ -2,6 +2,7 @@ package ai.meteor.kcode.plugin.api
 
 import ai.meteor.kcode.plugin.CurrentPluginApiVersion
 import ai.meteor.kcode.plugin.DynamicPluginSpec
+import ai.meteor.kcode.plugin.PluginPackageInstallation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -27,12 +28,24 @@ data class PluginCompositionSnapshot(
     val formatVersion: Int = 1,
     val builtinsEnabled: Map<String, Boolean> = emptyMap(),
     val external: List<StoredDynamicPlugin> = emptyList(),
+    /** Last offered bundled release, retained after uninstall to remember the user's choice. */
+    val bundledPackages: Map<String, String> = emptyMap(),
 ) {
-    fun validate() {
-        require(formatVersion == 1) { "Unsupported plugin manifest format: $formatVersion" }
+    fun validate() = validateSnapshot(requireCompatibleApi = true)
+
+    /** Historical descriptors may be replaced by a verified bundled release before activation. */
+    fun validateForRestore() = validateSnapshot(requireCompatibleApi = false)
+
+    private fun validateSnapshot(requireCompatibleApi: Boolean) {
+        require(formatVersion == 1) { "Unsupported plugin snapshot format: $formatVersion" }
+        require(bundledPackages.all { (id, digest) -> id.isNotBlank() && id !in BootstrapIds && digest.matches(Regex("[0-9a-f]{64}")) }) { "Invalid bundled release history" }
         require(builtinsEnabled.keys.all { it.isNotBlank() && it !in BootstrapIds }) { "Invalid builtin plugin state" }
         require(external.map { it.id }.distinct().size == external.size) { "Duplicate external plugin ids" }
-        external.forEach { it.toSpec().validatePluginApi() }
+        external.forEach {
+            val spec = it.toSpec()
+            if (requireCompatibleApi) spec.validatePluginApi() else spec.validatePluginDescriptor()
+        }
+        validatePackageDependencies(external.map { it.toSpec() })
         orderedExternal()
     }
 
@@ -43,7 +56,9 @@ data class PluginCompositionSnapshot(
         val ids = external.map { it.id }.toSet()
         require(external.all { spec -> spec.dependencies.all { it in ids } }) { "Missing external plugin dependency" }
         while (remaining.isNotEmpty()) {
-            val ready = remaining.firstOrNull { spec -> spec.dependencies.all { dependency -> ordered.any { it.id == dependency } } }
+            val ready = remaining.firstOrNull { spec ->
+                (spec.dependencies + spec.packageInstallation?.dependencies.orEmpty().keys).all { dependency -> ordered.any { it.id == dependency } }
+            }
                 ?: error("Cyclic external plugin dependencies")
             ordered += ready
             remaining.remove(ready)
@@ -65,10 +80,11 @@ data class StoredDynamicPlugin(
     val capabilities: Set<String>,
     val apiVersion: Int,
     val enabled: Boolean,
+    val packageInstallation: PluginPackageInstallation? = null,
 ) {
     fun toSpec(): DynamicPluginSpec = DynamicPluginSpec(
         id, version, entryClass, artifactPath, sha256, dependencies, configuration.decode(), packageName,
-        capabilities, apiVersion, enabled,
+        capabilities, apiVersion, enabled, packageInstallation,
     )
 
     companion object {
@@ -76,7 +92,7 @@ data class StoredDynamicPlugin(
             spec.validatePluginApi()
             return StoredDynamicPlugin(
                 spec.id, spec.version, spec.entryClass, spec.artifactPath, spec.sha256, spec.dependencies,
-                StoredPluginConfiguration.encode(spec.config), spec.packageName, spec.capabilities, spec.apiVersion, spec.enabled,
+                StoredPluginConfiguration.encode(spec.config), spec.packageName, spec.capabilities, spec.apiVersion, spec.enabled, spec.packageInstallation,
             )
         }
     }
@@ -115,11 +131,41 @@ data class StoredPluginConfiguration(val kind: String, val value: JsonElement = 
 }
 
 fun DynamicPluginSpec.validatePluginApi() {
+    validatePluginDescriptor()
     require(apiVersion == CurrentPluginApiVersion) { "Plugin '$id' requires API $apiVersion; host API is $CurrentPluginApiVersion" }
+}
+
+private fun DynamicPluginSpec.validatePluginDescriptor() {
+    require(apiVersion > 0) { "Invalid plugin API version" }
     require(id.isNotBlank() && id !in BootstrapIds) { "Invalid plugin id '$id'" }
     require(version.isNotBlank() && entryClass.isNotBlank() && artifactPath.isNotBlank()) { "Incomplete plugin descriptor '$id'" }
     require(sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "Invalid SHA-256 for '$id'" }
     require(dependencies.distinct().size == dependencies.size && id !in dependencies) { "Invalid dependencies for '$id'" }
+    packageInstallation?.let { release ->
+        require(dependencies.isEmpty()) { "Package dependencies must not expose private class loaders" }
+        require(release.archivePath.isNotBlank() && release.variantId.isNotBlank()) { "Incomplete package installation" }
+        require(release.archiveSha256.matches(Regex("[a-f0-9]{64}")) && release.runtimeAbi.matches(Regex("[a-f0-9]{64}"))) { "Invalid package identity" }
+        require(id !in release.dependencies && release.dependencies.all { it.key.isNotBlank() && it.value.isNotBlank() }) { "Invalid package dependency" }
+    }
+}
+
+fun validatePackageDependencies(specs: List<DynamicPluginSpec>) {
+    val byId = specs.associateBy { it.id }
+    specs.forEach { spec ->
+        spec.packageInstallation?.dependencies?.forEach { (id, version) ->
+            val dependency = byId[id]
+            require(dependency?.packageInstallation != null && dependency.version == version) { "Missing/conflicting package dependency '$id@$version'" }
+            require(!spec.enabled || dependency.enabled) { "Enabled package '${spec.id}' requires enabled '$id'" }
+        }
+    }
+    val pending = specs.filter { it.packageInstallation != null }.toMutableList()
+    val ordered = mutableSetOf<String>()
+    while (pending.isNotEmpty()) {
+        val ready = pending.firstOrNull { it.packageInstallation!!.dependencies.keys.all { dependency -> dependency in ordered } }
+            ?: error("Cyclic package dependencies")
+        ordered += ready.id
+        pending.remove(ready)
+    }
 }
 
 /** Optional persistent provider; removing it explicitly returns management to process-local state. */

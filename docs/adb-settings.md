@@ -6,7 +6,7 @@ The broadcast action is `ai.meteor.kcode.action.CONFIGURE_SETTINGS`, and the rec
 `android.permission.DUMP` permission restriction.
 
 Settings are validated and saved through the current plugin runtime. Open the application
-first and enable the target model provider, settings, settings-command, and search-settings
+first and enable the target model provider, settings, settings-command, and Web Search
 plugins. Broadcasting after `force-stop` does not create the Activity/runtime; start
 `MainActivity` first. The receiver waits up to five seconds for asynchronous runtime
 publication and returns an error if it is unavailable. It does not bypass plugins to write
@@ -95,3 +95,13 @@ Only field names are returned; credentials are not echoed.
 The device regression entry point is `AdbSettingsPluginTest`. It covers `-p`/`-n`, models/keys,
 preservation of other keys, provider replacement/revocation, and runtime publication.
 See the [verification guide](verification.md) for execution instructions.
+
+## Feature-owned fields
+
+As of API 54 the receiver accepts string extras without a built-in field allowlist.
+The fields listed above are contributed by the model/search features. An installed
+feature can register another identity, such as `plugin.example/field`, which is sent
+with `--es` through the same command boundary. Unknown or disabled feature fields
+reject the complete update before mutation. Non-string extras reject at transport
+parsing; empty strings remain explicit values for feature-owned clearing semantics.
+The app does not validate feature values or create a fallback settings store.

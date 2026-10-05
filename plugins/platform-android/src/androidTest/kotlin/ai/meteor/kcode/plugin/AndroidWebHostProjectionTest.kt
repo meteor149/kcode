@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeWebContainers
 import ai.meteor.kcode.plugin.api.PluginDescriptor
@@ -14,7 +16,6 @@ import ai.meteor.kcode.webcontainer.WebPreviewResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
@@ -45,7 +46,7 @@ class AndroidWebHostProjectionTest {
         ) { ctx, _ -> current = requireNotNull(ctx.require(KcodeWebContainers.Key).controller) }, Unit)
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
-            profile = KcodePluginProfile(disabled = setOf("provider.web-containers.platform")),
+            profile = KcodePluginProfile(disabled = setOf("feature.web-container")),
             featurePlugins = listOf(capture),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
@@ -57,7 +58,7 @@ class AndroidWebHostProjectionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.web-host", version = "test", entryClass = AndroidFixtureHostWebController::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName, config = "APK Web provider",
             ))
             val old = current

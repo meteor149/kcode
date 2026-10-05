@@ -8,6 +8,8 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.toolPermissionMode
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import kotlin.test.Test
@@ -45,7 +47,9 @@ class SettingsInteractionCompositionTest {
             assertFailsWith<IllegalStateException> { previous.permissionModeProvider() }
             assertFailsWith<IllegalStateException> { previous.approver.approve(request()) }
             assertEquals(ToolPermissionMode.Bypass, policy.permissionModeProvider())
-            second.save(StoredAppSettings(toolPermissionMode = ToolPermissionMode.Ask.code))
+            val permissionSettings = requireNotNull(policy.settings)
+            second.save(permissionSettings.update(LegacySettings(toolPermissionMode = "bypass"), ToolPermissionMode.Ask))
+            assertEquals("bypass", second.load().toolPermissionMode)
             assertEquals(ToolPermissionMode.Ask, policy.permissionModeProvider())
             assertTrue(policy.approver.approve(request()))
             assertEquals(1, approvals)
@@ -104,7 +108,7 @@ class SettingsInteractionCompositionTest {
 
     private class MemorySettings(mode: ToolPermissionMode) : AppSettingsStore {
         override val protection = SettingsProtection.Transient
-        private var value = StoredAppSettings(toolPermissionMode = mode.code)
+        private var value = LegacySettings(toolPermissionMode = mode.code)
         override suspend fun load() = value
         override suspend fun save(settings: StoredAppSettings) { value = settings }
     }

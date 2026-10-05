@@ -1,9 +1,13 @@
 package ai.meteor.kcode.plugin
 
-import ai.meteor.kcode.plugin.localization.LocalizationProviderPlugin
+import org.cordis.packages.packageFileSha256
+
+import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
 import kotlinx.serialization.json.Json
 
 import ai.meteor.kcode.chat.ScheduledTaskPlatformHost
@@ -22,7 +26,6 @@ import android.content.pm.PackageManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -80,7 +83,7 @@ class AndroidNativeNotificationsTest {
                 hostInputs = AndroidPluginHostInputs(activity),
                 settingsStore = object : AppSettingsStore {
                     override val protection = SettingsProtection.Transient
-                    override suspend fun load() = StoredAppSettings(language = "en")
+                    override suspend fun load() = LegacySettings(language = "en")
                     override suspend fun save(settings: StoredAppSettings) = Unit
                 },
                 featurePlugins = listOf(capture),
@@ -91,15 +94,15 @@ class AndroidNativeNotificationsTest {
             var overlapping: KcodePluginRuntime? = null
             try {
                 runtime.pluginManager.replace(DynamicPluginSpec(
-                    id = "provider.localization.default", version = "native-private-words", artifactPath = apk.path,
-                    sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
-                    entryClass = LocalizationProviderPlugin::class.java.name, packageName = instrumentation.context.packageName,
+                    id = "feature.localization", version = "native-private-words", artifactPath = apk.path,
+                    sha256 = packageFileSha256(apk),
+                    entryClass = LocalizationFeaturePlugin::class.java.name, packageName = instrumentation.context.packageName,
                     config = Json.parseToJsonElement("""{"translations":{"en":{"scheduled_task_notification_channel":"Private channel"}}}"""),
                 ))
                 val spec = DynamicPluginSpec(
                     id = "provider.notifications.platform", version = "test", entryClass = LocalizedAndroidNativeNotificationsPlugin::class.java.name,
                     artifactPath = apk.path, config = Unit,
-                    sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                    sha256 = packageFileSha256(apk),
                     packageName = instrumentation.context.packageName,
                 )
                 runtime.pluginManager.replace(spec)
@@ -149,7 +152,7 @@ class AndroidNativeNotificationsTest {
                 }
                 assertTrue(manager.activeNotifications.any { it.tag == shadowPosted.tag })
                 assertFailsWith<IllegalStateException> { previous.showTriggeredNotification(title, "stale") }
-                assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.schedules.application" }.state)
+                assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
                 runtime.pluginManager.setEnabled("provider.notifications.platform", true)
                 current.showTriggeredNotification(title, "new generation")
                 val replacement = withTimeout(5_000) {

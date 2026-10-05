@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.artifact.MutableArtifactRepository
 import ai.meteor.kcode.artifact.SaveWebArtifactRequest
@@ -15,13 +17,15 @@ import ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin
 import ai.meteor.kcode.plugin.settingsstorage.AndroidNativeSettingsPlugin
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import android.app.Activity
 import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
@@ -52,7 +56,7 @@ class AndroidNativeStorageTest {
         }
         val workspace = File(directory, "agent_workspace").apply { mkdirs() }
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         lateinit var settings: AppSettingsStore
         lateinit var history: ConversationHistoryRepository
         lateinit var artifacts: ArtifactRepository
@@ -81,18 +85,26 @@ class AndroidNativeStorageTest {
         ) }
         try {
             specs.forEach { runtime.pluginManager.install(it) }
-            assertNotSame(classes[0].classLoader, settings.javaClass.classLoader)
+            // The coordinator is shared SDK; its borrowed storage implementation stays private.
+            assertEquals(AppSettingsStore::class.java.classLoader, settings.javaClass.classLoader)
+            val settingsLoader = settings.javaClass.getDeclaredField("delegate").apply { isAccessible = true }
+                .get(settings).javaClass.classLoader
+            assertNotSame(classes[0].classLoader, settingsLoader)
             assertNotSame(classes[1].classLoader, history.javaClass.classLoader)
             assertNotSame(classes[2].classLoader, artifacts.javaClass.classLoader)
-            assertEquals(settings.javaClass.classLoader, Class.forName(
-                "ai.meteor.kcode.plugin.settingsstorage.DefaultSettingsKt", false, settings.javaClass.classLoader,
+            assertEquals(settingsLoader, Class.forName(
+                "ai.meteor.kcode.plugin.settingsstorage.DefaultSettingsKt", false, settingsLoader,
             ).classLoader)
-            assertEquals(StoredAppSettings(
+            assertEquals(LegacySettings(
                 provider = "OpenAI", modelId = "gpt-4o-mini", dashscopeRegion = "china_mainland",
-                webSearchProvider = "google", temperature = 0.7, language = "zh",
+                temperature = 0.7, language = "zh",
                 shellExecutionMode = "app", toolPermissionMode = "ask",
             ), settings.load())
-            val saved = StoredAppSettings(language = "en")
+            val saved = LegacySettings(language = "en", namespaces = mapOf(
+                "private.feature/v2" to (Json.parseToJsonElement(
+                    """{"credential":"private-fixture","unknown":[null,{"key.with.dots":""}]}""",
+                ) as JsonObject),
+            ))
             settings.save(saved)
             history.appendMessage(1, "native", 1, "User", "durable")
             File(workspace, "source").mkdirs()

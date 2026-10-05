@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ChatMessageCodec
 import ai.meteor.kcode.model.MessageRole
@@ -12,7 +14,6 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -59,7 +60,7 @@ class AndroidMessageCodecPrivateLoadingTest {
                 id = "provider.message-codec.envelope",
                 version = "private-codec",
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 entryClass = MessageCodecProviderPlugin::class.java.name,
                 packageName = instrumentation.context.packageName,
             ))
@@ -73,14 +74,16 @@ class AndroidMessageCodecPrivateLoadingTest {
             assertEquals(message.content, original.decode(encoded).text)
             assertEquals(message.toolUses, original.decode(encoded).toolUses)
             runtime.pluginManager.setEnabled("provider.message-codec.envelope", false)
-            for (id in listOf("provider.sessions.history", "provider.conversation-execution.history", "provider.ui.compose")) {
+            for (id in listOf("provider.sessions.history", "provider.conversation-execution.history")) {
                 assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == id }.state, id)
             }
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             assertFailsWith<IllegalStateException> { original.encode(message) }
             assertFailsWith<IllegalStateException> { original.decode(encoded) }
             runtime.close()
             runtime = KcodePluginRuntime.create(configuration())
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.sessions.history" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             runtime.pluginManager.setEnabled("provider.message-codec.envelope", true)
             assertNotSame(original, codec)
             assertEquals(message.toolUses, codec.decode(encoded).toolUses)
@@ -92,6 +95,7 @@ class AndroidMessageCodecPrivateLoadingTest {
             runtime.pluginManager.uninstall("provider.message-codec.envelope")
             assertFailsWith<IllegalStateException> { restored.decode(encoded) }
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.sessions.history" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             runtime.pluginManager.setEnabled("provider.message-codec.envelope", true)
             assertEquals(message.toolUses, codec.decode(encoded).toolUses)
             assertNotSame(restored, codec)

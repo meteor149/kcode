@@ -8,13 +8,11 @@ import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.chat.ConversationExecution
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ScheduledTaskCoordinator
-import ai.meteor.kcode.export.ConversationExporter
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.model.ModelCatalogSnapshot
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.StoredAppSettings
-import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.ui.component.KcodeHazeState
 import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.plugin.ui.api.PersistenceFailure
@@ -39,6 +37,12 @@ fun interface ThemeRenderer {
     fun Render(content: @Composable () -> Unit)
 }
 
+/** A prepared draft and submission boundary shared by feature-owned configuration controls. */
+data class SettingsEditorProjection(
+    val draft: StoredAppSettings,
+    val submit: (StoredAppSettings) -> Unit,
+)
+
 data class ChatPageRequest(
     val modifier: Modifier,
     val compact: Boolean,
@@ -55,10 +59,7 @@ data class ChatPageRequest(
     val historyRepository: ConversationHistoryRepository,
     val goalSessionFactory: GoalSessionFactory,
     val scheduledTaskCoordinator: ScheduledTaskCoordinator,
-    val conversationExporter: ConversationExporter? = null,
-    val toolPermissionControlsAvailable: Boolean,
-    val toolPermissionMode: ToolPermissionMode,
-    val onToolPermissionModeChange: (ToolPermissionMode) -> Unit,
+    val settingsEditor: SettingsEditorProjection? = null,
 )
 
 
@@ -116,15 +117,11 @@ data class ArtifactsPageRequest(
 
 
 data class SettingsPageRequest(
-    val current: ModelConfiguration?,
     val appSettings: StoredAppSettings,
     val persistenceFailure: PersistenceFailure?,
-    val shellSettingsAvailable: Boolean,
     val onSettingsChange: (StoredAppSettings) -> Unit,
-    val onModelSettingsChange: (ModelConfiguration, Map<String, String>) -> Unit,
     val onDismiss: () -> Unit,
     val sections: List<SettingsSection> = emptyList(),
-    val modelCatalog: ModelCatalogSnapshot = ModelCatalogSnapshot(),
 )
 
 data class SettingsSectionRequest(val page: SettingsPageRequest, val onReturn: () -> Unit)
@@ -137,7 +134,8 @@ data class SettingsSection(
     val title: @Composable () -> String,
     val description: @Composable (SettingsPageRequest) -> String,
     val renderer: UiRenderer<SettingsSectionRequest>,
-    val isVisible: (SettingsPageRequest) -> Boolean = { true },
+    val isVisible: @Composable (SettingsPageRequest) -> Boolean = { true },
+    val texts: Map<String, String> = emptyMap(),
 )
 
 
@@ -198,9 +196,9 @@ data class NavigationDestination(
 
 data class NavigationPageRequest(
     val slots: ApplicationUiSlots,
-    val conversationSession: ConversationSession,
-    val chat: ChatPageRequest,
-    val artifacts: ArtifactsPageRequest,
+    val conversationSession: ConversationSession?,
+    val chat: ChatPageRequest?,
+    val artifacts: ArtifactsPageRequest?,
     val onNavigate: (String) -> Unit,
 )
 
@@ -227,4 +225,5 @@ data class ApplicationUiSlots(
     val navigation: List<NavigationDestination> = emptyList(),
     val conversationDecorations: List<ConversationDecoration> = emptyList(),
     val conversationEffects: List<ConversationPageEffect> = emptyList(),
+    val textDictionaries: List<UiTextDictionary> = emptyList(),
 )

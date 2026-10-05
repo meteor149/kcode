@@ -10,6 +10,8 @@ import ai.meteor.kcode.plugin.settingsstorage.desktopSettingsStoreFactory
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.nio.file.Files
@@ -61,7 +63,7 @@ class SettingsResourceCompositionTest {
             SettingsStoreResource(resource.store) { resource.close(); closed++ }
         }
         val runtime = KcodePluginRuntime.create(config(owned, capture { current = it }))
-        val settings = StoredAppSettings(provider = "custom", modelApiKeys = mapOf("custom" to "fixture"), toolPermissionMode = "deny")
+        val settings = LegacySettings(provider = "custom", modelApiKeys = mapOf("custom" to "fixture"), toolPermissionMode = "deny")
         try {
             current.save(settings)
             val previous = current

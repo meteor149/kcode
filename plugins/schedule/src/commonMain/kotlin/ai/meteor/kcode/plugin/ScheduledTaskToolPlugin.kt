@@ -18,7 +18,7 @@ import org.cordis.dependencies
 object ScheduledTaskToolConsumerPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "kcode-tool-schedule"
-    override val inject: Dependencies = dependencies(KcodeTools.Key)
+    override val inject: Dependencies = dependencies(KcodeTools.Key, KcodeSchedules.Key)
 
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(

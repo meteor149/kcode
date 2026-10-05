@@ -1,54 +1,49 @@
-# Settings repository providers
+# Generic settings repository
 
-This module owns Memory, MMKV and DataStore setting implementations, scalar keys/defaults,
-provider-key maps, Android encrypted-key bootstrap policy, and resource allocation.
-Shared retains DTOs/contracts. The Android MMKV lease is owned by `:plugins:api`, with no
-application keys or codecs. Native hosts describe factories and allocate no stores eagerly.
+`SettingsProviderPlugin` publishes a transaction-capable `KcodeSettings` store. Borrowed
+stores stay caller-owned; absent inputs allocate independent memory resources.
+`FactorySettingsProviderPlugin` owns bounded allocation, admitted-operation cancellation,
+joining and resource release, and attempts every cleanup on failure. Disabling a provider
+allocates nothing. Desktop scopes cancel/join before reopening the same DataStore file;
+Android SDK leases serialize shared MMKV access and close the native handle on final release.
 
-`StoredAppSettings()` is an empty neutral SDK snapshot. `DefaultSettings.kt` owns product
-choices for new installations and absent persisted fields. MMKV legacy scalars and desktop
-DataStore use the same private defaults. Older partial MMKV JSON snapshots merge only
-absent fields with those defaults; explicit empty values remain empty and corrupt snapshots
-still fail. Current snapshot writers encode every field and preserve the stable scalar keys.
+API 59 `StoredAppSettings` contains only `namespaces` and an opaque `legacyValues` JSON
+object. Storage has no model, search, language, execution or permission defaults. Feature
+providers own their schemas/defaults and interpret historical values only while their
+namespace is absent. Explicit empty/null/numeric values and unknown legacy root fields are
+preserved during import; validation belongs to the feature, not the repository.
 
-`FactorySettingsProviderPlugin` consumes the stable `SettingsStoreFactory` contract. It
-collects bounded allocation before publication, revokes and joins calls before resource
-release, and aggregates cleanup failures. A disabled provider allocates nothing. Borrowed
-stores supplied to `SettingsProviderPlugin` remain caller-owned; missing input creates an
-owned memory resource, released and cleared on withdrawal.
+Both persistent backends publish `settings_snapshot.v2` as their single complete commit.
+Reads prefer v2, import v1 JSON without adding missing fields, then import historical scalar
+keys only when no committed snapshot exists. Malformed committed records fail explicitly;
+no fallback resurrects older credentials or permission settings. Known scalar names are a
+bounded read-only migration table. Writes no longer fan out to legacy keys, remove old
+credentials, choose search providers, or overwrite unknown native preferences. V1 records
+and scalar values remain untouched. A failed first/new commit leaves the previous durable
+state available for a fresh provider. Existing MMKV IDs, deployment paths, encryption and
+Keystore alias remain unchanged; no separate plaintext credential file is created.
 
-Desktop scopes cancel/join before another DataStore opens the same persistent file.
-Android leases serialize access to a shared native handle; old Activity/resource release
-cannot close a sibling's handle. Final release closes MMKV. Persistent file paths, native
-setting keys/defaults, encrypted bootstrap format and Keystore alias remain unchanged.
-MMKV/DataStore SDK binding is host shared; plugin codecs remain child-first. Plugin API 11
-rejects old shared implementation dependencies before loading.
+DataStore protects/reveals the whole v2 document through its configured codecs. Historical
+credential scalars are revealed while importing; historical complete v1 records are revealed
+as whole documents. The native desktop provider retains its application-data policy.
+Memory save/load deeply detach opaque legacy JSON and namespace containers.
+
+Native entries are `AndroidNativeSettingsPlugin` (`Unit`, leased host inputs) and
+`DesktopNativeSettingsPlugin` (absolute deployment path). The dual-target release is
+`provider.settings.platform`; production hosts exclude its private implementation classes.
+Explicit caller-owned stores/factories bind through the SDK-only composition adapters.
+MMKV/DataStore framework identities are host-shared; codecs and provider state stay private.
+Provider replacement revokes stale load/save/protection access without deleting durable data.
+
+Tests cover scalar/v1 migration, actual absence versus empty values, unknown roots/namespaces,
+empty unloaded-provider credentials, single-commit false/throw/cancellation failures, retry,
+corruption, protection failure and private-package withdrawal/reopening. Native MMKV fault
+fixtures compile for device execution and verify old data after native close/reopen. Desktop
+DataStore tests use real files. Test-only `LegacySettings` fixtures construct historical bags;
+they do not reintroduce a fixed production settings DTO.
 
 ```sh
 ./gradlew :plugins:settings-repository:desktopTest :plugins:platform-desktop:test
+./gradlew :plugins:settings-repository:compileDebugAndroidTestKotlin
 ./gradlew :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidSettingsStorageTest,ai.meteor.kcode.plugin.AndroidCustomProviderSettingsTest
 ```
-
-MMKV settings retain the legacy scalar keys/defaults and add `settings_snapshot.v1`, a
-small serialized committed preference snapshot. The first save preserves the complete
-legacy value before scalar writes. Successful saves publish the new snapshot only after
-all scalar writes succeed. Fresh/reopened providers read the committed record, so a
-partial scalar failure cannot silently change model credentials, permission or execution
-identity. Corrupt committed records fail explicitly. StoredAppSettings is serializable;
-the private codec preserves the native Double domain and ignores unknown future fields.
-The MMKV file remains Keystore encrypted; this adds no separate plaintext credential file.
-
-Fault tests cover every failed write during initial migration and later saves, false/throw/
-cancellation, fresh codec reads, retry, removed provider keys and corrupt records. Device
-fault tests use actual MMKV writes with injected scalar/commit rejection, close the native
-lease and reopen the file to verify that the previous full snapshot remains visible.
-
-Native default compositions use `AndroidNativeSettingsPlugin` (`Unit`, leased SDK
-host inputs) and `DesktopNativeSettingsPlugin` (absolute deployment path string).
-The entry owns factory creation and delegates allocation, revocation and release
-to the owned provider. Default hosts no longer supply a business factory closure.
-Explicit caller-owned stores/repositories and custom profile overrides remain supported.
-Real JAR/APK formal-entry tests cover private implementation identity, stale-call
-rejection, durable data after remount, and uninstall. Desktop storage packages
-include the private Room runtime/common and collection dependencies; DataStore
-and its Okio types preserve the host SDK identity.

@@ -7,7 +7,6 @@ import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.MessageRole
 import ai.meteor.kcode.model.ChatMessageCodec
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Job
@@ -20,52 +19,91 @@ import ai.meteor.kcode.chat.ConversationSession
 import ai.meteor.kcode.ui.state.ConversationState
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal class HistoryConversationSession(
     private val historyRepository: ConversationHistoryRepository,
     parentScope: CoroutineScope,
     private val messageCodec: ChatMessageCodec,
+    private val data: HistoryConversationData = HistoryConversationData(),
     private val onClosed: () -> Unit = {},
 ) : ConversationSession {
     private val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
-    override val conversations = mutableStateListOf<ConversationState>()
-    override val floatingConversations = mutableStateListOf<ConversationState>()
-    private val pendingStandaloneConversations = mutableMapOf<Long, ConversationState>()
+    private val conversationsState get() = data.conversations
+    private val floatingConversationsState get() = data.floatingConversations
+    private val pendingStandaloneConversations get() = data.pendingStandaloneConversations
+    private val mutations get() = data.mutations
+    private val projections = mutableMapOf<ConversationState, ConversationState>()
+    private val ownedJobs = mutableSetOf<Job>()
+    override val conversations get() = projection(conversationsState)
+    override val floatingConversations get() = projection(floatingConversationsState)
     override var activeId by mutableStateOf<Long?>(null)
         private set
-    override var isLoaded by mutableStateOf(false)
-        private set
-    private var sequence = 1L
+    override var isLoaded: Boolean
+        get() = data.isLoaded
+        private set(value) { data.isLoaded = value }
+    override var failureMessage: String?
+        get() = data.failureMessage
+        private set(value) { data.failureMessage = value }
+    private var sequence: Long
+        get() = data.sequence
+        set(value) { data.sequence = value }
+    private var initialized = false
     private var closed = false
-    private val mutations = Mutex()
-    override var failureMessage by mutableStateOf<String?>(null)
-        private set
+
+    private fun projection(states: List<ConversationState>): List<ConversationState> {
+        val live = (conversationsState + floatingConversationsState + pendingStandaloneConversations.values).toSet()
+        projections.keys.retainAll(live)
+        return states.map(::project)
+    }
+
+    /** Lease views share durable/transient state but capture only jobs allocated through this lease. */
+    private fun project(state: ConversationState): ConversationState = projections.getOrPut(state) {
+        object : ConversationState by state {
+            private var assignedJob: Job? = null
+            override var runningJob: Job?
+                get() = state.runningJob
+                set(value) {
+                    if (value != null) {
+                        requireOpen()
+                        ownedJobs.removeAll { it.isCompleted }
+                        ownedJobs += value
+                        assignedJob = value
+                        state.runningJob = value
+                    } else {
+                        if (state.runningJob === assignedJob) state.runningJob = null
+                        assignedJob = null
+                    }
+                }
+        }
+    }
 
     override fun cancel() {
         if (closed) return
         closed = true
-        allConversations().forEach { it.runningJob?.cancel() }
+        ownedJobs.toList().forEach { it.cancel() }
         scope.cancel()
     }
 
     override suspend fun close() {
-        val running = allConversations().mapNotNull { it.runningJob }
+        val running = ownedJobs.toList()
         cancel()
         running.forEach { it.join() }
         scope.coroutineContext[Job]?.join()
+        ownedJobs.clear()
+        projections.clear()
         onClosed()
     }
-
-    private fun allConversations(): List<ConversationState> =
-        conversations + floatingConversations + pendingStandaloneConversations.values
 
     private fun requireOpen() = check(!closed) { "Conversation session provider has been disposed" }
 
     override suspend fun load() = mutate {
         requireOpen()
-        if (isLoaded) return@mutate
+        if (isLoaded) {
+            if (!initialized) activeId = conversationsState.firstOrNull()?.id
+            initialized = true
+            return@mutate
+        }
         try {
             val stored = historyRepository.loadAll()
             val nextId = historyRepository.nextConversationId()
@@ -86,14 +124,15 @@ internal class HistoryConversationSession(
             }
             loaded.forEach { ensureStandaloneResultMessage(it) }
             requireOpen()
-            conversations.clear()
-            conversations += loaded.filter { it.presentation == ConversationPresentation.Recent }
-            floatingConversations.clear()
-            floatingConversations += loaded.filter { it.presentation == ConversationPresentation.Floating }
+            conversationsState.clear()
+            conversationsState += loaded.filter { it.presentation == ConversationPresentation.Recent }
+            floatingConversationsState.clear()
+            floatingConversationsState += loaded.filter { it.presentation == ConversationPresentation.Floating }
             sequence = maxOf(sequence, nextId, (loaded.maxOfOrNull { it.id } ?: 0L) + 1L)
-            activeId = conversations.firstOrNull()?.id
+            activeId = conversationsState.firstOrNull()?.id
             failureMessage = null
             isLoaded = true
+            initialized = true
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
@@ -113,12 +152,12 @@ internal class HistoryConversationSession(
 
     override fun ensureConversation(prompt: String): ConversationState {
         requireOpen()
-        conversations.firstOrNull { it.id == activeId }?.let { return it }
+        conversationsState.firstOrNull { it.id == activeId }?.let { return project(it) }
         val created = HistoryConversationState(sequence++, conversationTitle(prompt))
-        val firstUnpinned = conversations.indexOfFirst { !it.isPinned }
-        conversations.add(if (firstUnpinned < 0) conversations.size else firstUnpinned, created)
+        val firstUnpinned = conversationsState.indexOfFirst { !it.isPinned }
+        conversationsState.add(if (firstUnpinned < 0) conversationsState.size else firstUnpinned, created)
         activeId = created.id
-        return created
+        return project(created)
     }
 
     override suspend fun createPendingStandaloneConversation(title: String): ConversationState = mutate {
@@ -136,7 +175,7 @@ internal class HistoryConversationSession(
             ConversationPresentation.PendingStandalone,
         )
         pendingStandaloneConversations[created.id] = created
-        created
+        project(created)
     }
 
     override suspend fun revealStandaloneConversation(id: Long) = mutate {
@@ -145,7 +184,7 @@ internal class HistoryConversationSession(
         historyRepository.setConversationPresentation(id, ConversationPresentation.Floating)
         pendingStandaloneConversations.remove(id)
         conversation.presentation = ConversationPresentation.Floating
-        floatingConversations += conversation
+        floatingConversationsState += conversation
     }
 
     override suspend fun setPendingStandaloneResult(id: Long, result: String) = mutate {
@@ -174,37 +213,37 @@ internal class HistoryConversationSession(
     }
 
     override fun promoteFloatingConversation(id: Long) = mutateAsync {
-        val conversation = floatingConversations.firstOrNull { it.id == id } ?: return@mutateAsync
+        val conversation = floatingConversationsState.firstOrNull { it.id == id } ?: return@mutateAsync
         historyRepository.setConversationPresentation(id, ConversationPresentation.Recent)
-        floatingConversations.remove(conversation)
+        floatingConversationsState.remove(conversation)
         conversation.presentation = ConversationPresentation.Recent
-        val firstUnpinned = conversations.indexOfFirst { !it.isPinned }
-        conversations.add(if (firstUnpinned < 0) conversations.size else firstUnpinned, conversation)
+        val firstUnpinned = conversationsState.indexOfFirst { !it.isPinned }
+        conversationsState.add(if (firstUnpinned < 0) conversationsState.size else firstUnpinned, conversation)
         activeId = id
     }
 
     override fun discardFloatingConversation(id: Long) = mutateAsync {
-        val conversation = floatingConversations.firstOrNull { it.id == id } ?: return@mutateAsync
+        val conversation = floatingConversationsState.firstOrNull { it.id == id } ?: return@mutateAsync
         conversation.runningJob?.let { it.cancel(); it.join() }
         historyRepository.deleteConversation(id)
-        floatingConversations.remove(conversation)
+        floatingConversationsState.remove(conversation)
     }
 
     override fun toggleConversationPinned(id: Long) = mutateAsync {
-        val conversation = conversations.firstOrNull { it.id == id } ?: return@mutateAsync
+        val conversation = conversationsState.firstOrNull { it.id == id } ?: return@mutateAsync
         val pinned = !conversation.isPinned
         historyRepository.setPinned(id, pinned)
-        conversations.remove(conversation)
+        conversationsState.remove(conversation)
         conversation.isPinned = pinned
-        val firstUnpinned = conversations.indexOfFirst { !it.isPinned }
-        conversations.add(if (pinned) 0 else if (firstUnpinned < 0) conversations.size else firstUnpinned, conversation)
+        val firstUnpinned = conversationsState.indexOfFirst { !it.isPinned }
+        conversationsState.add(if (pinned) 0 else if (firstUnpinned < 0) conversationsState.size else firstUnpinned, conversation)
     }
 
     override fun deleteConversation(id: Long) = mutateAsync {
-        val conversation = conversations.firstOrNull { it.id == id } ?: return@mutateAsync
+        val conversation = conversationsState.firstOrNull { it.id == id } ?: return@mutateAsync
         conversation.runningJob?.let { it.cancel(); it.join() }
         historyRepository.deleteConversation(id)
-        conversations.remove(conversation)
+        conversationsState.remove(conversation)
         if (activeId == id) activeId = null
     }
 

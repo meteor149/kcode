@@ -5,3 +5,4 @@ cordis = "0.0.1-SNAPSHOT"
 cordis-core = { module = "io.github.meteor149:core", version.ref = "cordis" }
 cordis-hmr = { module = "io.github.meteor149:hmr", version.ref = "cordis" }
 cordis-loader = { module = "io.github.meteor149:loader", version.ref = "cordis" }
+cordis-packages = { module = "io.github.meteor149:packages", version.ref = "cordis" }

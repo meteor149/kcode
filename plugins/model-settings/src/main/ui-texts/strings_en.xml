@@ -1,0 +1,21 @@
+<resources>
+    <string name="api_key">API Key</string>
+    <string name="api_version">API version</string>
+    <string name="dashscope_china_mainland">China (Beijing)</string>
+    <string name="dashscope_singapore">Singapore</string>
+    <string name="dashscope_united_states">United States (Virginia)</string>
+    <string name="deployment">Deployment</string>
+    <string name="deployment_hint">Azure deployment name</string>
+    <string name="endpoint">Endpoint</string>
+    <string name="enter_api_key">Enter API Key</string>
+    <string name="hide">Hide</string>
+    <string name="model_provider_desc">Manage model services and credentials</string>
+    <string name="model_service">Model service</string>
+    <string name="provider">Provider</string>
+    <string name="read_settings_failed">Couldn’t load settings: %1$s</string>
+    <string name="region">Region</string>
+    <string name="save_settings">Save settings</string>
+    <string name="save_settings_failed">Couldn’t save settings: %1$s</string>
+    <string name="show">Show</string>
+    <string name="unknown_error">Unknown error</string>
+</resources>

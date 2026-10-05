@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.plugin.api.AndroidForegroundExecutionHost
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
@@ -8,10 +10,11 @@ import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.notifications.LocalizedAndroidGenerationForegroundPlugin
 import ai.meteor.kcode.plugin.notifications.generationForegroundConfig
-import ai.meteor.kcode.plugin.localization.LocalizationProviderPlugin
+import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
 import kotlinx.serialization.json.Json
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import android.app.Activity
@@ -29,7 +32,6 @@ import android.content.pm.ServiceInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -82,21 +84,21 @@ class AndroidGenerationForegroundTest {
                 hostInputs = inputs, featurePlugins = listOf(capture),
                 settingsStore = object : AppSettingsStore {
                     override val protection = SettingsProtection.Transient
-                    override suspend fun load() = StoredAppSettings(language = "en")
+                    override suspend fun load() = LegacySettings(language = "en")
                     override suspend fun save(settings: StoredAppSettings) = Unit
                 },
                 dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                     AndroidDynamicPluginController(ctx, context, loader, inventory, trusted)
                 },
             )).also { runtimes += it }
-            val digest = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) }
+            val digest = packageFileSha256(apk)
             runtime.pluginManager.replace(DynamicPluginSpec(
                 id = "provider.generation", version = "apk", artifactPath = privateApk.path, sha256 = digest,
                 entryClass = GenerationProviderPlugin::class.java.name, packageName = instrumentation.context.packageName,
             ))
             runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "provider.localization.default", version = "native-private-words", artifactPath = privateApk.path,
-                sha256 = digest, entryClass = LocalizationProviderPlugin::class.java.name,
+                id = "feature.localization", version = "native-private-words", artifactPath = privateApk.path,
+                sha256 = digest, entryClass = LocalizationFeaturePlugin::class.java.name,
                 packageName = instrumentation.context.packageName,
                 config = Json.parseToJsonElement("""{"translations":{"en":{"generation_notification_channel":"Test model responses","generation_notification_title":"Generation $id","generation_notification_text":"Owned response"}}}"""),
             ))
@@ -131,7 +133,7 @@ class AndroidGenerationForegroundTest {
             awaitLeases(1)
             first.pluginManager.replace(DynamicPluginSpec(
                 id = "provider.generation", version = "apk-next", artifactPath = File(directory, "first/generation.apk").path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 entryClass = GenerationProviderPlugin::class.java.name, packageName = instrumentation.context.packageName,
             ))
             concurrent.join()

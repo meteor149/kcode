@@ -1,12 +1,13 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.ApplicationRenderer
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
@@ -40,7 +41,7 @@ class AndroidDefaultApplicationUiPrivateLoadingTest {
         ))
         val spec = DynamicPluginSpec(
             id = "provider.ui.compose", version = "private-default", artifactPath = artifact.path,
-            sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+            sha256 = packageFileSha256(artifact),
             entryClass = DefaultApplicationUiPlugin::class.java.name, packageName = instrumentation.context.packageName,
         )
         try {
@@ -49,6 +50,14 @@ class AndroidDefaultApplicationUiPrivateLoadingTest {
             assertTrue(original.javaClass.name.startsWith("ai.meteor.kcode.plugin."))
             assertNotSame(ApplicationRenderer::class.java.classLoader, original.javaClass.classLoader)
             assertNotSame(DefaultApplicationUiPlugin::class.java.classLoader, original.javaClass.classLoader)
+            for (providerId in listOf("provider.generation", "provider.sessions.history", "provider.history.platform")) {
+                runtime.pluginManager.setEnabled(providerId, false)
+                kotlin.test.assertEquals(ai.meteor.kcode.plugin.api.PluginState.Active,
+                    runtime.diagnostics().plugins.single { it.id == "provider.ui.compose" }.state)
+                assertSame(original, renderer)
+                runtime.pluginManager.setEnabled(providerId, true)
+                assertSame(original, renderer)
+            }
             // A host renderer is not a deployment configuration for the default entry.
             assertFailsWith<IllegalStateException> {
                 runtime.pluginManager.replace(spec.copy(version = "host-object", config = DefaultApplicationRenderer))

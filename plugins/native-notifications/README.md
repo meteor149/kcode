@@ -82,3 +82,17 @@ behavior across UI removal, uninstall, and root-input revocation. Broker instrum
 covers cancellation/late names, empty results, host close, already-granted permissions, and
 launcher failure. These tests use synthetic permission results and do not consent to any
 production permission prompt or establish visible interaction on a locked device.
+
+Native distribution exports three independent logical packages from this module. The
+dual-target `provider.notifications.platform` selects `DesktopNativeNotificationsPlugin`
+on desktop and `LocalizedAndroidNativeNotificationsPlugin` on Android, both with Unit
+configuration and native host-input leases. The Android-only packages
+`policy.notifications.permission.android` and `provider.generation.foreground.android`
+use `AndroidNotificationPermissionPlugin` and `LocalizedAndroidGenerationForegroundPlugin`.
+Desktop staging skips their payloads. Implementations are absent from the host classpath;
+neutral foreground execution primitives and manifest components remain in the SDK/host.
+The host must still declare its permissions; an imported package cannot grant them.
+
+API 59 localized channel/foreground configuration uses the neutral catalog language
+projection on committed settings. Language schema/defaults stay in the localization feature;
+notification providers do not read fixed settings fields or decode feature JSON.

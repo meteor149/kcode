@@ -1,6 +1,8 @@
 package ai.meteor.kcode.plugin.ui.api
 
 import ai.meteor.kcode.plugin.api.UiSlotKey
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,6 +37,7 @@ class KcodeUiSlots(ctx: Context) : Service<Unit>(ctx, Key) {
     private val toolUses = mutableMapOf<String, ToolUsePresentation>()
     private val sections = mutableMapOf<String, SettingsSection>()
     private val renderers = mutableMapOf<String, Any>()
+    private val textDictionaries = mutableMapOf<String, UiTextDictionary>()
 
     private suspend fun <K : Any, V : Any> registerContribution(
         entries: MutableMap<K, V>,
@@ -72,9 +75,60 @@ class KcodeUiSlots(ctx: Context) : Service<Unit>(ctx, Key) {
         return registerContribution(renderers, slot.id, renderer, "UI slot '${slot.id}'")
     }
 
+    suspend fun registerTexts(dictionary: UiTextDictionary): Disposable {
+        val guarded = UiTextDictionary(dictionary.id, dictionary.values)
+        mutex.withLock {
+            require(dictionary.id !in textDictionaries) { "UI texts '${dictionary.id}' are already registered" }
+            guarded.values.forEach { (key, value) ->
+                require(textDictionaries.values.all { it.values[key]?.let { existing -> existing == value } != false }) {
+                    "Conflicting default UI text '$key'"
+                }
+            }
+            textDictionaries[dictionary.id] = guarded
+        }
+        var disposed = false
+        return Disposable {
+            guarded.revoke()
+            withContext(NonCancellable) {
+                mutex.withLock {
+                    if (!disposed) {
+                        textDictionaries.remove(dictionary.id)
+                        disposed = true
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun registerSettings(section: SettingsSection): Disposable {
         require(section.id.isNotBlank()) { "Settings section id must not be blank" }
-        return registerContribution(sections, section.id, section, "Settings section '${section.id}'")
+        val active = MutableStateFlow(true)
+        val guarded = section.copy(
+            title = { if (active.collectAsState().value) section.title() else "" },
+            description = { if (active.collectAsState().value) section.description(it) else "" },
+            isVisible = { active.collectAsState().value && section.isVisible(it) },
+            renderer = UiRenderer { request ->
+                if (active.collectAsState().value) {
+                    section.renderer.Render(request.copy(page = request.page.copy(
+                        onSettingsChange = { value ->
+                            check(active.value) { "Settings section '${section.id}' was withdrawn" }
+                            request.page.onSettingsChange(value)
+                        },
+                    )))
+                }
+            },
+        )
+        val texts = if (section.texts.isEmpty()) null else registerTexts(UiTextDictionary("settings.${section.id}", section.texts))
+        val registration = try {
+            registerContribution(sections, section.id, guarded, "Settings section '${section.id}'")
+        } catch (error: Throwable) {
+            texts?.dispose()
+            throw error
+        }
+        return Disposable {
+            active.value = false
+            try { registration.dispose() } finally { texts?.dispose() }
+        }
     }
 
     suspend fun registerMessage(presentation: MessagePresentation): Disposable {
@@ -120,6 +174,7 @@ class KcodeUiSlots(ctx: Context) : Service<Unit>(ctx, Key) {
             localization = value(ApplicationSlots.Localization),
             markdown = value(ApplicationSlots.Markdown),
             theme = value(ApplicationSlots.Theme),
+            textDictionaries = textDictionaries.values.sortedBy { it.id },
             effects = effects.values.sortedWith(compareBy({ it.order }, { it.id })),
             conversationDecorations = conversationDecorations.values.sortedWith(compareBy({ it.order }, { it.id })),
             conversationEffects = conversationEffects.values.sortedWith(compareBy({ it.order }, { it.id })),

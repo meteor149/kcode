@@ -18,9 +18,9 @@ kotlin {
             implementation(compose.runtime)
         }
         commonTest.dependencies {
+            implementation(project(":plugins:schedule"))
             implementation(project(":plugins:session-history"))
             implementation(project(":plugins:message-codec"))
-            implementation(project(":plugins:schedule-dispatch"))
             implementation(kotlin("test"))
             implementation(project(":plugins:test-support"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

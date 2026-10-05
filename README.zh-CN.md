@@ -140,13 +140,21 @@ ADB 工作区与应用文件工具的工作区分离。Root 创建的文件可�
 | `plugins/installation-store` | 已安装包与启用状态持久化 |
 | `apps/*`、`plugins/platform-*` | 应用 Host、Loader 与平台适配 |
 
-产品实现在各功能模块中：`application`、`ui-pages` 与 `ui-settings` 提供默认界面，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
+产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 提供可选的默认 UI 投影，`application` 与 `ui-pages` 提供默认界面；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
+
+Web Search、Goal、Subagent、Localization、Markdown、Conversation Export 和 WebContainer 各自将相关 Provider 与贡献项包含在一个功能发布包中，内部子插件仍根据可用服务独立响应。
+
+WebContainer 拥有默认浮层实现，默认页面仅消费其可选 UI 插槽。
 
 通过插件管理器加载、启用、禁用、替换或卸载外部包，修改组合前先结束或取消活动 Agent 回合。安装状态跨重启保留，替换或清单发布失败时恢复已提交组合。撤销插件时先取消并等待其拥有的操作，再释放资源；切换存储 Provider 不会自动迁移数据。
 
-外部包共享公开 SDK 类型，产品实现与私有依赖独立加载。当前 ABI 为 **Plugin API 34**，旧包需重新编译。自定义根渲染器可以自行选择服务，无需采用默认 UI 契约。
+外部包共享公开 SDK 类型，产品实现与私有依赖独立加载。当前 ABI 为 **Plugin API 60**，旧包需重新编译。自定义根渲染器可以自行选择服务，无需采用默认 UI 契约。
 
 实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
+
+[跨平台插件包格式](docs/plugin-package-format.md)按平台和架构声明变体。原生构建从可独立替换的 `.kplugin` 包加载默认实现，并保留配置、禁用状态、用户替换和卸载选择。Artifact、Web 搜索、Goal、Schedule、Subagent、本地化、Markdown、对话导出和 WebContainer 各自作为一个功能包，包含相关工具、命令、设置和可选界面贡献；模型适配器与可复用基础设施保留独立发布边界。`:distribution:packager:stageBundledPlugins` 导出可信清单及包文件；当前模块和平台变体以 `settings.gradle.kts` 及清单为准。宿主保留 SDK 契约、组合／安装基础设施及仅依赖 SDK 的输入适配器。iOS 当前仅支持元数据；运行时支持桌面 JAR 和 Android APK 变体导入、SDK 校验、依赖批次事务和重启恢复。
+
+显式交互回调通过仅依赖 SDK 的宿主输入适配器接入。生产宿主不再链接旧 interaction 实现模块；默认设置策略从独立插件包运行。
 
 ## 权限与数据
 
@@ -200,3 +208,8 @@ ADB 工作区与应用文件工具的工作区分离。Root 创建的文件可�
 Copyright 2026 The kcode Authors.
 
 本项目基于 [Apache License 2.0](LICENSE) 开源。第三方组件继续遵循各自协议，归属信息见 [NOTICE](NOTICE)。
+
+工具权限配置与聊天输入区控件归交互功能插件所有。默认聊天页面提供通用配置编辑接口与扩展插槽；禁用功能插件会移除其控件并保留已保存的配置。
+
+配置存储保存不透明的功能命名空间和历史迁移原始值。功能插件拥有配置结构与默认值；
+v2 快照保留未知数据，不再持续写入各功能的旧标量字段。

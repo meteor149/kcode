@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.koog.http.client.KoogHttpClient
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.model.ModelProvider
@@ -19,7 +21,6 @@ import ai.meteor.kcode.plugin.llm.OllamaModelAdapterPlugin
 import ai.meteor.kcode.plugin.llm.GLMModelAdapterPlugin
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.cordis.dependencies
@@ -50,7 +51,7 @@ class AndroidFormalModelAdapterPrivateLoadingTest {
         val artifact = File(directory, "llm.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         lateinit var llm: KcodeLlm
         val capture = kcodePlugin(PluginDescriptor("test.formal-llm", "test", "test", emptySet()),
             plugin<Unit>(name = "capture-formal-llm", inject = dependencies(KcodeLlm.Key)) { ctx, _ ->
@@ -84,10 +85,16 @@ class AndroidFormalModelAdapterPrivateLoadingTest {
                     sha256 = digest, entryClass = entry.name,
                     packageName = instrumentation.context.packageName,
                 )
-                runtime.pluginManager.replace(spec)
+                if (provider == ModelProvider.Bedrock) {
+                    // The default Android composition no longer mounts the unsupported entry.
+                    assertTrue(runtime.diagnostics().plugins.none { it.id == id })
+                    runtime.pluginManager.install(spec)
+                } else {
+                    runtime.pluginManager.replace(spec)
+                }
                 assertTrue("koog.${provider.name}" in llm.adapterIds())
                 val catalog = llm.catalog().providers.singleOrNull { it.provider == provider }
-                if (provider == ModelProvider.Bedrock && true) {
+                if (provider == ModelProvider.Bedrock) {
                     assertEquals(null, catalog)
                     continue
                 }

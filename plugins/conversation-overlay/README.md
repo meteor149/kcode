@@ -49,16 +49,29 @@ rendering runs separately in the module's test APK:
 `ConversationOverlayLifecycleTest`; it requires an unlocked, awake device and overlay
 permission. CPU lifecycle results do not prove window rendering.
 
-Android defaults now mount `AndroidNativeConversationOverlayPlugin`, the same entry
-available to an external APK. It acquires an effect-owned `AndroidPluginHostInputs`
+The default catalog includes `core.conversation-overlays` as a desktop/Android
+`.kplugin` and `provider.conversation-overlay.platform` as an Android-only `.kplugin`.
+The registry uses `NativeConversationOverlaysServicePlugin` with Unit configuration.
+API 42 adds `ConversationOverlayHostState.bind/current`: the runtime binds its borrowed
+foreground state and committed UI projection before loading the registry. These values
+survive registry replacement without keeping a private implementation in the host.
+External plugins must be rebuilt against the matching SDK ABI.
+
+Android defaults load `AndroidNativeConversationOverlayPlugin` from the catalog's
+verified APK payload. It acquires an effect-owned `AndroidPluginHostInputs`
 lease and resolves the registry's read-only `uiSlots` flow. The host no longer passes
 an Activity/controller factory for the default overlay. The flow follows committed
 UI changes and remains shared across controller generations; each controller retains
 only application context and owns its windows, permission polling, and Compose scope.
 The legacy factory override remains available to custom compositions.
 
-The actual native-entry APK test verifies private implementation class loading with
-shared SDK identity, theme withdrawal/restoration through the projection, disable and
+The actual registry/provider archive test verifies private implementation class loading with
+shared SDK identity, preserved foreground state and projection across registry replacement,
+theme withdrawal/restoration through the projection, disable and
 reenable, uninstall, joined controller scopes, rejected stale turns, and root-input
 release. It keeps the host foreground and does not establish visible system-window
 rendering or user permission consent.
+
+The desktop/device presentation tests compile their shared scenario from `src/uiTestFixtures`.
+Android instrumentation does not depend across source-set trees on `commonTest`; its test
+runtime dependencies are explicit. Shared ownership tests remain in the regular common tree.

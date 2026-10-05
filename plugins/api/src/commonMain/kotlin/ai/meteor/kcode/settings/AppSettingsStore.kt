@@ -1,26 +1,15 @@
 package ai.meteor.kcode.settings
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
-/** A platform-neutral snapshot. Empty values do not select a product default or provider. */
+/** Opaque platform-neutral configuration. Feature providers own schemas and defaults. */
 @Serializable
 data class StoredAppSettings(
-    val provider: String = "",
-    val modelId: String = "",
-    val modelApiKeys: Map<String, String> = emptyMap(),
-    val modelEndpoint: String = "",
-    val modelRegion: String = "",
-    val modelDeployment: String = "",
-    val modelApiVersion: String = "",
-    val dashscopeRegion: String = "",
-    val webSearchApiKey: String = "",
-    val exaSearchApiKey: String = "",
-    val searchApiKeys: Map<String, String> = emptyMap(),
-    val webSearchProvider: String = "",
-    val temperature: Double = 0.0,
-    val language: String = "",
-    val shellExecutionMode: String = "",
-    val toolPermissionMode: String = "",
+    /** Feature-owned JSON objects; unknown namespaces and fields survive ordinary updates. */
+    val namespaces: Map<String, JsonObject> = emptyMap(),
+    /** Opaque historical values. Only feature providers interpret their legacy schema. */
+    val legacyValues: JsonObject = JsonObject(emptyMap()),
 )
 
 enum class ShellExecutionMode(val code: String) {
@@ -55,4 +44,14 @@ interface AppSettingsStore {
     suspend fun load(): StoredAppSettings
 
     suspend fun save(settings: StoredAppSettings)
+
+    /** Published settings services serialize this complete read/validate/commit operation. */
+    suspend fun <T> transaction(block: suspend SettingsTransaction.() -> T): T =
+        error("Use the transaction-capable store published by KcodeSettings")
+}
+
+/** A single-use commit, valid only while its transaction callback is executing. */
+interface SettingsTransaction {
+    val current: StoredAppSettings
+    suspend fun commit(settings: StoredAppSettings)
 }

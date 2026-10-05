@@ -44,13 +44,13 @@ object KoogAgentLoopPlugin : Plugin<Unit> {
         KcodeSystemPrompt.Key,
         KcodeLlm.Key,
         KcodeInteraction.Key,
-        KcodeSkills.Key,
         KcodeContinuations.Key,
-        KcodeSubagents.Key,
-        KcodeConversationOverlays.Key,
     )
 
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        val skills = bindOptionalAgentService(ctx, effect, KcodeSkills.Key)
+        val subagents = bindOptionalAgentService(ctx, effect, KcodeSubagents.Key)
+        val overlays = bindOptionalAgentService(ctx, effect, KcodeConversationOverlays.Key)
         val interaction = ctx.require(KcodeInteraction.Key).policy
         val lifecycle = CordisAgentLifecycle(ctx)
         val owner = PluginOperationOwner("Koog agent provider")
@@ -73,11 +73,11 @@ object KoogAgentLoopPlugin : Plugin<Unit> {
                     continuationProvider = { continuation ->
                         ctx.require(KcodeContinuations.Key).next(continuation)
                     },
-                    subagentCoordinatorFactory = ctx.require(KcodeSubagents.Key).factory,
+                    subagentCoordinatorFactoryProvider = { subagents()?.factory },
                     toolPermissionModeProvider = interaction.permissionModeProvider,
                     toolCallApprover = interaction.approver,
-                    skillRuntime = ctx.require(KcodeSkills.Key).runtime,
-                    conversationOverlayProvider = { ctx.require(KcodeConversationOverlays.Key).current() },
+                    skillRuntimeProvider = { skills()?.runtime },
+                    conversationOverlayProvider = { overlays()?.current() },
                 ),
                 owner = owner,
             ),
@@ -134,4 +134,17 @@ private class CordisAgentLifecycle(private val ctx: Context) : AgentLifecycle {
     override suspend fun onTurnFinished(response: String?, error: Throwable?) {
         ctx.parallelEvent(KcodeAgentEvents.TurnFinished, AgentTurnFinished(response, error))
     }
+}
+
+private class OptionalAgentBinding<T>(val value: T)
+
+private suspend fun <T : Any> bindOptionalAgentService(ctx: Context, effect: EffectScope, key: org.cordis.ServiceKey<T>): () -> T? {
+    val current = kotlinx.coroutines.flow.MutableStateFlow<OptionalAgentBinding<T>?>(null)
+    val fiber = ctx.plugin(org.cordis.plugin<Unit>(name = "agent-optional-${key.name}", inject = dependencies(key)) { child, _ ->
+        val token = OptionalAgentBinding(child.require(key))
+        current.value = token
+        collect { current.compareAndSet(token, null); Unit }
+    }, Unit)
+    effect.collect { fiber.dispose() }
+    return { current.value?.value }
 }

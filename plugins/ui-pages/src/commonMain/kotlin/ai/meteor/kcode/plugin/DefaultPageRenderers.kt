@@ -1,11 +1,9 @@
 package ai.meteor.kcode.plugin
 
-import ai.meteor.kcode.plugin.pages.artifact.ArtifactsPage
 import ai.meteor.kcode.plugin.pages.chat.StandaloneConversationOverlay
 import ai.meteor.kcode.plugin.ui.api.StandaloneConversationRequest
 import ai.meteor.kcode.plugin.pages.chat.ChatPane
 import ai.meteor.kcode.plugin.ui.api.ChatPageRequest
-import ai.meteor.kcode.plugin.ui.api.ArtifactsPageRequest
 import ai.meteor.kcode.plugin.ui.api.SettingsPageRequest
 import ai.meteor.kcode.plugin.ui.api.UiRenderer
 import ai.meteor.kcode.plugin.pages.settings.SettingsPageOverlay
@@ -34,24 +32,7 @@ object DefaultChatPageRenderer : UiRenderer<ChatPageRequest> {
             historyRepository = request.historyRepository,
             goalSessionFactory = request.goalSessionFactory,
             scheduledTaskCoordinator = request.scheduledTaskCoordinator,
-            conversationExporter = request.conversationExporter,
-            toolPermissionControlsAvailable = request.toolPermissionControlsAvailable,
-            toolPermissionMode = request.toolPermissionMode,
-            onToolPermissionModeChange = request.onToolPermissionModeChange,
-        )
-    }
-}
-
-
-object DefaultArtifactsPageRenderer : UiRenderer<ArtifactsPageRequest> {
-    @Composable
-    override fun Render(request: ArtifactsPageRequest) {
-        ArtifactsPage(
-            repository = request.repository,
-            webContainerController = request.webContainerController,
-            compact = request.compact,
-            onMenu = request.onMenu,
-            modifier = request.modifier,
+            settingsEditor = request.settingsEditor,
         )
     }
 }

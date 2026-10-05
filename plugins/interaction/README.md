@@ -1,28 +1,24 @@
-# Interaction and native approvals
+# Interaction policies
 
 `provider.interaction.platform` publishes `KcodeInteraction`. The native default
-`SettingsToolInteractionPlugin` injects `KcodeSettings` and `KcodeToolApprovals`, reads
-the current committed permission mode for each call, and owns its suspended operations.
-Either dependency disappearing makes the policy pending and invalidates old callbacks.
+`SettingsToolInteractionPlugin` in [interaction-settings](../interaction-settings/README.md) injects `KcodeSettings` and `KcodeToolApprovals`, reads
+committed permission mode for each call and owns suspended operations. Either dependency
+withdrawing makes the policy Pending and invalidates retained callbacks.
 
-`provider.tool-approvals.native` independently publishes `KcodeToolApprovals` through
-`NativeToolApprovalPlugin`. Its portable JSON configuration contains `title`, `message`,
-`allow`, and `deny` strings. The title formats one tool-name argument; the message formats
-description (or tool name when blank) and input, bounded to 2,048 and 8,192 characters.
-Templates use Java positional string formatting; malformed formats fail mounting.
-`toolApprovalConfig` builds this configuration. Android localization resources and desktop
-ResourceBundles belong to this module; external packages can supply their own scalar text.
+Native approvals are distributed separately by [native-tool-approvals](../native-tool-approvals/README.md).
+This module consumes the SDK approval service without depending on its implementation.
+`HostModeToolInteractionPlugin` permits an explicitly supplied mode callback while injecting
+that service. `InteractionServicePlugin` remains an explicit callback entry. Settings-backed
+approvers belong to `SettingsApproverInteractionPlugin` in the interaction-settings feature;
+the duplicate settings implementation in this callback-only module has been removed. Native production hosts do not link
+this implementation module. The composition layer borrows custom callbacks through
+SDK-only `HostInteractionInputPlugin` for explicit policies, or the feature-owned
+`SettingsApproverInteractionPlugin` for settings-backed custom approvers;
+Android's `HostToolPermissionModeInputPlugin` borrows a mode reader and injects the approval
+service. Each adapter owns admitted calls, joins them on withdrawal, and rejects stale
+callbacks without closing borrowed inputs. Callback values are never package configuration.
+The settings-driven Unit entry ships as an independent package and is excluded from
+production host classpaths.
 
-The product entry acquires a per-mount SDK `PluginHostInputs` lease and uses the generic
-`ConfirmationDialogHost`. Hosts provide window mechanics and lifecycle only. Withdrawal
-cancels and joins pending dialogs before returning, and retired approvers reject new calls.
-A host without dialog capabilities cannot mount this provider.
-
-`HostModeToolInteractionPlugin` permits an explicitly supplied mode callback while still
-injecting the approval service. The earlier `SettingsInteractionProviderPlugin` and
-`InteractionServicePlugin` remain available for explicit custom approvers and headless
-composition. Native Android deployment preserves existing custom-approver behavior.
-
-Both native defaults and external APK/JAR packages use the same zero-argument product
-entries. Lifecycle tests load the real module artifacts, including the settings policy,
-then check dependency withdrawal, cleanup waiting, restoration and replacement rollback.
+Lifecycle tests load the actual interaction-settings JAR/APK independently of the approval artifact,
+then verify dependency withdrawal, cleanup waiting, restoration and replacement rollback.

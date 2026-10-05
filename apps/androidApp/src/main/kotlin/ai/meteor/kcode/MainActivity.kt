@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     checkNotNull(agentRuntime.applicationContent).Render(
                         ApplicationHostOptions(
                             shellSettingsAvailable = true,
-                            toolPermissionControlsAvailable = true,
+                            conversationSettingsControlsAvailable = true,
                         ),
                     )
                 }

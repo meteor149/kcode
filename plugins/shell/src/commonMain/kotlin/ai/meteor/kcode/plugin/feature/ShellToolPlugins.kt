@@ -29,6 +29,26 @@ object DesktopShellToolConsumerPlugin : Plugin<Unit> {
     }
 }
 
+object DefaultAndroidShellToolConsumerPlugin : Plugin<Unit> {
+    override val config = ConfigValidator<Unit> { it }
+    override val name = "default-android-shell-tools"
+    override val inject = AndroidShellToolConsumerPlugin.inject
+
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        AndroidShellToolConsumerPlugin.apply(ctx, AndroidShellToolDescription, effect)
+    }
+}
+
+object DefaultUbuntuShellToolConsumerPlugin : Plugin<Unit> {
+    override val config = ConfigValidator<Unit> { it }
+    override val name = "default-ubuntu-shell-tools"
+    override val inject = UbuntuShellToolConsumerPlugin.inject
+
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        UbuntuShellToolConsumerPlugin.apply(ctx, AndroidUbuntuShellToolDescription, effect)
+    }
+}
+
 object AndroidShellToolConsumerPlugin : Plugin<String> {
     override val config = ConfigValidator<String> { value ->
         require(value.isNotBlank()) { "Android shell tool description must not be blank" }

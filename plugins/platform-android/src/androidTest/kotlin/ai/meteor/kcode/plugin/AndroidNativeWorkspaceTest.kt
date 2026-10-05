@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.AgentWorkspace
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.FileSystemBackend
@@ -19,7 +21,6 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -42,7 +43,7 @@ class AndroidNativeWorkspaceTest {
         val apk = File(directory, "workspace.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(apk)
         check(apk.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(apk)
         val isolated = object : ContextWrapper(context) {
             override fun getApplicationContext(): Context = this
             override fun getFilesDir(): File = directory

@@ -50,6 +50,21 @@ import org.cordis.plugin
 
 class KcodePluginRuntimeTest {
     @Test
+    fun optionalFeatureWithdrawalKeepsCoreAgentActiveAndRetractsSubagentTools() = runTest {
+        val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(interactionPolicy = testInteractionPolicy()))
+        try {
+            for (id in listOf("provider.skills.platform", "feature.subagents", "core.conversation-overlays")) {
+                runtime.pluginManager.setEnabled(id, false)
+                assertEquals(PluginState.Active, runtime.diagnostics().plugins.single { it.id == "provider.agent-loop.koog" }.state, id)
+                if (id == "feature.subagents") assertFalse("core/subagent" in runtime.diagnostics().toolContributions)
+                runtime.pluginManager.setEnabled(id, true)
+                assertEquals(PluginState.Active, runtime.diagnostics().plugins.single { it.id == "provider.agent-loop.koog" }.state, id)
+            }
+            assertTrue("core/subagent" in runtime.diagnostics().toolContributions)
+        } finally { runtime.close() }
+    }
+
+    @Test
     fun failedReplacementCannotScheduleAnUnmanagedBackgroundReload() = runTest {
         val directory = createTempDirectory("kcode-managed-hmr")
         val jar = fixtureJar(directory.resolve("plugin.jar"))
@@ -222,23 +237,23 @@ class KcodePluginRuntimeTest {
         )
         val first = KcodePluginRuntime.create(configuration)
         try {
-            first.pluginManager.setEnabled("consumer.tools.schedule", false)
-            first.pluginManager.replace(spec(jar, DynamicFixturePluginV1::class.qualifiedName!!, "1").copy(id = "consumer.tools.goal"))
-            first.pluginManager.setEnabled("consumer.tools.goal", false)
+            first.pluginManager.setEnabled("feature.schedule", false)
+            first.pluginManager.replace(spec(jar, DynamicFixturePluginV1::class.qualifiedName!!, "1").copy(id = "feature.goal"))
+            first.pluginManager.setEnabled("feature.goal", false)
         } finally {
             first.close()
         }
         val restarted = KcodePluginRuntime.create(configuration)
         try {
-            assertEquals(PluginState.Disabled, restarted.diagnostics().plugins.first { it.id == "consumer.tools.schedule" }.state)
-            assertEquals(PluginState.Disabled, restarted.diagnostics().plugins.first { it.id == "consumer.tools.goal" }.state)
+            assertEquals(PluginState.Disabled, restarted.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
+            assertEquals(PluginState.Disabled, restarted.diagnostics().plugins.first { it.id == "feature.goal" }.state)
             assertFalse("external/fixture-v1" in restarted.diagnostics().toolContributions)
             assertEquals("1", restarted.pluginManager.installed().single().version)
             assertFalse(restarted.pluginManager.installed().single().enabled)
-            restarted.pluginManager.setEnabled("consumer.tools.goal", true)
+            restarted.pluginManager.setEnabled("feature.goal", true)
             assertTrue("external/fixture-v1" in restarted.diagnostics().toolContributions)
-            restarted.pluginManager.uninstall("consumer.tools.goal")
-            restarted.pluginManager.setEnabled("consumer.tools.goal", true)
+            restarted.pluginManager.uninstall("feature.goal")
+            restarted.pluginManager.setEnabled("feature.goal", true)
         } finally {
             restarted.close()
         }
@@ -280,7 +295,7 @@ class KcodePluginRuntimeTest {
             assertTrue("external/fixture-v1" in runtime.diagnostics().toolContributions)
             assertFalse("external/fixture-v2" in runtime.diagnostics().toolContributions)
             store.failNext = true
-            assertFailsWith<java.io.IOException> { runtime.pluginManager.setEnabled("consumer.tools.goal", false) }
+            assertFailsWith<java.io.IOException> { runtime.pluginManager.setEnabled("feature.goal", false) }
             assertTrue("core/goal" in runtime.diagnostics().toolContributions)
             assertEquals(committed, store.snapshot)
             assertFailsWith<IllegalArgumentException> {
@@ -354,7 +369,7 @@ class KcodePluginRuntimeTest {
                 DesktopDynamicPluginController(context, loader, inventory, directory.toFile())
             },
         ))
-        val id = "consumer.tools.goal"
+        val id = "feature.goal"
         try {
             assertFailsWith<IllegalStateException> {
                 runtime.pluginManager.replace(spec(failed, FailingDynamicFixturePlugin::class.qualifiedName!!, "failed").copy(id = id))
@@ -444,8 +459,8 @@ class KcodePluginRuntimeTest {
         assertTrue(diagnostics.plugins.any { it.id == "provider.agent-loop.koog" })
         assertTrue(diagnostics.plugins.any { it.id == "test.tools" })
         assertEquals(
-            listOf("core/subagent", "core/goal", "core/schedule", "test/tools"),
-            diagnostics.toolContributions,
+            setOf("core/subagent", "core/goal", "core/schedule", "consumer.tools.web-search", "consumer.tools.artifact", "test/tools"),
+            diagnostics.toolContributions.toSet(),
         )
         assertEquals(listOf("kcode/default"), diagnostics.promptSections)
         assertEquals(ai.meteor.kcode.model.ModelProvider.entries.map { "koog.${it.name}" }, diagnostics.modelAdapters)

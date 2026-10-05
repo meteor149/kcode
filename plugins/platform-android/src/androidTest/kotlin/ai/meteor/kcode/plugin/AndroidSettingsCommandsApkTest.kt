@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.model.ModelCatalogSnapshot
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeSettingsCommands
@@ -13,12 +15,13 @@ import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.SettingsUpdate
 import ai.meteor.kcode.settings.AppliedSettingsUpdate
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.modelEndpoint
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
@@ -44,7 +47,7 @@ class AndroidSettingsCommandsApkTest {
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(apk)
         check(apk.setReadOnly())
         var saved = 0
-        var stored = StoredAppSettings(modelEndpoint = "fixture")
+        var stored = LegacySettings(modelEndpoint = "fixture")
         val store = object : AppSettingsStore {
             override val protection = SettingsProtection.Transient
             override suspend fun load() = stored
@@ -64,32 +67,32 @@ class AndroidSettingsCommandsApkTest {
             },
         ))
         try {
-            assertFails { runtime.updateSettings(SettingsUpdate(searchProvider = "exa")) }
+            assertFails { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))) }
             assertEquals(0, saved)
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.settings-commands", version = "test", entryClass = AndroidFixtureSettingsCommands::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName,
             ))
             val old = handler
             assertTrue(old.javaClass.classLoader !== SettingsCommandsPlugin::class.java.classLoader)
-            val result = runtime.updateSettings(SettingsUpdate(searchProvider = "exa"))
+            val result = runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa")))
             assertTrue(result.javaClass === AppliedSettingsUpdate::class.java)
             assertTrue(result.settings.javaClass === StoredAppSettings::class.java)
-            assertEquals("exa", stored.webSearchProvider)
+            assertEquals(kotlinx.serialization.json.JsonPrimitive("exa"), stored.namespaces["feature.web-search"]?.get("provider"))
             assertEquals("fixture", result.settings.modelEndpoint)
             assertEquals(1, saved)
             runtime.pluginManager.setEnabled("fixture.settings-commands", false)
-            assertFailsWith<IllegalStateException> { old.apply(SettingsUpdate(searchProvider = "google"), ModelCatalogSnapshot()) }
-            assertFails { runtime.updateSettings(SettingsUpdate(searchProvider = "google")) }
+            assertFailsWith<IllegalStateException> { old.apply(SettingsUpdate(mapOf("search-provider" to "google")), ModelCatalogSnapshot()) }
+            assertFails { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "google"))) }
             assertEquals(1, saved)
             runtime.pluginManager.setEnabled("fixture.settings-commands", true)
             assertNotSame(old, handler)
-            runtime.updateSettings(SettingsUpdate(searchProvider = "google"))
+            runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "google")))
             assertEquals(2, saved)
             runtime.pluginManager.uninstall("fixture.settings-commands")
-            assertFails { runtime.updateSettings(SettingsUpdate(searchProvider = "exa")) }
+            assertFails { runtime.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))) }
             assertEquals(2, saved)
         } finally {
             runtime.close()

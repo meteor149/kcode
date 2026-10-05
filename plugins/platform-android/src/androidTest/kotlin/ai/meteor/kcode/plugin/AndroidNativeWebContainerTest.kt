@@ -1,5 +1,10 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
+import ai.meteor.kcode.plugin.packages.androidPackageHost
+import ai.meteor.kcode.plugin.packages.androidPackageVerifier
+
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.KcodeWebContainers
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -19,7 +24,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import android.os.PowerManager
 import android.os.ParcelFileDescriptor
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +40,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.cordis.dependencies
 import org.cordis.plugin
@@ -49,8 +54,10 @@ class AndroidNativeWebContainerTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val directory = File(context.cacheDir, "web-plugins-${System.nanoTime()}").apply { mkdirs() }
-        val artifact = File(directory, "web.apk")
-        File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
+        val artifact = File(directory, "web.kplugin")
+        instrumentation.context.assets.open("feature.web-container-1.0.0.kplugin").use { input ->
+            artifact.outputStream().use { input.copyTo(it) }
+        }
         check(artifact.setReadOnly())
         val workspace = File(context.filesDir, "agent_workspace/private-web-test").apply { mkdirs() }
         File(workspace, "style.css").writeText("button { color: rgb(10, 20, 30); }")
@@ -79,7 +86,10 @@ class AndroidNativeWebContainerTest {
                 hostInputs = AndroidPluginHostInputs(activity),
                 featurePlugins = listOf(kcodePlugin(descriptor("test.web.capture"), plugin<Unit>(
                     name = "capture-private-web", inject = dependencies(KcodeWebContainers.Key),
-                ) { ctx, _ -> capture(ctx.require(KcodeWebContainers.Key).controller) }, Unit)),
+                ) { ctx, _ -> capture(ctx.require(KcodeWebContainers.Key).controller) }, Unit), kcodePlugin(
+                    descriptor("provider.plugin-packages.platform"),
+                    NativePluginPackagesPlugin(directory, androidPackageHost(), artifactVerifier = androidPackageVerifier(context)), Unit,
+                )),
                 dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                     AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
                 },
@@ -87,11 +97,7 @@ class AndroidNativeWebContainerTest {
         )
         val first = runtime { firstController = it }
         val second = runtime { secondController = it }
-        val specification = DynamicPluginSpec(
-            id = "provider.web-containers.platform", version = "test", artifactPath = artifact.path,
-            sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
-            entryClass = AndroidNativeWebContainerPlugin::class.java.name, config = Unit,
-        )
+        val specification = PluginPackageImport(artifact.absolutePath, packageFileSha256(artifact))
         val release = CompletableDeferred<Unit>()
         val releaseDestroyed = CompletableDeferred<Unit>()
         instrumentation.uiAutomation.adoptShellPermissionIdentity("android.permission.START_ACTIVITIES_FROM_BACKGROUND")
@@ -103,12 +109,17 @@ class AndroidNativeWebContainerTest {
             // The assertions require resumed windows; keep the display awake until both windows retire.
             screen.acquire(90_000)
             withTimeout(3_000) { while (!power.isInteractive) delay(50) }
-            first.pluginManager.replace(specification)
-            second.pluginManager.replace(specification)
+            first.pluginManager.importPackages(listOf(specification))
+            second.pluginManager.importPackages(listOf(specification))
             val a = requireNotNull(firstController)
             val b = requireNotNull(secondController)
             assertNotSame(a.javaClass.classLoader, AndroidNativeWebContainerPlugin::class.java.classLoader)
             assertNotSame(a.javaClass.classLoader, b.javaClass.classLoader)
+            val privateLoader = a.javaClass.classLoader
+            listOf("androidx.core.content.FileProvider", "androidx.versionedparcelable.VersionedParcelable").forEach { type ->
+                assertSame(Class.forName(type), Class.forName(type, false, privateLoader))
+            }
+            assertSame(privateLoader, Class.forName("androidx.webkit.WebViewAssetLoader", false, privateLoader).classLoader)
             ParcelFileDescriptor.AutoCloseInputStream(
                 instrumentation.uiAutomation.executeShellCommand("cmd power wakeup"),
             ).bufferedReader().use { it.readText() }
@@ -168,7 +179,7 @@ class AndroidNativeWebContainerTest {
                 }
             }
             entered.await()
-            val withdrawal = async { first.pluginManager.setEnabled(specification.id, false) }
+            val withdrawal = async { first.pluginManager.setEnabled("feature.web-container", false) }
             withTimeout(5_000) { cleaning.await() }
             assertFalse(withdrawal.isCompleted)
             assertFalse(worker.isCompleted)
@@ -184,7 +195,7 @@ class AndroidNativeWebContainerTest {
             assertEquals(listOf(launchedB.containerId), b.list().map { it.id })
             assertFailsWith<IllegalStateException> { a.list() }
             assertFailsWith<IllegalStateException> { a.inspect(launchedA.containerId) }
-            first.pluginManager.setEnabled(specification.id, true)
+            first.pluginManager.setEnabled("feature.web-container", true)
             val restored = requireNotNull(firstController)
             assertNotSame(a, restored)
             assertTrue(restored.list().isEmpty())
@@ -206,7 +217,7 @@ class AndroidNativeWebContainerTest {
             withTimeout(5_000) { destroyedCleaning.await() }
             assertTrue(restored.list().isEmpty())
             val removalStarted = CompletableDeferred<Unit>()
-            val removal = async { removalStarted.complete(Unit); first.pluginManager.uninstall(specification.id) }
+            val removal = async { removalStarted.complete(Unit); first.pluginManager.uninstall("feature.web-container") }
             removalStarted.await()
             @Suppress("UNCHECKED_CAST") val ownerLive = field(field(restored, "owner"), "live") as StateFlow<Boolean>
             withTimeout(5_000) { while (ownerLive.value) delay(10) }

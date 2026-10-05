@@ -1,0 +1,10 @@
+<resources>
+    <string name="shell_execution">Tool permission</string>
+    <string name="shell_execution_warning">Tool calls can modify device data. Every command still requires confirmation. Unavailable modes fail explicitly and never fall back to another identity.</string>
+    <string name="shell_mode_adb">ADB shell</string>
+    <string name="shell_mode_adb_desc">UID 2000 · requires Shizuku started through adb and user authorization</string>
+    <string name="shell_mode_app">Application UID</string>
+    <string name="shell_mode_app_desc">Safest · limited to kcode’s app sandbox and permissions</string>
+    <string name="shell_mode_root">Root</string>
+    <string name="shell_mode_root_desc">UID 0 · requires su and approval from your root manager</string>
+</resources>

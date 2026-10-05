@@ -21,11 +21,11 @@ internal class MemoryAppSettingsStore : AppSettingsStore {
     private var closed = false
     override suspend fun load(): StoredAppSettings = mutex.withLock {
         check(!closed) { "memory settings storage is closed" }
-        value.copy(modelApiKeys = value.modelApiKeys.toMap(), searchApiKeys = value.searchApiKeys.toMap())
+        value.snapshot()
     }
     override suspend fun save(settings: StoredAppSettings) = mutex.withLock {
         check(!closed) { "memory settings storage is closed" }
-        value = settings.copy(modelApiKeys = settings.modelApiKeys.toMap(), searchApiKeys = settings.searchApiKeys.toMap())
+        value = settings.snapshot()
     }
     suspend fun close() = mutex.withLock {
         closed = true

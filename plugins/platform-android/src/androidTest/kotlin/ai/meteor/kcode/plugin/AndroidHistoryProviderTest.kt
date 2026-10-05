@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.history.StoredConversation
 import ai.meteor.kcode.plugin.api.HistoryRepositoryFactory
@@ -16,7 +18,6 @@ import android.database.SQLException
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -55,7 +56,7 @@ class AndroidHistoryProviderTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.history", version = "test", entryClass = AndroidFixtureHistory::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName, config = File(directory, "history.db").absolutePath,
             ))
             val previous = repository

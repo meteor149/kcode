@@ -16,8 +16,6 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
         androidMain.dependencies {
-            implementation("dev.rikka.shizuku:api:13.1.5")
-            implementation("dev.rikka.shizuku:provider:13.1.5")
             implementation("org.apache.commons:commons-compress:1.27.1")
             implementation("org.tukaani:xz:1.10")
         }

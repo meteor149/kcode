@@ -37,7 +37,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import org.cordis.dependencies
 import org.cordis.plugin
-import ai.meteor.kcode.plugin.export.ConversationImageRenderingPlugin
+import ai.meteor.kcode.plugin.export.ConversationExportFeaturePlugin
 import ai.meteor.kcode.export.ComposeConversationImageRenderContext
 import ai.meteor.kcode.export.ConversationImageRenderRequest
 import ai.meteor.kcode.export.ConversationExportMessage
@@ -47,14 +47,14 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.platform.LocalLayoutDirection
-import ai.meteor.kcode.plugin.localization.LocalizationProviderPlugin
-import ai.meteor.kcode.plugin.localization.LocalizationUiContributionPlugin
+import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin
-import ai.meteor.kcode.plugin.markdown.MarkdownProviderPlugin
+import ai.meteor.kcode.plugin.markdown.MarkdownFeaturePlugin
 import ai.meteor.kcode.ApplicationHostOptions
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import androidx.compose.ui.ImageComposeScene
@@ -85,6 +85,7 @@ class PrivateApplicationRenderingTest {
         }
         val themeValues = AtomicReference<List<Any>?>(null)
         val resolvedTemperature = AtomicReference<Double?>(null)
+        lateinit var modelPolicy: ai.meteor.kcode.settings.ModelSettingsPolicy
         lateinit var slots: KcodeUiSlots
         lateinit var imageRenderer: ConversationImageRenderer
         val capture = kcodePlugin(
@@ -105,11 +106,16 @@ class PrivateApplicationRenderingTest {
             Unit,
         )
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
-            featurePlugins = listOf(capture),
+            featurePlugins = listOf(capture, kcodePlugin(
+                PluginDescriptor("test.model-policy", "test", "test", emptySet()),
+                plugin<Unit>(name = "capture-model-policy", inject = dependencies(ai.meteor.kcode.plugin.api.KcodeModelSettings.Key)) { ctx, _ ->
+                    modelPolicy = ctx.require(ai.meteor.kcode.plugin.api.KcodeModelSettings.Key).policy
+                }, Unit,
+            )),
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
             settingsStore = object : AppSettingsStore {
                 override val protection = SettingsProtection.Transient
-                private var settings = StoredAppSettings(provider = "OpenAI", modelId = "gpt-4o-mini", language = "en", temperature = 1.75, modelApiKeys = mapOf("OpenAI" to "fixture"))
+                private var settings = LegacySettings(provider = "OpenAI", modelId = "gpt-4o-mini", language = "en", temperature = 1.75, modelApiKeys = mapOf("OpenAI" to "fixture"))
                 override suspend fun load(): StoredAppSettings = settings
                 override suspend fun save(settings: StoredAppSettings) { this.settings = settings }
             },
@@ -119,11 +125,10 @@ class PrivateApplicationRenderingTest {
         ))
         try {
             val entries = listOf(
-                "provider.localization.default" to LocalizationProviderPlugin::class.java,
-                "consumer.localization.ui" to LocalizationUiContributionPlugin::class.java,
+                "feature.localization" to LocalizationFeaturePlugin::class.java,
                 "provider.model-settings.catalog" to ModelSettingsProviderPlugin::class.java,
-                "provider.markdown.default" to MarkdownProviderPlugin::class.java,
-                "provider.export.image-rendering" to ConversationImageRenderingPlugin::class.java,
+                "feature.markdown" to MarkdownFeaturePlugin::class.java,
+                "feature.conversation-export" to ConversationExportFeaturePlugin::class.java,
                 "provider.ui.compose" to DefaultApplicationUiPlugin::class.java,
                 "provider.ui.layout" to DefaultLayoutUiPlugin::class.java,
                 "provider.ui.sidebar" to DefaultSidebarUiPlugin::class.java,
@@ -148,7 +153,7 @@ class PrivateApplicationRenderingTest {
                 )
                 if (id == "provider.ui.theme") themeDeployment = deployment
                 if (id == "provider.model-settings.catalog") modelSettingsDeployment = deployment
-                if (id == "provider.localization.default") localizationDeployment = deployment
+                if (id == "feature.localization") localizationDeployment = deployment
                 runtime.pluginManager.replace(deployment)
             }
             withContext(Dispatchers.Main.immediate) {
@@ -206,16 +211,85 @@ class PrivateApplicationRenderingTest {
                     frames()
                     assertEquals(1.75, resolvedTemperature.get())
                     runtime.pluginManager.setEnabled("provider.model-settings.catalog", false)
+                    runtime.pluginManager.setEnabled("provider.artifacts.platform", false)
+                    frames()
+                    assertTrue("Message kcode…" in semanticsLabels(scene))
+                    assertTrue(slots.snapshot().settings != null)
+                    assertNull(slots.snapshot().artifacts)
+                    assertTrue(slots.snapshot().navigation.none { it.id == "artifacts" })
+                    assertEquals(ai.meteor.kcode.plugin.api.PluginState.Active,
+                        runtime.diagnostics().plugins.single { it.id == "provider.ui.compose" }.state)
+                    runtime.pluginManager.setEnabled("provider.artifacts.platform", true)
+                    frames()
+                    assertTrue(slots.snapshot().artifacts != null)
+                    assertTrue(slots.snapshot().navigation.any { it.id == "artifacts" })
                     resolvedTemperature.set(null)
                     frames()
                     assertNull(resolvedTemperature.get())
-                    assertTrue("Message kcode…" !in semanticsLabels(scene))
+                    assertTrue("Message kcode…" in semanticsLabels(scene))
+                    assertTrue(slots.snapshot().settings != null)
+                    assertTrue(slots.snapshot().settingsSections.none { it.id == "model" })
                     runtime.pluginManager.setEnabled("provider.model-settings.catalog", true)
                     frames()
                     assertEquals(1.75, resolvedTemperature.get())
                     runtime.pluginManager.replace(modelSettingsDeployment)
                     frames()
                     assertEquals(1.0, resolvedTemperature.get())
+
+                    clickSemanticAction(scene, "New chat")
+                    frames()
+                    val settingsRequest = AtomicReference<ai.meteor.kcode.plugin.ui.api.SettingsPageRequest?>(null)
+                    val settingsProbe = slots.registerSettings(ai.meteor.kcode.plugin.ui.api.SettingsSection(
+                        id = "test.settings-probe", order = -1000, icon = KcodeIconAsset.Settings,
+                        title = { "Probe" }, description = { "" }, renderer = UiRenderer { },
+                        isVisible = { request ->
+                            SideEffect { settingsRequest.set(request) }
+                            false
+                        },
+                    ))
+                    for ((providerId, changedTemperature) in listOf(
+                        "provider.generation" to 0.25,
+                        "provider.sessions.history" to 0.35,
+                        "provider.history.platform" to 0.45,
+                    )) {
+                        settingsRequest.set(null)
+                        runtime.pluginManager.setEnabled(providerId, false)
+                        frames()
+                        assertEquals(ai.meteor.kcode.plugin.api.PluginState.Active,
+                            runtime.diagnostics().plugins.single { it.id == "provider.ui.compose" }.state)
+                        assertTrue("Message kcode…" !in semanticsLabels(scene))
+                        assertTrue("Open settings" in semanticsLabels(scene))
+                        frames()
+                        val compactScene = ImageComposeScene(width = 400, height = 600, coroutineContext = coroutineContext) {
+                            runtime.Render(ApplicationHostOptions())
+                        }
+                        try {
+                            repeat(12) { frame -> compactScene.render(frame * 50000000L).close(); delay(50) }
+                            if ("Open settings" !in semanticsLabels(compactScene)) {
+                                clickSemanticAction(compactScene, "Open sidebar")
+                                repeat(12) { frame -> compactScene.render((frame + 12) * 50000000L).close(); delay(50) }
+                            }
+                            assertTrue("Open settings" in semanticsLabels(compactScene), "Missing compact navigation without $providerId")
+                            assertTrue("Message kcode…" !in semanticsLabels(compactScene))
+                        } finally {
+                            compactScene.close()
+                        }
+                        clickSemanticAction(scene, "Open settings")
+                        frames()
+                        val openSettings = requireNotNull(settingsRequest.get())
+                        assertTrue(openSettings.sections.any { it.id == "language" })
+                        openSettings.onSettingsChange(modelPolicy.update(openSettings.appSettings,
+                            requireNotNull(modelPolicy.resolve(openSettings.appSettings, runtime.modelCatalog())).copy(temperature = changedTemperature)))
+                        frames()
+                        assertEquals(changedTemperature, modelPolicy.resolve(requireNotNull(settingsRequest.get()).appSettings, runtime.modelCatalog())?.temperature)
+                        runtime.pluginManager.setEnabled(providerId, true)
+                        frames()
+                        assertEquals(changedTemperature, resolvedTemperature.get())
+                        requireNotNull(settingsRequest.get()).onDismiss()
+                        frames()
+                        assertTrue("Message kcode…" in semanticsLabels(scene))
+                    }
+                    settingsProbe.dispose()
 
                     val configuredLocale = localizationDeployment.copy(config = Json.parseToJsonElement(
                         """{"translations":{"en":{"message_placeholder":"Private composer"}}}""",
@@ -229,12 +303,70 @@ class PrivateApplicationRenderingTest {
                         runtime.pluginManager.replace(configuredLocale.copy(config = Json.parseToJsonElement("""{"defaultLanguage":"absent"}""")))
                     }
                     assertSame(retainedLocale, slots.snapshot().localization)
-                    runtime.pluginManager.setEnabled("provider.localization.default", false)
+                    val fallbackRequest = AtomicReference<ai.meteor.kcode.plugin.ui.api.SettingsPageRequest?>(null)
+                    val fallbackCatalog = AtomicReference<ai.meteor.kcode.localization.TranslationCatalog?>(null)
+                    val fallbackModels = AtomicReference<ai.meteor.kcode.model.ModelCatalogSnapshot?>(null)
+                    val fallbackProbe = slots.registerSettings(ai.meteor.kcode.plugin.ui.api.SettingsSection(
+                        id = "test.localized-settings", order = -1000, icon = KcodeIconAsset.Settings,
+                        title = { "Probe" }, description = { "" }, renderer = UiRenderer { },
+                        texts = mapOf("test.feature.setting" to "Feature option"),
+                        isVisible = { request ->
+                            val catalog = ai.meteor.kcode.localization.LocalTranslationCatalog.current
+                            val models = ai.meteor.kcode.plugin.ui.api.LocalModelCatalog.current
+                            SideEffect { fallbackRequest.set(request); fallbackCatalog.set(catalog); fallbackModels.set(models) }
+                            false
+                        },
+                    ))
+                    runtime.pluginManager.setEnabled("feature.localization", false)
                     frames()
                     assertTrue("Private composer" !in semanticsLabels(scene))
-                    runtime.pluginManager.setEnabled("provider.localization.default", true)
+                    assertTrue("Message kcode…" in semanticsLabels(scene))
+                    assertEquals(ai.meteor.kcode.plugin.api.PluginState.Active,
+                        runtime.diagnostics().plugins.single { it.id == "provider.ui.compose" }.state)
+                    clickSemanticAction(scene, "Open settings")
+                    frames()
+                    val preparedSettings = requireNotNull(fallbackRequest.get())
+                    assertTrue(preparedSettings.sections.none { it.id == "language" })
+                    assertTrue(preparedSettings.sections.any { it.id == "model" })
+                    assertTrue(preparedSettings.sections.any { it.id == "search" })
+                    val heldCatalog = requireNotNull(fallbackCatalog.get())
+                    val featureLabel = ai.meteor.kcode.localization.LocalizedText("test.feature.setting")
+                    assertEquals("Feature option", heldCatalog.translate(ai.meteor.kcode.localization.AppLanguage.English, featureLabel))
+                    val privateLayoutLoader = requireNotNull(slots.snapshot().layout).javaClass.classLoader
+                    assertSame(privateLayoutLoader, Class.forName(
+                        "ai.meteor.kcode.plugin.uitexts.uipages.BuiltinUiTextsKt", false, privateLayoutLoader,
+                    ).classLoader)
+                    val fallbackTheme = slots.snapshot().theme
+                    for ((sectionId, expectedLabel) in listOf("model" to "Provider", "search" to "Search provider")) {
+                        val section = preparedSettings.sections.single { it.id == sectionId }
+                        val formScene = ImageComposeScene(width = 800, height = 600, coroutineContext = coroutineContext) {
+                            CompositionLocalProvider(
+                                ai.meteor.kcode.localization.LocalTranslationCatalog provides heldCatalog,
+                                ai.meteor.kcode.localization.LocalAppLanguage provides ai.meteor.kcode.localization.AppLanguage.English,
+                                ai.meteor.kcode.plugin.ui.api.LocalModelCatalog provides requireNotNull(fallbackModels.get()),
+                            ) {
+                                fallbackTheme?.Render {
+                                    section.renderer.Render(ai.meteor.kcode.plugin.ui.api.SettingsSectionRequest(preparedSettings) { })
+                                }
+                            }
+                        }
+                        try {
+                            repeat(8) { frame -> formScene.render(frame * 50000000L).close(); delay(50) }
+                            assertTrue(expectedLabel in semanticsLabels(formScene), "Missing private $sectionId form label")
+                        } finally { formScene.close() }
+                    }
+                    preparedSettings.onSettingsChange(modelPolicy.update(preparedSettings.appSettings,
+                        requireNotNull(modelPolicy.resolve(preparedSettings.appSettings, runtime.modelCatalog())).copy(temperature = 0.55)))
+                    frames()
+                    assertEquals(0.55, resolvedTemperature.get())
+                    fallbackProbe.dispose()
+                    assertNull(heldCatalog.displayText(ai.meteor.kcode.localization.AppLanguage.English, featureLabel, emptyList()))
+                    assertEquals("Settings", heldCatalog.translate(ai.meteor.kcode.localization.AppLanguage.English, ai.meteor.kcode.localization.UiText.Settings))
+                    requireNotNull(fallbackRequest.get()).onDismiss()
+                    runtime.pluginManager.setEnabled("feature.localization", true)
                     frames()
                     assertTrue("Private composer" in semanticsLabels(scene))
+                    assertFailsWith<IllegalStateException> { heldCatalog.translate(ai.meteor.kcode.localization.AppLanguage.English, ai.meteor.kcode.localization.UiText.Settings) }
                     runtime.pluginManager.replace(localizationDeployment)
                     frames()
                     assertTrue("Message kcode…" in semanticsLabels(scene))
@@ -299,15 +431,34 @@ class PrivateApplicationRenderingTest {
             directory.walkBottomUp().forEach { it.setWritable(true); it.delete() }
         }
     }
-    /** Read only the scene owned by this test; Compose 1.8 exposes no ImageComposeScene semantics API. */
-    private fun semanticsLabels(imageScene: ImageComposeScene): List<String> {
+    private fun clickSemanticAction(imageScene: ImageComposeScene, label: String) {
+        fun matches(node: androidx.compose.ui.semantics.SemanticsNode): Boolean =
+            label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() ||
+                node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == label } ||
+                node.children.any(::matches)
+        fun find(node: androidx.compose.ui.semantics.SemanticsNode): (() -> Boolean)? {
+            if (matches(node)) {
+                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)?.action?.let { return it }
+            }
+            return node.children.firstNotNullOfOrNull(::find)
+        }
+        val click = requireNotNull(find(semanticsOwner(imageScene).unmergedRootSemanticsNode)) { "Missing action: $label" }
+        assertTrue(click())
+    }
+
+    private fun semanticsOwner(imageScene: ImageComposeScene): SemanticsOwner {
         fun field(target: Any, name: String): Any = target.javaClass.getDeclaredField(name).run {
             isAccessible = true
             get(target)
         }
         val scene = field(imageScene, "scene")
         val root = field(scene, "mainOwner")
-        val owner = root.javaClass.getMethod("getSemanticsOwner").invoke(root) as SemanticsOwner
+        return root.javaClass.getMethod("getSemanticsOwner").invoke(root) as SemanticsOwner
+    }
+
+    /** Read only the scene owned by this test; Compose 1.8 exposes no ImageComposeScene semantics API. */
+    private fun semanticsLabels(imageScene: ImageComposeScene): List<String> {
+        val owner = semanticsOwner(imageScene)
         val labels = mutableListOf<String>()
         fun collect(node: androidx.compose.ui.semantics.SemanticsNode) {
             labels += node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }

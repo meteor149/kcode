@@ -43,7 +43,7 @@ class ImageSavingCompositionTest {
         }, { saver = it }, { exporter = it }).copy(profile = KcodePluginProfile(disabled = setOf(ProviderId))))
         try {
             assertEquals(0, opened)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.export.conversation" }.state)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.conversation-export" }.state)
             runtime.pluginManager.setEnabled(ProviderId, true)
             val oldSaver = saver
             val oldExporter = exporter
@@ -51,11 +51,22 @@ class ImageSavingCompositionTest {
             runtime.pluginManager.setEnabled(ProviderId, false)
             assertEquals(1, closed)
             assertFailsWith<IllegalStateException> { oldSaver.share(image, "test.png") }
+            assertFailsWith<IllegalStateException> {
+                oldExporter.export(
+                    ai.meteor.kcode.export.ConversationExportRequest(1, "test", emptyList(), activeSecret = "", truncatedLabel = "truncated"),
+                    ai.meteor.kcode.export.ExportAction.Save,
+                    object : ai.meteor.kcode.export.ConversationImageRenderContext {
+                        override val textMeasurer: androidx.compose.ui.text.TextMeasurer get() = error("Retired exporter must not measure")
+                        override val graphicsLayer: androidx.compose.ui.graphics.layer.GraphicsLayer get() = error("Retired exporter must not draw")
+                        override val layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr
+                    },
+                )
+            }
             runtime.pluginManager.setEnabled(ProviderId, true)
             assertEquals(2, opened)
             assertNotSame(oldSaver, saver)
             assertNotSame(oldExporter, exporter)
-            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.export.conversation" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.conversation-export" }.state)
         } finally { runtime.close() }
         assertEquals(opened, closed)
     }
@@ -147,5 +158,5 @@ class ImageSavingCompositionTest {
             error("Saving fixture must not inspect pixels")
     }
 
-    private companion object { const val ProviderId = "provider.export.image-saving" }
+    private companion object { const val ProviderId = "feature.conversation-export" }
 }

@@ -6,7 +6,8 @@ import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.TranslationCatalog
 import ai.meteor.kcode.localization.UiText
 import kotlin.test.assertNull
-import ai.meteor.kcode.plugin.localization.LocalizationProviderPlugin
+import kotlin.test.assertTrue
+import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import ai.meteor.kcode.plugin.api.KcodeConversationCommands
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
 import ai.meteor.kcode.plugin.api.KcodeLocalization
@@ -32,7 +33,7 @@ class LocalizationPrivateLoadingTest {
     fun privateDictionaryRebindsUiAndGoalCommandsAcrossRestart(): Unit = runBlocking {
         val directory = Files.createTempDirectory("localization-private").toFile()
         val artifact = File(directory, "localization.jar")
-        File(LocalizationProviderPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
+        File(LocalizationFeaturePlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
         check(artifact.setReadOnly())
         lateinit var catalog: TranslationCatalog
         lateinit var commands: KcodeConversationCommands
@@ -72,22 +73,29 @@ class LocalizationPrivateLoadingTest {
         try {
             assertEquals("New chat", catalog.translate(AppLanguage.English, UiText.NewChat))
             val deployment = DynamicPluginSpec(
-                id = "provider.localization.default", version = "private-dictionary",
+                id = "feature.localization", version = "private-dictionary",
                 artifactPath = artifact.path,
                 sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
-                entryClass = LocalizationProviderPlugin::class.java.name,
+                entryClass = LocalizationFeaturePlugin::class.java.name,
                 config = Json.parseToJsonElement("""{"defaultLanguage":"en","translations":{"en":{"new_chat":"Private action","goal_no_goal":"Private goal message"}}}"""),
             )
             runtime.pluginManager.replace(deployment)
             val original = catalog
+            val languagePolicy = checkNotNull(original.languageSettings)
+            assertNotSame(ai.meteor.kcode.localization.LanguageSettingsPolicy::class.java.classLoader,
+                languagePolicy.javaClass.classLoader)
+            val savedLanguage = languagePolicy.update(ai.meteor.kcode.test.LegacySettings(language = "zh"), AppLanguage.English)
+            assertEquals(AppLanguage.English, languagePolicy.preferredLanguage(savedLanguage))
             assertNotSame(TranslationCatalog::class.java.classLoader, original.javaClass.classLoader)
-            assertNotSame(LocalizationProviderPlugin::class.java.classLoader, original.javaClass.classLoader)
+            assertNotSame(LocalizationFeaturePlugin::class.java.classLoader, original.javaClass.classLoader)
             for (name in listOf("BuiltinTranslationsKt", "DictionaryConfiguration", "TranslationFormattingKt")) {
                 assertEquals(original.javaClass.classLoader, Class.forName(
                     "ai.meteor.kcode.plugin.localization.$name", false, original.javaClass.classLoader,
                 ).classLoader)
             }
             assertEquals("Private action", original.translate(AppLanguage.English, UiText.NewChat))
+            assertNull(original.displayText(AppLanguage.English, ai.meteor.kcode.localization.LocalizedText("test.feature.setting"), emptyList()))
+            assertFailsWith<IllegalStateException> { original.translate(AppLanguage.English, ai.meteor.kcode.localization.LocalizedText("test.feature.setting")) }
             assertEquals("Private goal message", goalFeedback())
             assertSame(original, slots.snapshot().localization)
             assertFailsWith<IllegalStateException> {
@@ -96,29 +104,35 @@ class LocalizationPrivateLoadingTest {
             assertSame(original, catalog)
             assertEquals("Private goal message", goalFeedback())
             val oldCommand = checkNotNull(commands.committedSnapshot.resolve("/goal"))
-            runtime.pluginManager.setEnabled("provider.localization.default", false)
-            for (id in listOf("provider.ui.compose", "provider.ui.chat", "provider.ui.settings.language", "consumer.commands.goal", "consumer.schedules.application", "consumer.localization.ui")) {
-                assertEquals(PluginState.Pending, state(id), id)
+            runtime.pluginManager.setEnabled("feature.localization", false)
+            for (id in listOf("provider.ui.compose", "provider.ui.chat")) {
+                assertEquals(PluginState.Active, state(id), id)
             }
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
             assertNull(slots.snapshot().localization)
             assertNull(original.snapshot())
             assertNull(original.displayText(AppLanguage.English, UiText.NewChat, emptyList()))
+            assertNull(original.languageSettings)
+            assertFailsWith<IllegalStateException> { languagePolicy.preferredLanguage(savedLanguage) }
+            assertFailsWith<IllegalStateException> { languagePolicy.update(savedLanguage, AppLanguage.Chinese) }
             assertFailsWith<IllegalStateException> { original.translate(AppLanguage.English, UiText.NewChat) }
             assertFailsWith<IllegalStateException> { oldCommand.execute(request) }
             assertNull(commands.committedSnapshot.resolve("/goal"))
+            assertEquals(listOf("conversation-export"), slots.snapshot().conversationDecorations.map { it.id })
             runtime.close()
             runtime = KcodePluginRuntime.create(configuration())
-            assertEquals(PluginState.Pending, state("provider.ui.compose"))
-            runtime.pluginManager.setEnabled("provider.localization.default", true)
+            assertEquals(PluginState.Active, state("provider.ui.compose"))
+            runtime.pluginManager.setEnabled("feature.localization", true)
             assertNotSame(original, catalog)
+            assertEquals(AppLanguage.English, checkNotNull(catalog.languageSettings).preferredLanguage(savedLanguage))
             assertEquals("Private action", catalog.translate(AppLanguage.English, UiText.NewChat))
             assertEquals("Private goal message", goalFeedback())
             assertEquals(PluginState.Active, state("provider.ui.compose"))
             val restored = catalog
-            runtime.pluginManager.uninstall("provider.localization.default")
+            runtime.pluginManager.uninstall("feature.localization")
             assertFailsWith<IllegalStateException> { restored.translate(AppLanguage.English, UiText.NewChat) }
-            assertEquals(PluginState.Pending, state("provider.ui.compose"))
-            runtime.pluginManager.setEnabled("provider.localization.default", true)
+            assertEquals(PluginState.Active, state("provider.ui.compose"))
+            runtime.pluginManager.setEnabled("feature.localization", true)
             assertNotSame(restored, catalog)
             assertEquals("New chat", catalog.translate(AppLanguage.English, UiText.NewChat))
             assertEquals(AppLanguage.Chinese, catalog.snapshot()?.defaultLanguage)

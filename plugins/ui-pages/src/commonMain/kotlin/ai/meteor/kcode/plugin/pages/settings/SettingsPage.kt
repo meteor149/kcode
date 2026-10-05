@@ -22,7 +22,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 @Composable
 fun SettingsPageOverlay(request: SettingsPageRequest) {
     var route by rememberSaveable { mutableStateOf<String?>(null) }
-    val sections = request.sections.filter { it.isVisible(request) }
+    val sections = request.sections.mapNotNull { if (it.isVisible(request)) it else null }
     val selected = sections.firstOrNull { it.id == route }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(route, selected) {

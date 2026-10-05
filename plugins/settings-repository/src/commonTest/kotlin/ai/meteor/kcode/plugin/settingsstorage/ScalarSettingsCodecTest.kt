@@ -2,109 +2,102 @@ package ai.meteor.kcode.plugin.settingsstorage
 
 import ai.meteor.kcode.settings.StoredAppSettings
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ScalarSettingsCodecTest {
+    private fun document(encoded: String) = Json.parseToJsonElement(encoded) as JsonObject
+
     @Test
-    fun partialLegacySnapshotsUseProviderDefaultsAndPreserveExplicitEmptyValues() {
+    fun legacySnapshotPreservesAbsenceExplicitValuesAndUnknownRootFields() {
         val access = MemoryAccess()
-        access.values["settings_snapshot.v1"] = """{"provider":"private.gateway","language":"en"}"""
-        assertEquals(defaultSettings().copy(provider = "private.gateway", language = "en"), ScalarSettingsCodec().load(access))
-        access.values["settings_snapshot.v1"] = """{"provider":"","modelId":"","language":"","temperature":0}"""
-        assertEquals(defaultSettings().copy(provider = "", modelId = "", language = "", temperature = 0.0),
-            ScalarSettingsCodec().load(access))
+        val legacy = document("""{"provider":"private.gateway","language":"","temperature":0,"future":{"value":null},"modelApiKeys":{"disabled":""}}""")
+        access.values["settings_snapshot.v1"] = legacy.toString()
+        val migrated = ScalarSettingsCodec().load(access)
+        assertEquals(legacy, migrated.legacyValues)
+        assertTrue("modelId" !in migrated.legacyValues)
+        assertEquals(emptyMap(), migrated.namespaces)
         access.values["settings_snapshot.v1"] = """{"provider":null}"""
-        assertFailsWith<IllegalArgumentException> { ScalarSettingsCodec().load(access) }
+        assertEquals(JsonNull, ScalarSettingsCodec().load(access).legacyValues["provider"])
     }
 
     @Test
-    fun legacyDefaultsAndEveryFieldRoundTripThroughAFreshCodec() {
+    fun emptyStorageHasNoFeatureDefaultsAndScalarImportPreservesEmptyCredentials() {
         val access = MemoryAccess()
-        assertEquals(defaultSettings(), ScalarSettingsCodec().load(access))
+        assertEquals(StoredAppSettings(), ScalarSettingsCodec().load(access))
         access.values["web_search_api_key"] = "legacy-search"
-        assertEquals("bright_data", ScalarSettingsCodec().load(access).webSearchProvider)
-        val complete = settings("first")
-        ScalarSettingsCodec().save(access, complete)
-        assertEquals(complete, ScalarSettingsCodec().load(access))
-        assertEquals("first", access.values["model_provider"])
-        assertEquals("fixture-first", access.values["model_api_key.acme:v1"])
-        ScalarSettingsCodec().save(access, complete.copy(modelApiKeys = emptyMap(), searchApiKeys = emptyMap()))
-        assertEquals(emptyMap(), ScalarSettingsCodec().load(access).modelApiKeys)
-        assertEquals("", access.values["model_api_key.acme:v1"])
-        assertEquals(emptyMap(), ScalarSettingsCodec().load(access).searchApiKeys)
-        assertEquals("", access.values["search_api_key.custom.route"])
+        access.values["model_api_key.unloaded.provider"] = ""
+        val migrated = ScalarSettingsCodec().load(access)
+        assertEquals(document("""{"webSearchApiKey":"legacy-search","modelApiKeys":{"unloaded.provider":""}}"""), migrated.legacyValues)
+        assertTrue("webSearchProvider" !in migrated.legacyValues)
     }
 
     @Test
-    fun everyFailedWritePreservesTheCompleteLegacyOrCommittedSnapshotAndAllowsRetry() {
+    fun versionTwoCommitDoesNotRewriteHistoricalOrUnknownScalarKeys() {
+        val access = MemoryAccess(mutableMapOf("model_provider" to "historical", "future_scalar" to "retain"))
+        val previous = access.values.toMap()
+        ScalarSettingsCodec().save(access, settings("new"))
+        assertEquals(settings("new"), ScalarSettingsCodec().load(access))
+        assertEquals(previous, access.values.filterKeys { it != "settings_snapshot.v2" })
+        assertEquals(1, access.writes)
+    }
+
+    @Test
+    fun failedSingleCommitPreservesLegacyAndCommittedDataExactlyAndAllowsRetry() {
         for (committed in listOf(false, true)) {
             for (failure in listOf("false", "throw", "cancel")) {
-                val baseline = MemoryAccess()
+                val baseline = MemoryAccess(mutableMapOf("model_provider" to "legacy", "future_scalar" to "retain"))
                 if (committed) ScalarSettingsCodec().save(baseline, settings("old"))
-                else {
-                    baseline.values["model_provider"] = "legacy"
-                    baseline.values["model_api_key.obsolete"] = "previous-secret"
-                    baseline.values["shell_execution_mode"] = "root"
-                }
                 val previous = ScalarSettingsCodec().load(baseline)
-                val probe = MemoryAccess(baseline.values.toMutableMap())
-                ScalarSettingsCodec().save(probe, settings("new"))
-                for (position in 1..probe.writes) {
-                    val access = MemoryAccess(baseline.values.toMutableMap(), position, failure)
-                    assertFailsWith<Exception>("$committed/$failure/$position") {
-                        ScalarSettingsCodec().save(access, settings("new"))
-                    }
-                    assertEquals(previous, ScalarSettingsCodec().load(access), "$committed/$failure/$position")
-                    access.failAt = null
-                    ScalarSettingsCodec().save(access, settings("new"))
-                    assertEquals(settings("new"), ScalarSettingsCodec().load(access))
-                }
+                val access = MemoryAccess(baseline.values.toMutableMap(), 1, failure)
+                assertFailsWith<Exception> { ScalarSettingsCodec().save(access, settings("new")) }
+                assertEquals(baseline.values, access.values)
+                assertEquals(previous, ScalarSettingsCodec().load(access))
+                access.failAt = null
+                ScalarSettingsCodec().save(access, settings("new"))
+                assertEquals(settings("new"), ScalarSettingsCodec().load(access))
             }
         }
     }
 
     @Test
-    fun failedCommitLeavesRealPartialScalarChangesInvisibleAfterReopen() {
-        val access = MemoryAccess()
-        val previous = settings("old")
-        ScalarSettingsCodec().save(access, previous)
-        val restarted = MemoryAccess(access.values, failAt = 1, failure = "commit")
-        assertFailsWith<IllegalStateException> { ScalarSettingsCodec().save(restarted, settings("new")) }
-        assertEquals("new", access.values["model_provider"])
-        assertEquals(previous, ScalarSettingsCodec().load(MemoryAccess(access.values)))
-        assertTrue(access.values["settings_snapshot.v1"].toString().contains("old"))
-    }
-
-    @Test
-    fun corruptCommittedSnapshotsFailInsteadOfReadingPartialLegacyKeys() {
-        val access = MemoryAccess()
-        ScalarSettingsCodec().save(access, settings("old"))
-        access.values["model_provider"] = "partial"
-        access.values["settings_snapshot.v1"] = "{broken"
+    fun corruptVersionTwoCannotFallBackToValidHistoricalData() {
+        val access = MemoryAccess(mutableMapOf("settings_snapshot.v1" to """{"provider":"legacy"}""",
+            "settings_snapshot.v2" to "{broken"))
+        assertFailsWith<IllegalArgumentException> { ScalarSettingsCodec().load(access) }
+        access.values["settings_snapshot.v2"] = """{"namespaces":{"invalid":7}}"""
         assertFailsWith<IllegalArgumentException> { ScalarSettingsCodec().load(access) }
     }
 
     @Test
-    fun committedSnapshotsPreserveTheNativeScalarDoubleDomain() {
-        for (temperature in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+    fun versionOneNamespacesAndUnknownLegacyValuesSurviveCommitAndReopen() {
+        val access = MemoryAccess(mutableMapOf("settings_snapshot.v1" to
+            """{"namespaces":{"disabled.feature":{"secret":"fixture","future":[null,{}]}},"future.root":[null,{"key.with.dots":""}]}"""))
+        val migrated = ScalarSettingsCodec().load(access)
+        ScalarSettingsCodec().save(access, migrated)
+        assertEquals(migrated, ScalarSettingsCodec().load(MemoryAccess(access.values)))
+        assertTrue(access.values["settings_snapshot.v1"].toString().contains("future.root"))
+    }
+
+    @Test
+    fun opaqueDocumentsPreserveTheLegacyFloatingPointDomain() {
+        for (value in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
             val access = MemoryAccess()
-            val stored = settings("special").copy(temperature = temperature)
+            val stored = StoredAppSettings(legacyValues = JsonObject(mapOf("temperature" to JsonPrimitive(value))))
             ScalarSettingsCodec().save(access, stored)
             assertEquals(stored, ScalarSettingsCodec().load(access))
         }
     }
 
     private fun settings(name: String) = StoredAppSettings(
-        provider = name, modelId = "model-$name", modelApiKeys = mapOf("acme:v1" to "fixture-$name"),
-        modelEndpoint = "https://fixture.invalid/$name", modelRegion = "region-$name",
-        modelDeployment = "deployment-$name", modelApiVersion = "version-$name",
-        dashscopeRegion = "region-$name", webSearchApiKey = "search-$name", exaSearchApiKey = "exa-$name",
-        searchApiKeys = mapOf("custom.route" to "custom-$name", "empty.route" to ""),
-        webSearchProvider = "exa", temperature = 1.2, language = "en", shellExecutionMode = "adb",
-        toolPermissionMode = "deny",
+        namespaces = mapOf("external.feature" to document("""{"token":"$name","future":[null,{"key.with.dots":""}]}""")),
+        legacyValues = document("""{"provider":"$name","unknown":[1,false,null]}"""),
     )
 
     private class MemoryAccess(
@@ -120,9 +113,9 @@ class ScalarSettingsCodecTest {
         override fun encodeDouble(key: String, value: Double) = write(key, value)
         private fun write(key: String, value: Any): Boolean {
             writes++
-            if ((failure == "commit" && key == "settings_snapshot.v1") || (failure != "commit" && writes == failAt)) {
+            if (writes == failAt) {
                 when (failure) {
-                    "throw", "commit" -> error("injected write failure")
+                    "throw" -> error("injected write failure")
                     "cancel" -> throw CancellationException("injected cancellation")
                     else -> return false
                 }

@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.PluginDescriptor
@@ -9,6 +11,8 @@ import ai.meteor.kcode.plugin.settingsstorage.androidSettingsStoreFactory
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
 import ai.meteor.kcode.settings.native.MmkvSettingsLease
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
@@ -17,7 +21,6 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -44,7 +47,7 @@ class AndroidSettingsStorageTest {
         try {
             val first = factory.create()
             val second = factory.create()
-            val settings = StoredAppSettings(provider = "custom", modelApiKeys = mapOf("custom" to "fixture"), language = "en")
+            val settings = LegacySettings(provider = "custom", modelApiKeys = mapOf("custom" to "fixture"), language = "en")
             try {
                 first.store.save(settings)
                 assertEquals(settings, second.store.load())
@@ -87,7 +90,7 @@ class AndroidSettingsStorageTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.settings-storage", version = "test", entryClass = AndroidFixtureSettingsStorage::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName, config = storageDirectory.path,
             ))
             val previous = store
@@ -95,7 +98,7 @@ class AndroidSettingsStorageTest {
             assertTrue(delegate.javaClass.classLoader !== FactorySettingsProviderPlugin::class.java.classLoader)
             val lease = delegate.javaClass.getDeclaredField("lease").apply { isAccessible = true }.get(delegate)
             assertTrue(lease.javaClass === MmkvSettingsLease::class.java)
-            val settings = StoredAppSettings(provider = "custom", modelApiKeys = mapOf("custom" to "fixture"), language = "en")
+            val settings = LegacySettings(provider = "custom", modelApiKeys = mapOf("custom" to "fixture"), language = "en")
             previous.save(settings)
             val restored = previous.load()
             assertTrue(restored.javaClass === StoredAppSettings::class.java)

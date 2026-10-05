@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
 data class ApplicationHostOptions(
     val generationRunner: ChatGenerationRunner? = null,
     val shellSettingsAvailable: Boolean = false,
-    val toolPermissionControlsAvailable: Boolean = false,
+    val conversationSettingsControlsAvailable: Boolean = false,
     val onShellExecutionModeChanged: (ShellExecutionMode) -> Unit = {},
     val onToolPermissionModeChanged: (ToolPermissionMode) -> Unit = {},
 )

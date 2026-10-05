@@ -1,0 +1,15 @@
+<resources>
+    <string name="unknown_error">Unknown error</string>
+    <string name="export_action">Export method</string>
+    <string name="export">Export</string>
+    <string name="export_conversation">Export conversation as image</string>
+    <string name="exporting_conversation">Creating conversation image…</string>
+    <string name="export_saved">Saved to %1$s</string>
+    <string name="export_saved_truncated">Saved to %1$s. The conversation exceeded the image limit and was truncated.</string>
+    <string name="export_failed">Could not export the conversation: %1$s</string>
+    <string name="export_unsupported">Image export is not supported on this platform yet.</string>
+    <string name="export_truncated_footer">Conversation truncated at the maximum image length.</string>
+    <string name="save_to_photos">Save to photos</string>
+    <string name="share_image">Share image</string>
+    <string name="share_opened">System sharing opened.</string>
+</resources>

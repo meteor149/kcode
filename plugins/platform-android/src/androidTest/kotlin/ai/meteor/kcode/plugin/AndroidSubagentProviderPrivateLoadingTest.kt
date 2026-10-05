@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.RootAgentPath
 import ai.meteor.kcode.SubagentCoordinatorFactory
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -7,7 +9,6 @@ import ai.meteor.kcode.plugin.api.KcodeSubagents
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -55,9 +56,9 @@ class AndroidSubagentProviderPrivateLoadingTest {
         try {
             assertEquals(5, factory.maxConcurrency)
             val deployment = DynamicPluginSpec(
-                id = "provider.subagents.in-process", version = "private-capacity", artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
-                entryClass = InProcessSubagentProviderPlugin::class.java.name,
+                id = "feature.subagents", version = "private-capacity", artifactPath = artifact.path,
+                sha256 = packageFileSha256(artifact),
+                entryClass = SubagentFeaturePlugin::class.java.name,
                 config = Json.parseToJsonElement("""{"maxConcurrency":2}"""),
                 packageName = instrumentation.context.packageName,
             )
@@ -91,7 +92,7 @@ class AndroidSubagentProviderPrivateLoadingTest {
             }
             assertSame(original, factory)
             assertEquals(2, factory.maxConcurrency)
-            val withdrawing = async { runtime.pluginManager.setEnabled("provider.subagents.in-process", false) }
+            val withdrawing = async { runtime.pluginManager.setEnabled("feature.subagents", false) }
             withTimeout(5_000) { cleaning.await() }
             assertFalse(withdrawing.isCompleted)
             assertEquals(null, original.maxConcurrency)
@@ -101,13 +102,13 @@ class AndroidSubagentProviderPrivateLoadingTest {
             assertFailsWith<IllegalStateException> { coordinator.list(RootAgentPath, null) }
             runtime.close()
             runtime = KcodePluginRuntime.create(configuration)
-            runtime.pluginManager.setEnabled("provider.subagents.in-process", true)
+            runtime.pluginManager.setEnabled("feature.subagents", true)
             assertNotSame(original, factory)
             assertEquals(2, factory.maxConcurrency)
             val restored = factory
-            runtime.pluginManager.uninstall("provider.subagents.in-process")
+            runtime.pluginManager.uninstall("feature.subagents")
             assertEquals(null, restored.maxConcurrency)
-            runtime.pluginManager.setEnabled("provider.subagents.in-process", true)
+            runtime.pluginManager.setEnabled("feature.subagents", true)
             assertEquals(5, factory.maxConcurrency)
         } finally {
             release.complete(Unit)

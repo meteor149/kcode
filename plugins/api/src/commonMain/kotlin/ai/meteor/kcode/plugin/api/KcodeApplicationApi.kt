@@ -20,13 +20,29 @@ import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.settings.ModelSettingsPolicy
 import ai.meteor.kcode.settings.AppSettingsStore
+import ai.meteor.kcode.settings.withTransactions
+import ai.meteor.kcode.settings.withMutationValidation
+import ai.meteor.kcode.settings.RegisteredSettingsMutations
+import ai.meteor.kcode.settings.SettingsMutationRegistry
 import ai.meteor.kcode.webcontainer.WebContainerController
 import androidx.compose.runtime.Composable
 import org.cordis.Context
 import org.cordis.Service
 import org.cordis.ServiceKey
 
-class KcodeSettings(ctx: Context, val store: AppSettingsStore) : Service<Unit>(ctx, Key) {
+class KcodeSettings(ctx: Context, store: AppSettingsStore) : Service<Unit>(ctx, Key) {
+    private val owner = PluginOperationOwner("Settings transactions")
+    val store = store.withTransactions(owner)
+    private val mutationRegistry = RegisteredSettingsMutations()
+    val mutations: SettingsMutationRegistry = mutationRegistry
+    /** UI/alternative-root writes require the live feature owner through durable commit. */
+    val mutationStore: AppSettingsStore = this.store.withMutationValidation(mutationRegistry)
+    init {
+        ctx.effect(dispose = {
+            owner.requireCanClose()
+            try { mutationRegistry.close() } finally { owner.close() }
+        }, label = "settings transactions")
+    }
     companion object { val Key = ServiceKey<KcodeSettings>("settings") }
 }
 

@@ -1,7 +1,7 @@
 # Plugin development
 
 Read [plugin architecture](plugin-architecture.md) first. Module entry points and configuration
-are documented in the corresponding `plugins/*/README.md`. The current shared ABI is API 34,
+are documented in the corresponding `plugins/*/README.md`. The current shared ABI is API 60,
 defined in [AgentPluginManager.kt](../plugins/api/src/commonMain/kotlin/ai/meteor/kcode/plugin/AgentPluginManager.kt).
 
 ## Dependencies and entry points
@@ -38,6 +38,11 @@ skip release of the others.
 
 ## Dynamic JARs/APKs
 
+The [cross-platform package format](plugin-package-format.md) wraps platform-specific JAR/APK
+variants under one logical release. `AgentPluginManager.importPackages` verifies/stages archives
+through the `pluginPackages` provider and commits their dependency set in one composition
+transaction. Native loaders receive resolved `DynamicPluginSpec` values rather than archives.
+
 `DynamicPluginSpec` declares the ID, version, entry class, artifact path, SHA-256, dependencies,
 configuration, and API version. Install or replace through `pluginManager`; do not modify
 the Loader directly to bypass composition persistence or snapshot publication. Configuration
@@ -66,11 +71,11 @@ UID-2000 driver are described in the [verification guide](verification.md).
 
 ## Persistence, models, and localization
 
-Access settings through `AppSettingsStore`. MMKV stores small scalar preferences; maintain
-stable keys together with their DTOs. Use Room/SQLite for structured conversation data,
+Access settings through `AppSettingsStore`. MMKV stores small encrypted preference documents;
+maintain versioned snapshot envelopes and read-only historical key migration. Use Room/SQLite for structured conversation data,
 suspending DAOs, transactions for multi-table mutations, exported schemas, and explicit
-migrations. Storage implementations, defaults, codecs, and database builders belong to
-providers. UI must not call DAOs directly.
+migrations. Storage implementations, generic codecs, and database builders belong to
+persistence providers; configuration schemas/defaults belong to their features. UI must not call DAOs directly.
 
 `ModelProvider(id)` is extensible. The legacy `entries` property is a built-in catalog/alias
 list, not an allowlist. Adapters contribute model catalogs, display text, and connection
@@ -91,3 +96,70 @@ icons according to the [UI design system](ui-design-system.md).
 
 Maintain development rules in topic guides and module READMEs. Update the relevant
 documentation whenever public contracts change.
+
+Register settings UI from the owning feature archive, using a child Fiber that requires
+`KcodeUiSlots`. Collect the child's disposer without awaiting absent optional UI services.
+Do not add feature-specific dependencies or fields to the generic page renderer/request.
+Register command transforms through `KcodeSettingsCommands.updates`; their disposers withdraw
+field handling and cancel/join the complete in-flight save transaction.
+
+Model adapters targeting API 47 declare their vendor implementation dependencies directly
+and include them in the private platform artifact. Do not obtain clients from the SDK or
+share the vendor namespace with the host. Keep `LLMClient`, HTTP factories and other
+exported protocols in the shared SDK identity; include required upstream implementation
+dependencies, such as Bedrock's Anthropic model/serializer code, in the private closure.
+
+For API 48 conversation presentation, return a `ConversationDecorationContent` with a
+generic `Header` or `AboveComposer` position. The page owns placement and compact-layout
+measurement. Borrow `ConversationPageContext.hazeState` when provided; do not require a
+concrete page implementation. Optional presentation declares its own reactive child
+dependencies and quiets retained presenters/renderers when withdrawn.
+
+## Feature settings documents
+
+API 55 exposes `StoredAppSettings.namespaces: Map<String, JsonObject>`. Give each feature
+a stable namespace and keep its schema, defaults and validation with that feature. Merge
+only its owned fields into the current transaction snapshot; preserve unknown fields and
+other namespaces, including documents belonging to disabled features. Namespace IDs and
+JSON keys are complete identities, not dot-separated paths. An explicit JSON null or empty
+string differs from removing a key. Generic patches merge independent nested changes.
+
+API 59 removes fixed legacy members. `StoredAppSettings.legacyValues` holds raw historical
+JSON, preserving absent fields, explicit empty/null values and unknown roots. Features
+interpret their own historical keys only when their namespace is absent. Persistence stores
+no feature defaults and writes one v2 document rather than historical scalar fanout.
+Feature-owned UI validation remains tracked in the audit; a generic storage write alone
+does not prove that feature validation ran. Rebuild external packages for ABI 59.
+
+When a draft creates a previously absent JSON object, `SettingsPatch` merges its fields
+into the latest document instead of replacing concurrent additions. Empty objects are
+created if needed without clearing objects already committed by another writer. Explicit
+JSON nulls and arrays remain atomic replacement values; an explicit removed key is still
+a deletion. This behavior also applies to nested objects and dotted field identities.
+
+API 56 lets a localization catalog expose optional `LanguageSettingsPolicy` through
+`languageSettings`. Supply it only when the feature implements preference configuration;
+rendering-only catalogs use null. Keep its namespace schema, legacy interpretation, defaults
+and choice validation in the feature. A root borrows that projection and uses the catalog's
+default language when configuration is unavailable. Withdrawing the provider revokes retained
+policy calls; closing a root projection does not close borrowed provider capabilities.
+
+For conversation configuration controls, contribute `ComposerActions` from the feature's
+optional default UI child. Use `ConversationPageContext.settingsEditor` to read the prepared
+draft and submit a proposal; do not require generic pages to import a concrete feature,
+mode enum, storage key or renderer. Withdraw both registration and its fallback dictionary,
+and reject retained control callbacks after withdrawal.
+
+## Settings mutation ownership
+
+A feature owns its namespace, schema, defaults and validation. Register a
+`SettingsMutationValidator` through `KcodeSettings.mutations` in a headless consumer
+child which injects the settings service and any required feature policy. Collect the
+registration disposer. Do not make the feature's entire provider depend on default UI
+or the optional settings command service merely to enable validation.
+
+Default and alternative roots submit proposals through `KcodeSettings.mutationStore`.
+Its transaction reads current persisted data and validates the merged candidate before
+committing. Validation of multiple changed namespaces is atomic, and each owner is held
+through durable save. Unchanged unknown namespaces are preserved; changing an unowned
+namespace is rejected. Persisted historical values remain read-only on this path.

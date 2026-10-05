@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.AgentWorkspace
 import ai.meteor.kcode.AgentWorkspaceEntry
 import ai.meteor.kcode.plugin.api.FileContentKind
@@ -17,7 +19,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import org.cordis.Context
 import org.cordis.EffectScope
@@ -54,7 +55,7 @@ class AndroidNativeFileSystemTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.native-fs", version = "test", entryClass = AndroidFixtureNativeFileSystem::class.java.name,
                 artifactPath = apk.path, config = directory.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName,
             ))
             assertTrue(backend.javaClass.classLoader !== FileSystemBackend::class.java.classLoader)

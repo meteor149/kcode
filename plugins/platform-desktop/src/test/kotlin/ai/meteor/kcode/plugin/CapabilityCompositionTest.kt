@@ -53,6 +53,54 @@ import org.cordis.plugin
 
 class CapabilityCompositionTest {
     @Test
+    fun realAgentProviderResolvesOptionalBindingsWithoutUndeclaredLookupsAndRecoversSkills() = kotlinx.coroutines.runBlocking {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val skills = object : ai.meteor.kcode.skill.SkillRuntime {
+            override suspend fun catalog(forceReload: Boolean) = ai.meteor.kcode.skill.SkillCatalog(emptyList(), generation = "fixture")
+            override suspend fun prepareTurn(originalUserPrompt: String): ai.meteor.kcode.skill.SkillTurnContext {
+                calls.incrementAndGet()
+                return ai.meteor.kcode.skill.SkillTurnContext("", emptyList(), emptyList())
+            }
+            override suspend fun read(request: ai.meteor.kcode.skill.SkillReadRequest): ai.meteor.kcode.skill.SkillReadResult = error("unused")
+        }
+        val marker = IllegalArgumentException("stop at model allocation")
+        val provider = ai.meteor.kcode.model.ModelProvider("fixture-optional-agent")
+        val adapter = modelAdapterPlugin(ai.meteor.kcode.plugin.api.ModelAdapter(
+            id = "fixture-optional-agent", supports = { it.provider == provider }, create = { _, _ -> throw marker },
+        ))
+        val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
+            interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
+            skillRuntime = skills,
+            featurePlugins = listOf(adapter),
+            profile = KcodePluginProfile(disabled = setOf("provider.skills.platform", "feature.subagents", "core.conversation-overlays")),
+        ))
+        val configuration = ai.meteor.kcode.model.ModelConfiguration(provider, "fixture", "fixture", 0.4)
+        suspend fun probe() {
+            val failure = assertFailsWith<IllegalArgumentException> { runtime.chatService.reply(configuration, emptyList(), "fixture") }
+            // Coroutine stack-trace recovery may copy the exception across the owned scope.
+            assertEquals(marker.message, failure.message)
+        }
+        try {
+            probe()
+            assertEquals(0, calls.get())
+            for (id in listOf("feature.subagents", "core.conversation-overlays")) runtime.pluginManager.setEnabled(id, true)
+            runtime.pluginManager.setEnabled("provider.skills.platform", true)
+            kotlinx.coroutines.withTimeout(5_000) {
+                while (calls.get() == 0) {
+                    probe()
+                    kotlinx.coroutines.delay(10)
+                }
+            }
+            runtime.pluginManager.setEnabled("provider.skills.platform", false)
+            runtime.pluginManager.setEnabled("feature.subagents", false)
+            runtime.pluginManager.setEnabled("core.conversation-overlays", false)
+            val previous = calls.get()
+            probe()
+            assertEquals(previous, calls.get())
+        } finally { runtime.close() }
+    }
+
+    @Test
     fun subagentProviderDisposalWaitsForChildrenAndReEnablingCreatesANewFactory() = runTest {
         lateinit var factory: ai.meteor.kcode.SubagentCoordinatorFactory
         val capture = kcodePlugin(descriptor("test.subagent-owner"),
@@ -73,16 +121,18 @@ class CapabilityCompositionTest {
             }, {})
             coordinator.spawn("/root", "worker", "task", null)
             entered.await()
-            val disabling = async { runtime.pluginManager.setEnabled("provider.subagents.in-process", false) }
+            val disabling = async { runtime.pluginManager.setEnabled("feature.subagents", false) }
             cleaning.await()
             assertFalse(disabling.isCompleted)
             assertFailsWith<IllegalStateException> { staleFactory.create(backgroundScope, "old", { "unused" }, {}) }
             assertFailsWith<IllegalStateException> { coordinator.list("/root", null) }
             release.complete(Unit)
             disabling.await()
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.agent-loop.koog" }.state)
-            runtime.pluginManager.setEnabled("provider.subagents.in-process", true)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.agent-loop.koog" }.state)
+            assertFalse("core/subagent" in runtime.diagnostics().toolContributions)
+            runtime.pluginManager.setEnabled("feature.subagents", true)
             assertFalse(staleFactory === factory)
+            assertTrue("core/subagent" in runtime.diagnostics().toolContributions)
             val replacement = factory.create(backgroundScope, "new", { "answer" }, {})
             assertContains(replacement.list("/root", null), "No matching agents")
             replacement.shutdown()
@@ -252,6 +302,7 @@ class CapabilityCompositionTest {
 private fun config(features: List<KcodePluginMount>) = KcodePluginRuntimeConfig(
     InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
     featurePlugins = features,
+    profile = KcodePluginProfile(disabled = setOf("feature.web-search")),
 )
 
 private fun descriptor(id: String) = PluginDescriptor(id, "test", "test", emptySet())

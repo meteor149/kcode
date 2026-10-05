@@ -12,6 +12,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies { api(project(":plugins:api")) }
         commonTest.dependencies {
+            implementation(project(":plugins:test-support"))
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }

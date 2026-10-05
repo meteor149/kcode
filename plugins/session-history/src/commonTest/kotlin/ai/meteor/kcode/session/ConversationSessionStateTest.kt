@@ -14,6 +14,8 @@ import kotlinx.coroutines.test.runTest
 import ai.meteor.kcode.plugin.messagecodec.EnvelopeChatMessageCodec
 import ai.meteor.kcode.model.ChatMessageCodec
 import ai.meteor.kcode.model.DecodedStoredMessageContent
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -213,9 +215,11 @@ class ConversationSessionStateTest {
     @Test
     fun toggleConversationPinnedPinsAnUnpinnedConversation() = runTest {
         val repository = RecordingConversationHistoryRepository()
-        val state = HistoryConversationSession(repository, this, EnvelopeChatMessageCodec())
-        state.conversations += HistoryConversationState(id = 1L, initialTitle = "First")
-        state.conversations += HistoryConversationState(id = 2L, initialTitle = "Second")
+        val data = HistoryConversationData().apply {
+            conversations += HistoryConversationState(id = 1L, initialTitle = "First")
+            conversations += HistoryConversationState(id = 2L, initialTitle = "Second")
+        }
+        val state = HistoryConversationSession(repository, this, EnvelopeChatMessageCodec(), data)
 
         state.toggleConversationPinned(2L)
         runCurrent()
@@ -229,10 +233,12 @@ class ConversationSessionStateTest {
     @Test
     fun toggleConversationPinnedUnpinsAPinnedConversation() = runTest {
         val repository = RecordingConversationHistoryRepository()
-        val state = HistoryConversationSession(repository, this, EnvelopeChatMessageCodec())
-        state.conversations += HistoryConversationState(id = 1L, initialTitle = "First", initialPinned = true)
-        state.conversations += HistoryConversationState(id = 2L, initialTitle = "Second", initialPinned = true)
-        state.conversations += HistoryConversationState(id = 3L, initialTitle = "Third")
+        val data = HistoryConversationData().apply {
+            conversations += HistoryConversationState(id = 1L, initialTitle = "First", initialPinned = true)
+            conversations += HistoryConversationState(id = 2L, initialTitle = "Second", initialPinned = true)
+            conversations += HistoryConversationState(id = 3L, initialTitle = "Third")
+        }
+        val state = HistoryConversationSession(repository, this, EnvelopeChatMessageCodec(), data)
 
         state.toggleConversationPinned(1L)
         runCurrent()
@@ -242,6 +248,100 @@ class ConversationSessionStateTest {
         assertEquals(listOf(1L to false), repository.pinChanges)
         state.close()
     }
+    @Test
+    fun backgroundPublicationIsVisibleToExistingAndNewLeasesWithoutStartupRecovery() = runTest {
+        val repository = RecordingConversationHistoryRepository()
+        val data = HistoryConversationData()
+        val codec = EnvelopeChatMessageCodec()
+        val ui = HistoryConversationSession(repository, this, codec, data)
+        val background = HistoryConversationSession(repository, this, codec, data)
+        val lateUi = HistoryConversationSession(repository, this, codec, data)
+        try {
+            ui.load()
+            val ordinary = ui.ensureConversation("ordinary")
+            background.load()
+            val target = background.createPendingStandaloneConversation("scheduled")
+            lateUi.load()
+            assertTrue(repository.deletedIds.isEmpty())
+            assertTrue(lateUi.floatingConversations.isEmpty())
+            assertTrue(ordinary.id != target.id)
+            background.setPendingStandaloneResult(target.id, "result")
+            background.appendPendingStandaloneResultMessage(target.id)
+            background.revealStandaloneConversation(target.id)
+            val visible = ui.floatingConversations.single()
+            assertEquals(target.id, visible.id)
+            assertEquals("result", visible.standaloneResult)
+            assertEquals("result", visible.messages.last().content)
+            assertEquals(target.id, lateUi.floatingConversations.single().id)
+            ui.startNewConversation()
+            assertTrue(ui.ensureConversation("next").id > target.id)
+        } finally {
+            ui.close()
+            background.close()
+            lateUi.close()
+        }
+    }
+
+    @Test
+    fun leasesCancelAndJoinTheirOwnJobsWithoutCancellingAnotherOrANewerJob() = runTest {
+        val repository = RecordingConversationHistoryRepository()
+        val data = HistoryConversationData()
+        val codec = EnvelopeChatMessageCodec()
+        val ui = HistoryConversationSession(repository, this, codec, data)
+        val background = HistoryConversationSession(repository, this, codec, data)
+        val reopened = HistoryConversationSession(repository, this, codec, data)
+        val cleanup = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val enteredCleanup = kotlinx.coroutines.CompletableDeferred<Unit>()
+        try {
+            ui.load()
+            background.load()
+            val ordinary = ui.ensureConversation("ordinary")
+            val ordinaryJob = backgroundScope.launch { kotlinx.coroutines.awaitCancellation() }
+            ordinary.runningJob = ordinaryJob
+            val target = background.createPendingStandaloneConversation("scheduled")
+            val backgroundJob = backgroundScope.launch {
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                        enteredCleanup.complete(Unit)
+                        cleanup.await()
+                    }
+                }
+            }
+            target.runningJob = backgroundJob
+            runCurrent()
+            ui.close()
+            assertTrue(ordinaryJob.isCancelled)
+            assertTrue(backgroundJob.isActive)
+            val closing = async { background.close() }
+            runCurrent()
+            enteredCleanup.await()
+            assertFalse(closing.isCompleted)
+            cleanup.complete(Unit)
+            closing.await()
+            reopened.load()
+            backgroundJob.join()
+            val fresh = reopened.ensureConversation("fresh")
+            val newerJob = backgroundScope.launch { kotlinx.coroutines.awaitCancellation() }
+            fresh.runningJob = newerJob
+            assertEquals(ordinary.id, fresh.id)
+            // Delayed cleanup from the old lease must not clear the replacement's job slot.
+            ordinary.runningJob = null
+            assertTrue(fresh.runningJob === newerJob)
+            ui.close()
+            background.close()
+            assertTrue(newerJob.isActive)
+            reopened.close()
+            assertTrue(newerJob.isCancelled)
+        } finally {
+            cleanup.complete(Unit)
+            ui.close()
+            background.close()
+            reopened.close()
+        }
+    }
+
 }
 
 private fun storedConversation(

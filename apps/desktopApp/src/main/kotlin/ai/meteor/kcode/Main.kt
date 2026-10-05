@@ -57,7 +57,7 @@ fun main() {
             }
             checkNotNull(runtime.applicationContent).Render(
                 ApplicationHostOptions(
-                    toolPermissionControlsAvailable = true,
+                    conversationSettingsControlsAvailable = true,
                 ),
             )
         }

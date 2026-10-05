@@ -1,7 +1,6 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.model.MessageRole
-import ai.meteor.kcode.plugin.api.KcodeLocalization
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.ui.api.MessagePresentation
@@ -36,7 +35,7 @@ fun toolUsePresentationPlugin(presentation: ToolUsePresentation): KcodePluginMou
 object DefaultUserMessagePresentationPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "message-user"
-    override val inject = dependencies(KcodeUiSlots.Key, KcodeLocalization.Key)
+    override val inject = dependencies(KcodeUiSlots.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(
             ctx.require(KcodeUiSlots.Key).registerMessage(
@@ -53,7 +52,7 @@ object DefaultUserMessagePresentationPlugin : Plugin<Unit> {
 object DefaultAssistantMessagePresentationPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "message-assistant"
-    override val inject = dependencies(KcodeUiSlots.Key, KcodeLocalization.Key)
+    override val inject = dependencies(KcodeUiSlots.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(
             ctx.require(KcodeUiSlots.Key).registerMessage(
@@ -70,7 +69,7 @@ object DefaultAssistantMessagePresentationPlugin : Plugin<Unit> {
 object DefaultErrorMessagePresentationPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "message-error"
-    override val inject = dependencies(KcodeUiSlots.Key, KcodeLocalization.Key)
+    override val inject = dependencies(KcodeUiSlots.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(
             ctx.require(KcodeUiSlots.Key).registerMessage(
@@ -87,7 +86,7 @@ object DefaultErrorMessagePresentationPlugin : Plugin<Unit> {
 object DefaultToolUsePresentationPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "tool-default"
-    override val inject = dependencies(KcodeUiSlots.Key, KcodeLocalization.Key)
+    override val inject = dependencies(KcodeUiSlots.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(
             ctx.require(KcodeUiSlots.Key).registerToolUse(

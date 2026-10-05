@@ -1,9 +1,11 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.ImageSaveResult
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
-import ai.meteor.kcode.plugin.export.AndroidNativeImageSavingPlugin
+import ai.meteor.kcode.plugin.export.ConversationExportFeaturePlugin
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeConversationImageSaving
 import ai.meteor.kcode.plugin.api.PluginDescriptor
@@ -15,7 +17,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
@@ -67,10 +68,10 @@ class AndroidNativeImageSavingTest {
         val image = bitmap.asImageBitmap()
         try {
             runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "provider.export.image-saving", version = "test",
-                entryClass = AndroidNativeImageSavingPlugin::class.java.name,
+                id = "feature.conversation-export", version = "test",
+                entryClass = ConversationExportFeaturePlugin::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName,
             ))
             assertTrue(current.javaClass.classLoader !== ConversationImageSaver::class.java.classLoader)
@@ -92,12 +93,12 @@ class AndroidNativeImageSavingTest {
                     decoded.recycle()
                 }
             }
-            runtime.pluginManager.setEnabled("provider.export.image-saving", false)
+            runtime.pluginManager.setEnabled("feature.conversation-export", false)
             assertFailsWith<IllegalStateException> { previous.save(image, name) }
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.export.conversation" }.state)
-            runtime.pluginManager.setEnabled("provider.export.image-saving", true)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.conversation-export" }.state)
+            runtime.pluginManager.setEnabled("feature.conversation-export", true)
             assertNotSame(previous, current)
-            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.export.conversation" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.conversation-export" }.state)
             assertEquals(ImageSaveResult.Shared, current.share(image, name))
             val firstSend = handoffs.last().getParcelableExtra(android.content.Intent.EXTRA_INTENT, android.content.Intent::class.java)!!
             val firstUri = firstSend.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)!!
@@ -122,7 +123,7 @@ class AndroidNativeImageSavingTest {
             assertTrue(current.share(image, "../escape.png") is ImageSaveResult.Failed)
             assertEquals(beforeFailure, shareRoot.listFiles()!!.map { it.name }.toSet())
             val beforeUninstall = current
-            runtime.pluginManager.uninstall("provider.export.image-saving")
+            runtime.pluginManager.uninstall("feature.conversation-export")
             assertFailsWith<IllegalStateException> { beforeUninstall.save(image, name) }
             assertFailsWith<IllegalStateException> { beforeUninstall.share(image, name) }
             // Committed handoff files remain readable after the provider is removed.

@@ -19,7 +19,7 @@ import org.cordis.dependencies
 object GoalToolConsumerPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "kcode-tool-goal"
-    override val inject: Dependencies = dependencies(KcodeTools.Key)
+    override val inject: Dependencies = dependencies(KcodeTools.Key, KcodeGoals.Key)
 
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(ctx.require(KcodeTools.Key).register("core/goal") { it.goalSession?.let(::goalTools) ?: ToolRegistry { } })
@@ -29,7 +29,7 @@ object GoalToolConsumerPlugin : Plugin<Unit> {
 object GoalContinuationPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "kcode-goal-round-driver"
-    override val inject: Dependencies = dependencies(KcodeContinuations.Key)
+    override val inject: Dependencies = dependencies(KcodeContinuations.Key, KcodeGoals.Key)
 
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(

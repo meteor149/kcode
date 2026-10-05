@@ -4,6 +4,7 @@ import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.PluginHostInputs
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.KcodeLocalization
+import ai.meteor.kcode.localization.configuredLanguage
 import ai.meteor.kcode.localization.UiText
 import org.cordis.dependencies
 import org.cordis.ConfigValidator
@@ -29,7 +30,7 @@ class LocalizedAndroidNativeNotificationsPlugin : Plugin<Unit> {
     override val inject = dependencies(KcodeSettings.Key, KcodeLocalization.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         val catalog = ctx.require(KcodeLocalization.Key).catalog
-        val language = checkNotNull(catalog.snapshot()).selectLanguage(ctx.require(KcodeSettings.Key).store.load().language)
+        val language = catalog.configuredLanguage(ctx.require(KcodeSettings.Key).store.load())
         AndroidNativeNotificationsPlugin().apply(ctx, catalog.translate(language, UiText.ScheduledTaskNotificationChannel), effect)
     }
 }

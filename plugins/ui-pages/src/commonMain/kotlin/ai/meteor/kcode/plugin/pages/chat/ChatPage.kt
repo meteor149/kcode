@@ -2,13 +2,12 @@
 
 package ai.meteor.kcode.plugin.pages.chat
 
+import ai.meteor.kcode.plugin.ui.api.SettingsEditorProjection
 import ai.meteor.kcode.plugin.pages.chat.component.LocalChatHazeState
 import ai.meteor.kcode.plugin.pages.chat.component.ConversationMessageList
-import ai.meteor.kcode.plugin.pages.chat.component.RunningSubAgentOverlay
 import ai.meteor.kcode.plugin.pages.chat.component.StreamScrollFollower
 import ai.meteor.kcode.plugin.pages.chat.component.animateToConversationBottom
 import ai.meteor.kcode.plugin.pages.chat.component.isAtConversationBottom
-import ai.meteor.kcode.plugin.pages.chat.component.isRunning
 import ai.meteor.kcode.plugin.pages.chat.component.latestContentIndex
 import ai.meteor.kcode.plugin.pages.chat.component.rememberMessageSelectionState
 import ai.meteor.kcode.plugin.pages.chat.component.scrollToConversationBottom
@@ -16,6 +15,7 @@ import ai.meteor.kcode.plugin.pages.chat.component.scrollToConversationBottom
 import androidx.compose.runtime.key
 import ai.meteor.kcode.plugin.ui.api.PresentConversationContributions
 import ai.meteor.kcode.plugin.ui.api.LocalApplicationUiSlots
+import ai.meteor.kcode.plugin.ui.api.ConversationDecorationPosition
 import ai.meteor.kcode.plugin.ui.api.ConversationPageContext
 import ai.meteor.kcode.localization.LocalAppLanguage
 import ai.meteor.kcode.ui.design.Paper
@@ -38,9 +38,6 @@ import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.export.ConversationExporter
-import ai.meteor.kcode.export.ExportAction
-import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
 import androidx.compose.animation.AnimatedVisibility
@@ -113,10 +110,7 @@ internal fun ChatPane(
     historyRepository: ConversationHistoryRepository,
     goalSessionFactory: GoalSessionFactory,
     scheduledTaskCoordinator: ScheduledTaskCoordinator,
-    conversationExporter: ConversationExporter?,
-    toolPermissionControlsAvailable: Boolean,
-    toolPermissionMode: ToolPermissionMode,
-    onToolPermissionModeChange: (ToolPermissionMode) -> Unit,
+    settingsEditor: SettingsEditorProjection?,
 ) {
     val hazeState = rememberKcodeHazeState()
     val scope = rememberCoroutineScope()
@@ -131,27 +125,20 @@ internal fun ChatPane(
     val listState = rememberLazyListState()
     val listIsDragged by listState.interactionSource.collectIsDraggedAsState()
     val focusRequester = remember { FocusRequester() }
-    val exportState = rememberChatExportState(conversationExporter)
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val messageSelection = rememberMessageSelectionState(conversation?.id)
     var mobileComposerHeightPx by remember { mutableStateOf(0) }
-    var mobileAgentOverlayHeightPx by remember { mutableStateOf(0) }
+    var mobileBottomContributionsHeightPx by remember { mutableStateOf(0) }
     var anchoredTurn by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     // Text fields and keyboard actions can retain an earlier callback instance. Keep the
     // callback stable while making every invocation observe the latest recomposed state.
     val currentConfiguration by rememberUpdatedState(configuration)
     val currentConversation by rememberUpdatedState(conversation)
     val regenerateDescription = text(UiText.RegenerateAnswer)
-    val shareDescription = text(UiText.ShareImage)
+    val shareDescription = text(ai.meteor.kcode.localization.LocalizedText("select_messages"))
     val conversationContentMotion = rememberConversationContentMotion(conversation?.id)
-    val runningSubAgents = conversation?.messages
-        ?.flatMap(ChatMessage::subAgents)
-        ?.associateBy { it.path }
-        ?.values
-        ?.filter { it.status.isRunning() }
-        .orEmpty()
     val messageAnchorTop = if (compact) 92.dp else 30.dp
     fun isAtConversationBottom(): Boolean {
         val target = currentConversation ?: return true
@@ -190,10 +177,28 @@ internal fun ChatPane(
 
     val contributionContext = ConversationPageContext(
         conversation, compact, configuration, service, generationRunner,
-        scheduledTaskCoordinator, failureMessages, ::followConversationBottom,
+        scheduledTaskCoordinator, failureMessages, ::followConversationBottom, hazeState,
+        selectedMessageIds = if (messageSelection.active) messageSelection.ids.toSet() else null,
+        clearSelection = messageSelection::clear,
+        beforeAction = { focusManager.clearFocus(force = true) },
+        settingsEditor = settingsEditor,
     )
     val pageSlots = LocalApplicationUiSlots.current
-    val decorations = PresentConversationContributions(contributionContext, pageSlots)
+    val contributions = PresentConversationContributions(contributionContext, pageSlots)
+    val decorations = contributions.filter { it.second.position == ConversationDecorationPosition.Header }
+    val composerContributions = contributions.filter { it.second.position == ConversationDecorationPosition.AboveComposer }
+    val headerActions = contributions.filter { it.second.position == ConversationDecorationPosition.HeaderActions }
+    val actions: @Composable () -> Unit = {
+        headerActions.forEach { (owner, content) ->
+            key(owner, content.position) { content.renderer.Render(Modifier) }
+        }
+    }
+    val composerActions: @Composable () -> Unit = {
+        contributions.filter { it.second.position == ConversationDecorationPosition.ComposerActions }
+            .forEach { (owner, content) ->
+                key(owner, content.position) { content.renderer.Render(Modifier) }
+            }
+    }
     val decorationsHeight = decorations.fold(0.dp) { total, decoration -> total + decoration.second.occupiedHeight }
 
     fun send(prompt: String) {
@@ -247,25 +252,9 @@ internal fun ChatPane(
         )
     }
 
-    fun exportConversation(action: ExportAction, selectedIds: Set<Long>? = null) {
-        exportState.export(
-            action = action,
-            conversation = currentConversation,
-            configuration = currentConfiguration,
-            selectedIds = selectedIds,
-        )
-    }
-
     fun beginMessageSelection(message: ChatMessage) {
         focusManager.clearFocus(force = true)
         messageSelection.begin(message)
-    }
-
-    fun exportSelectedMessages(action: ExportAction) {
-        if (messageSelection.isEmpty) return
-        val selection = messageSelection.ids
-        messageSelection.clear()
-        exportConversation(action, selection)
     }
 
     LaunchedEffect(conversation?.id) {
@@ -289,8 +278,8 @@ internal fun ChatPane(
                 176.dp
             } else {
                 with(density) { mobileComposerHeightPx.toDp() } + 18.dp
-            } + if (runningSubAgents.isEmpty()) 0.dp else {
-                with(density) { mobileAgentOverlayHeightPx.toDp() } + 10.dp
+            } + if (composerContributions.isEmpty()) 0.dp else {
+                with(density) { mobileBottomContributionsHeightPx.toDp() } + 10.dp
             }
             val composerOverlayBottom = if (mobileComposerHeightPx == 0) {
                 150.dp
@@ -315,9 +304,7 @@ internal fun ChatPane(
                     onSend = ::send,
                     onModelClick = onSettings,
                     onConfigurationChange = onConfigurationChange,
-                    toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                    toolPermissionMode = toolPermissionMode,
-                    onToolPermissionModeChange = onToolPermissionModeChange,
+                    composerActions = composerActions,
                 )
             } else {
                 ConversationMessageList(
@@ -349,27 +336,26 @@ internal fun ChatPane(
                         ?.second,
                     messageAnchorTop = messageAnchorTop,
                 )
-                if (runningSubAgents.isNotEmpty()) {
-                    RunningSubAgentOverlay(
+                if (composerContributions.isNotEmpty()) {
+                    Column(
                         modifier = Modifier.align(Alignment.BottomCenter)
                             .widthIn(max = 720.dp)
                             .fillMaxWidth()
-                            .padding(
-                                start = composerOuterPadding,
-                                end = composerOuterPadding,
-                                bottom = composerOverlayBottom,
-                            )
-                            .onSizeChanged { mobileAgentOverlayHeightPx = it.height },
-                        agents = runningSubAgents,
-                        hazeState = hazeState,
-                    )
+                            .padding(start = composerOuterPadding, end = composerOuterPadding, bottom = composerOverlayBottom)
+                            .onSizeChanged { mobileBottomContributionsHeightPx = it.height },
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        composerContributions.forEach { (owner, content) ->
+                            key(owner, content.position) { content.renderer.Render(Modifier.fillMaxWidth()) }
+                        }
+                    }
                 }
                 AnimatedVisibility(
                     visible = !isAtConversationBottom(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(
                         bottom = composerOverlayBottom - KcodeSize.floatingShadowGutter +
-                            if (runningSubAgents.isEmpty()) 0.dp else {
-                                with(density) { mobileAgentOverlayHeightPx.toDp() } + 8.dp
+                            if (composerContributions.isEmpty()) 0.dp else {
+                                with(density) { mobileBottomContributionsHeightPx.toDp() } + 8.dp
                             },
                     ),
                     enter = fadeIn(tween(160)),
@@ -406,11 +392,9 @@ internal fun ChatPane(
                     onConfigurationChange = onConfigurationChange,
                     onSend = ::send,
                     onStop = { conversation.runningJob?.cancel() },
-                    toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                    toolPermissionMode = toolPermissionMode,
-                    onToolPermissionModeChange = onToolPermissionModeChange,
+                    composerActions = composerActions,
                 )
-                (conversation?.executionFailure ?: exportState.notice)?.let { notice ->
+                conversation?.executionFailure?.let { notice ->
                     Surface(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = composerOverlayBottom + 8.dp),
                         shape = RoundedCornerShape(18.dp),
@@ -431,10 +415,8 @@ internal fun ChatPane(
                 hazeState = hazeState,
                 selectionMode = messageSelection.active,
                 selectedCount = messageSelection.count,
-                selectionExportAvailable = conversationExporter != null,
                 onCancelSelection = messageSelection::clear,
-                onSaveSelection = { exportSelectedMessages(ExportAction.Save) },
-                onShareSelection = { exportSelectedMessages(ExportAction.Share) },
+                actions = actions,
                 onMenu = {
                     focusManager.clearFocus(force = true)
                     onMenu()
@@ -443,20 +425,11 @@ internal fun ChatPane(
                     focusManager.clearFocus(force = true)
                     onNewConversation()
                 },
-                exportEnabled = conversationExporter != null && !conversation?.messages.isNullOrEmpty(),
-                onExportSave = {
-                    focusManager.clearFocus(force = true)
-                    exportConversation(ExportAction.Save)
-                },
-                onExportShare = {
-                    focusManager.clearFocus(force = true)
-                    exportConversation(ExportAction.Share)
-                },
             )
             if (decorations.isNotEmpty()) {
                 Column(Modifier.align(Alignment.TopCenter).padding(top = 72.dp, start = 16.dp, end = 16.dp)) {
                     decorations.forEach { (owner, content) ->
-                        key(owner) { content.renderer.Render(Modifier.fillMaxWidth()) }
+                        key(owner, content.position) { content.renderer.Render(Modifier.fillMaxWidth()) }
                     }
                 }
             }
@@ -469,29 +442,16 @@ internal fun ChatPane(
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
             }
             DesktopChatHeader(
-                conversationId = conversation?.id,
                 title = conversation?.title ?: text(UiText.NewChat),
-                hasMessages = !conversation?.messages.isNullOrEmpty(),
-                exportAvailable = conversationExporter != null,
                 selectionMode = messageSelection.active,
                 selectedCount = messageSelection.count,
-                selectionExportAvailable = conversationExporter != null,
                 configuration = configuration,
                 onMenu = {
                     focusManager.clearFocus(force = true)
                     onMenu()
                 },
                 onCancelSelection = messageSelection::clear,
-                onSaveSelection = { exportSelectedMessages(ExportAction.Save) },
-                onShareSelection = { exportSelectedMessages(ExportAction.Share) },
-                onSaveConversation = {
-                    focusManager.clearFocus(force = true)
-                    exportConversation(ExportAction.Save)
-                },
-                onShareConversation = {
-                    focusManager.clearFocus(force = true)
-                    exportConversation(ExportAction.Share)
-                },
+                actions = actions,
                 onMissingConfiguration = {
                     focusManager.clearFocus(force = true)
                     onSettings()
@@ -499,7 +459,7 @@ internal fun ChatPane(
                 onConfigurationChange = onConfigurationChange,
             )
             decorations.forEach { (owner, content) ->
-                key(owner) {
+                key(owner, content.position) {
                     content.renderer.Render(Modifier.align(Alignment.CenterHorizontally)
                         .padding(horizontal = 24.dp, vertical = 8.dp).widthIn(max = 760.dp).fillMaxWidth())
                 }
@@ -517,9 +477,7 @@ internal fun ChatPane(
                     onSend = ::send,
                     onModelClick = onSettings,
                     onConfigurationChange = onConfigurationChange,
-                    toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                    toolPermissionMode = toolPermissionMode,
-                    onToolPermissionModeChange = onToolPermissionModeChange,
+                    composerActions = composerActions,
                 )
             } else {
                 ConversationMessageList(
@@ -548,15 +506,16 @@ internal fun ChatPane(
                         ?.second,
                     messageAnchorTop = messageAnchorTop,
                 )
-                if (runningSubAgents.isNotEmpty()) {
-                    RunningSubAgentOverlay(
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                            .widthIn(max = 760.dp)
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
-                        agents = runningSubAgents,
-                        hazeState = hazeState,
-                    )
+                if (composerContributions.isNotEmpty()) {
+                    Column(
+                        Modifier.align(Alignment.CenterHorizontally).widthIn(max = 760.dp)
+                            .fillMaxWidth().padding(horizontal = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        composerContributions.forEach { (owner, content) ->
+                            key(owner, content.position) { content.renderer.Render(Modifier.fillMaxWidth()) }
+                        }
+                    }
                 }
                 Composer(                    modifier = Modifier.align(Alignment.CenterHorizontally)
                         .widthIn(max = 760.dp)
@@ -568,9 +527,7 @@ internal fun ChatPane(
                     onFocus = {},
                     onSend = ::send,
                     onStop = { conversation.runningJob?.cancel() },
-                    toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                    toolPermissionMode = toolPermissionMode,
-                    onToolPermissionModeChange = onToolPermissionModeChange,
+                    composerActions = composerActions,
                 )
             }
         }

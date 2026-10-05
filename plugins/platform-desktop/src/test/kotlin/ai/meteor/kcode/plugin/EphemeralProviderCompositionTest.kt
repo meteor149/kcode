@@ -7,6 +7,7 @@ import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.settings.StoredAppSettings
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsUpdate
 import ai.meteor.kcode.settings.ToolPermissionMode
@@ -31,12 +32,12 @@ class EphemeralProviderCompositionTest {
         try {
             firstHistory.appendMessage(1, "first", 1, "User", "first message")
             firstHistory.upsertScheduledTask("first", ScheduledTask("t", 1, "first task", "work", ScheduledTaskStatus.Paused, 10, createdAt = 1, updatedAt = 1))
-            first.updateSettings(SettingsUpdate(searchProvider = "exa"))
+            first.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa")))
             assertEquals("first message", firstHistory.loadAll().single().messages.single().content)
             assertEquals(1, firstHistory.loadScheduledTasks().size)
             assertTrue(secondHistory.loadAll().isEmpty())
             assertTrue(secondHistory.loadScheduledTasks().isEmpty())
-            assertEquals("google", secondSettings.load().webSearchProvider)
+            assertEquals(StoredAppSettings(), secondSettings.load())
             secondHistory.appendMessage(1, "second", 1, "User", "second message")
             val previousHistory = firstHistory
             val previousSettings = firstSettings
@@ -48,7 +49,7 @@ class EphemeralProviderCompositionTest {
             first.pluginManager.setEnabled("provider.settings.platform", true)
             assertTrue(firstHistory.loadAll().isEmpty())
             assertTrue(firstHistory.loadScheduledTasks().isEmpty())
-            assertEquals("google", firstSettings.load().webSearchProvider)
+            assertEquals(StoredAppSettings(), firstSettings.load())
             assertEquals("second message", secondHistory.loadAll().single().messages.single().content)
         } finally { first.close(); second.close() }
     }

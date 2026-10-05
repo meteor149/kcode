@@ -1,0 +1,11 @@
+<resources>
+    <string name="api_key">API Key</string>
+    <string name="api_key_required">API Key required</string>
+    <string name="enter_api_key">Enter API Key</string>
+    <string name="hide">Hide</string>
+    <string name="internet_search">Internet search</string>
+    <string name="no_api_key_required">No API Key</string>
+    <string name="save_settings">Save settings</string>
+    <string name="search_provider">Search provider</string>
+    <string name="show">Show</string>
+</resources>

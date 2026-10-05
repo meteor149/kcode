@@ -1,5 +1,10 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
+import ai.meteor.kcode.plugin.packages.androidPackageHost
+import ai.meteor.kcode.plugin.packages.androidPackageVerifier
+
 import ai.meteor.kcode.createAndroidKoogChatRuntime
 import ai.meteor.kcode.settings.ShellExecutionMode
 import android.app.Activity
@@ -26,7 +31,6 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFalse
@@ -74,7 +78,7 @@ class AndroidConversationOverlayProviderTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.overlay", version = "test", entryClass = AndroidFixtureConversationOverlay::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName, config = "APK overlay",
             ))
             val old = requireNotNull(registry.current())
@@ -108,9 +112,12 @@ class AndroidConversationOverlayProviderTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val directory = File(context.filesDir, "native-overlay-apk-${System.nanoTime()}").apply { mkdirs() }
-        val apk = File(directory, "overlay.apk")
-        File(instrumentation.context.applicationInfo.sourceDir).copyTo(apk)
+        val apk = File(directory, "overlay.kplugin")
+        instrumentation.context.assets.open("provider.conversation-overlay.platform-1.0.0.kplugin").use { input -> apk.outputStream().use { input.copyTo(it) } }
         check(apk.setReadOnly())
+        val registryArchive = File(directory, "registry.kplugin")
+        instrumentation.context.assets.open("core.conversation-overlays-1.0.0.kplugin").use { input -> registryArchive.outputStream().use { input.copyTo(it) } }
+        check(registryArchive.setReadOnly())
         val activity = withContext(Dispatchers.Main.immediate) {
             object : Activity() {
                 override fun getApplicationContext(): AndroidContext = context
@@ -124,7 +131,10 @@ class AndroidConversationOverlayProviderTest {
         val runtime = KcodePluginRuntime.create(config().copy(
             hostInputs = inputs,
             profile = KcodePluginProfile(disabled = setOf("provider.conversation-overlay.platform")),
-            featurePlugins = listOf(capture),
+            featurePlugins = listOf(capture, kcodePlugin(
+                PluginDescriptor("provider.plugin-packages.platform", "test", "test", emptySet()),
+                NativePluginPackagesPlugin(directory, androidPackageHost(), artifactVerifier = androidPackageVerifier(context)), Unit,
+            )),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
@@ -134,13 +144,13 @@ class AndroidConversationOverlayProviderTest {
             owned.javaClass.getDeclaredField("delegate").apply { isAccessible = true }
                 .get(owned) as AgentConversationOverlayController
         try {
-            runtime.pluginManager.install(DynamicPluginSpec(
-                id = "native.overlay", version = "test", entryClass = AndroidNativeConversationOverlayPlugin::class.java.name,
-                artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
-                packageName = instrumentation.context.packageName,
-                capabilities = setOf("conversationOverlays"),
+            val originalProjection = registry.uiSlots
+            runtime.conversationOverlayController.setHostForeground(false)
+            runtime.pluginManager.importPackages(listOf(
+                PluginPackageImport(registryArchive.absolutePath, packageFileSha256(registryArchive)),
+                PluginPackageImport(apk.absolutePath, packageFileSha256(apk), enabled = true),
             ))
+            assertSame(originalProjection, registry.uiSlots)
             val projection = registry.uiSlots
             assertFalse(projection is kotlinx.coroutines.flow.MutableStateFlow<*>)
             assertNotNull(projection.value.defaultUi().theme)
@@ -151,17 +161,19 @@ class AndroidConversationOverlayProviderTest {
             val first = delegate(requireNotNull(registry.current())).also { delegates += it }
             assertNotSame(AndroidNativeConversationOverlayPlugin::class.java.classLoader, first.javaClass.classLoader)
             assertSame(AgentConversationOverlayController::class.java, first.javaClass.interfaces.single())
+            assertFalse(first.javaClass.getDeclaredField("hostForeground").apply { isAccessible = true }.getBoolean(first))
+            runtime.conversationOverlayController.setHostForeground(true)
             val turn = runtime.conversationOverlayController.startTurn(emptyList())
-            runtime.pluginManager.setEnabled("native.overlay", false)
+            runtime.pluginManager.setEnabled("provider.conversation-overlay.platform", false)
             assertNativeClosed(first)
             assertNull(registry.current())
             assertFailsWith<IllegalStateException> { turn.update(emptyList()) }
-            runtime.pluginManager.setEnabled("native.overlay", true)
+            runtime.pluginManager.setEnabled("provider.conversation-overlay.platform", true)
             val second = delegate(requireNotNull(registry.current())).also { delegates += it }
             assertNotSame(first, second)
             assertSame(projection, registry.uiSlots)
             runtime.conversationOverlayController.startTurn(emptyList()).finish()
-            runtime.pluginManager.uninstall("native.overlay")
+            runtime.pluginManager.uninstall("provider.conversation-overlay.platform")
             assertNativeClosed(second)
             assertFailsWith<IllegalStateException> { second.startTurn(emptyList()) }
         } finally {
@@ -211,6 +223,8 @@ class AndroidConversationOverlayProviderTest {
                     val activity = object : Activity() {
                         override fun getApplicationContext(): AndroidContext = isolatedContext
                         override fun getFilesDir() = directory
+                        override fun getAssets() = InstrumentationRegistry.getInstrumentation().context.assets
+                        override fun getResources() = context.resources
                     }
                     val runtime = createAndroidKoogChatRuntime(
                         activity = activity,

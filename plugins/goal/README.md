@@ -1,10 +1,20 @@
 # Goal service and consumers
 
+`feature.goal` / `GoalFeaturePlugin` is the single install/enable boundary. Its owned
+children provide sessions, commands, model tools, continuation policy, status decoration,
+and restoration effects. Missing optional UI services suspend presentation children only.
+Disabling the feature withdraws all contributions, cancels/joins owned calls, and preserves
+stored goals. Re-enabling restores fresh facades and contributions. The former six package
+IDs migrate to this feature. If a surviving external dependency needs any former member,
+composition recovery retains the whole former Goal group and disables the aggregate by
+default. Removing that dependency permits group migration on restart. There is no separate
+Goal UI module or release.
+
 `provider.goal-sessions.history` consumes `KcodeHistory` and provides `KcodeGoals` / `GoalSessionFactory`. ConversationGoalSession is private to this module. All UI actions and agent tools receive the same cached session instance for each conversation, with shared mutation serialization. Repository publication precedes changes to the observable conversation; failed storage writes leave the committed goal intact.
 
-`consumer.tools.goal` contributes model tools, and `provider.continuation.goal` contributes goal continuation policy. These are independent Fiber mounts. Missing session providers supply no model goal tools; restored-goal execution waits for an available session. Tests cover lifecycle, token budgets, failed persistence, provider enable/disable and history rebinding.
+`GoalToolConsumerPlugin` contributes model tools, and `GoalContinuationPlugin` contributes goal continuation policy as internal Fibers. Both require the Goal capability. Missing session providers supply no model goal tools; restored-goal execution waits for an available session. Tests cover lifecycle, token budgets, failed persistence, provider enable/disable and history rebinding.
 
-`consumer.commands.goal` separately contributes `/goal` grammar and command handling to
+`GoalCommandConsumerPlugin` contributes `/goal` grammar and command handling to
 `conversationCommands`. It depends on the Goal session provider. Shared chat execution
 and input controls contain no Goal command parser or switch. Localization and status
 decisions live in this module; the executor supplies generic feedback and response

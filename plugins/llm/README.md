@@ -1,6 +1,6 @@
 # LLM provider plugins
 
-`core.llm` owns the adapter registry. Each native provider is a separate mount,
+`core.llm` owns the adapter registry through the independent [llm-service](../llm-service/README.md) package. Each native provider is a separate mount,
 `provider.llm.koog.<ModelProvider.name>`, rather than one aggregate registration.
 Client implementations, vendor SDK dependencies, model inventories, requirements,
 and connection defaults live in this module. Shared code contains vocabulary and
@@ -32,7 +32,7 @@ and legacy aliases. External adapters contribute display names, descriptions,
 models, and supported connection metadata through `ModelProviderSpec`, without
 editing the host. Settings stores retain custom route keys when the plugin is
 temporarily absent. Compose, ADB, real DataStore/MMKV, and isolated APK tests cover
-registration, withdrawal, and restoration. Dynamic plugins use API version 18 and
+registration, withdrawal, and restoration. Dynamic plugins use the current SDK API version 47 and
 must be recompiled for the changed provider and catalog ABI.
 
 Each of the 11 built-in routes now has a named `Plugin<Unit>` export in
@@ -53,3 +53,23 @@ Chinese dictionaries in `src/main/localization` compile into private package byt
 Shared presentation helpers project the current catalog and do not restore built-in labels after
 withdrawal. Alibaba endpoint selection also belongs to this module; the SDK region code keeps
 its persisted identity without carrying endpoint policy.
+
+Native distributions now ship each model adapter as an independent package. Ten providers
+offer desktop JAR and Android APK variants; Bedrock is desktop-only. Native hosts exclude
+this module from their production classpaths. Koog vendor clients are shared SDK/framework
+peers; the adapter factories, generated dictionaries and catalogs stay private to each
+package. Production fixtures exercise every supported adapter's client allocation boundary
+without model requests, withdrawal/recovery, and actual desktop Bedrock construction.
+
+The fallback `defaultModelAdapterPlugins` composition helper lives in `bundle-native`.
+It resolves an entry only when that ID has no package owner, and Android omits Bedrock.
+In-process tests still supply this module explicitly on their runtime classpaths.
+
+API 47 gives each shipped adapter its own desktop JAR and Android APK dependency closure.
+The shared SDK contains Koog framework contracts; vendor clients, the OpenAI-compatible
+base, and desktop AWS/Smithy types load privately from the owning archive. Providers using
+an OpenAI-compatible endpoint share that implementation as a build dependency, while
+retaining independent deployment and lifecycle. Unrelated vendor client jars are omitted. Bedrock includes the Anthropic dependency used
+by its upstream model definitions and wire serializers.
+`packaged<Provider>DesktopJar` tasks are also used by actual private-loading fixtures.
+Android release APKs use `distribution:llm-<provider>-android`; Bedrock remains desktop-only.

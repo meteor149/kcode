@@ -20,8 +20,8 @@ object WebContainerToolConsumerPlugin : Plugin<Unit> {
     override val inject = dependencies(KcodeTools.Key, KcodeWebContainers.Key)
 
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
-        val controller = ctx.require(KcodeWebContainers.Key).controller
-        val tools = ToolRegistry { if (controller != null) webContainerTools(controller) }
+        val controller = ctx.require(KcodeWebContainers.Key).controller ?: return
+        val tools = ToolRegistry { webContainerTools(controller) }
         effect.collect(ctx.require(KcodeTools.Key).register("consumer.tools.web-container", tools))
     }
 }

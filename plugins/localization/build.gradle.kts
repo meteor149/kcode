@@ -55,10 +55,14 @@ kotlin {
         commonMain { kotlin.srcDir(translationOutput) }
         commonMain.dependencies {
             api(project(":plugins:api"))
+            implementation(compose.material3)
+            implementation(compose.foundation)
+            implementation(project(":libraries:ui"))
             api(project(":plugins:default-ui-api"))
             implementation(compose.runtime)
         }
         commonTest.dependencies {
+            implementation(project(":plugins:test-support"))
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }

@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeShell
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
@@ -13,7 +15,6 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
@@ -38,7 +39,7 @@ class AndroidPluginCodeOriginTest {
         }
         val first = artifact("first.apk")
         val second = artifact("second.apk")
-        fun sha(file: File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+        fun sha(file: File) = packageFileSha256(file)
         fun spec(file: File, version: String, config: String) = DynamicPluginSpec(
             id = "fixture.origin", version = version, config = config,
             artifactPath = file.path, sha256 = sha(file), packageName = instrumentation.context.packageName,

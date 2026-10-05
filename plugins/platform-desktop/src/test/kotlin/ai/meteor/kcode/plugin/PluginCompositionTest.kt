@@ -36,6 +36,9 @@ import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.provider
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.plugin.ui.api.ApplicationLayoutRequest
@@ -58,6 +61,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -74,12 +78,129 @@ import org.cordis.plugin
 
 class PluginCompositionTest {
     @Test
-    fun defaultApplicationUiDeclaresItsRequiredSettingsHistoryAndSessionProviders() = runTest {
+    fun compositionWaitsForOwnedSettingsChildrenAndRollsBackFailedChildren() = runTest {
+        lateinit var slots: KcodeUiSlots
+        val capture = kcodePlugin(descriptor("test.child-slots"),
+            plugin<Unit>(name = "child-slots", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
+                slots = ctx.require(KcodeUiSlots.Key)
+            }, Unit)
+        fun parent(beforeRegister: suspend () -> Unit): KcodePluginMount = kcodePlugin(
+            descriptor("test.settings-parent"),
+            plugin<Unit>(name = "settings-parent") { ctx, _ ->
+                val child = ctx.plugin(plugin<Unit>(name = "settings-child", inject = dependencies(KcodeUiSlots.Key)) { childCtx, _ ->
+                    beforeRegister()
+                    collect(childCtx.require(KcodeUiSlots.Key).registerSettings(
+                        ai.meteor.kcode.plugin.ui.api.SettingsSection(
+                            "owned", 100, ai.meteor.kcode.ui.component.KcodeIconAsset.Settings,
+                            { "Owned" }, { "" }, UiRenderer { },
+                        ),
+                    ))
+                }, Unit)
+                collect { child.dispose() }
+            }, Unit,
+        )
+        val original = parent { }
+        val runtime = KcodePluginRuntime.create(config().copy(featurePlugins = listOf(capture, original)))
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        try {
+            assertTrue(slots.snapshot().settingsSections.any { it.id == "owned" })
+            val changing = async {
+                runtime.replacePlugin(parent { entered.complete(Unit); release.await() })
+            }
+            entered.await()
+            assertFalse(changing.isCompleted)
+            release.complete(Unit)
+            changing.await()
+            assertTrue(slots.snapshot().settingsSections.any { it.id == "owned" })
+            assertFailsWith<IllegalStateException> {
+                runtime.replacePlugin(parent { error("Child preparation failed") })
+            }
+            assertTrue(slots.snapshot().settingsSections.any { it.id == "owned" })
+            runtime.pluginManager.setEnabled("test.settings-parent", false)
+            assertTrue(slots.snapshot().settingsSections.none { it.id == "owned" })
+            assertNotNull(slots.snapshot().settings)
+        } finally {
+            release.complete(Unit)
+            runtime.close()
+        }
+    }
+
+    @Test
+    fun retainedSettingsSectionsRejectSavesAfterWithdrawalAndDoNotReviveWithReplacement() = runTest {
+        val context = Context()
+        val slots = KcodeUiSlots(context)
+        val clock = object : MonotonicFrameClock {
+            override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {
+                yield()
+                return onFrame(System.nanoTime())
+            }
+        }
+        val recomposer = Recomposer(backgroundScope.coroutineContext + clock)
+        val runner = backgroundScope.launch(clock) { recomposer.runRecomposeAndApplyChanges() }
+        val composition = Composition(UnitApplier(), recomposer)
+        var save: ((StoredAppSettings) -> Unit)? = null
+        var writes = 0
+        var disposed = 0
+        val section = ai.meteor.kcode.plugin.ui.api.SettingsSection(
+            "custom", 0, ai.meteor.kcode.ui.component.KcodeIconAsset.Settings, { "Custom" }, { "" },
+            UiRenderer { request ->
+                save = request.page.onSettingsChange
+                DisposableEffect(Unit) { onDispose { disposed++ } }
+            },
+        )
+        val request = ai.meteor.kcode.plugin.ui.api.SettingsSectionRequest(
+            ai.meteor.kcode.plugin.ui.api.SettingsPageRequest(
+                StoredAppSettings(), null, { writes++ }, {},
+            ), {},
+        )
+        suspend fun renderChanges() {
+            Snapshot.withMutableSnapshot { testScheduler.runCurrent() }
+            Snapshot.sendApplyNotifications()
+            testScheduler.runCurrent()
+            recomposer.awaitIdle()
+        }
+        try {
+            val old = slots.registerSettings(section)
+            val captured = slots.snapshot().settingsSections.single()
+            composition.setContent { captured.renderer.Render(request) }
+            renderChanges()
+            val staleSave = checkNotNull(save)
+            staleSave(StoredAppSettings())
+            assertEquals(1, writes)
+            old.dispose()
+            renderChanges()
+            assertEquals(1, disposed)
+            assertFailsWith<IllegalStateException> { staleSave(StoredAppSettings()) }
+            val replacement = slots.registerSettings(section)
+            old.dispose()
+            assertEquals(1, slots.snapshot().settingsSections.size)
+            assertFailsWith<IllegalStateException> { staleSave(StoredAppSettings()) }
+            val restored = slots.snapshot().settingsSections.single()
+            composition.setContent { restored.renderer.Render(request) }
+            renderChanges()
+            checkNotNull(save)(StoredAppSettings())
+            assertEquals(2, writes)
+            replacement.dispose()
+        } finally {
+            composition.dispose()
+            recomposer.cancel()
+            runner.cancelAndJoin()
+            context.fiber.dispose()
+        }
+    }
+
+    @Test
+    fun defaultApplicationUiKeepsSettingsMountedWithoutConversationProviders() = runTest {
         val runtime = KcodePluginRuntime.create(config())
         try {
-            for (id in listOf("provider.settings.platform", "provider.history.platform", "provider.sessions.history")) {
+            runtime.pluginManager.setEnabled("provider.settings.platform", false)
+            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
+            runtime.pluginManager.setEnabled("provider.settings.platform", true)
+            for (id in listOf("provider.history.platform", "provider.sessions.history", "provider.generation")) {
                 runtime.pluginManager.setEnabled(id, false)
-                assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
+                assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
+                assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.sidebar" }.state)
                 runtime.pluginManager.setEnabled(id, true)
                 assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.compose" }.state)
             }
@@ -134,7 +255,7 @@ class PluginCompositionTest {
             assertTrue(state != null)
             assertEquals(1, starts)
             assertTrue(slots.webContainers != null)
-            runtime.pluginManager.setEnabled("provider.web-containers.platform", false)
+            runtime.pluginManager.setEnabled("feature.web-container", false)
             renderChanges()
             assertEquals(0, stops)
             assertSame(state, remembered)
@@ -142,8 +263,8 @@ class PluginCompositionTest {
             assertNull(slots.webContainers)
             assertSame(chat, slots.chat)
             assertFailsWith<IllegalStateException> { previous.list() }
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.web-containers" }.state)
-            runtime.pluginManager.setEnabled("provider.web-containers.platform", true)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.web-container" }.state)
+            runtime.pluginManager.setEnabled("feature.web-container", true)
             renderChanges()
             assertEquals(1, starts)
             assertEquals(0, stops)
@@ -258,21 +379,18 @@ class PluginCompositionTest {
         try {
             val initial = slots.snapshot()
             assertTrue(initial.webContainers != null)
-            runtime.pluginManager.setEnabled("provider.ui.web-containers", false)
-            assertNull(slots.snapshot().webContainers)
-            assertSame(initial.chat, slots.snapshot().chat)
-            runtime.pluginManager.setEnabled("provider.ui.web-containers", true)
-            assertTrue(slots.snapshot().webContainers != null)
             val staleController = publishedController
-            val disabling = async { runtime.pluginManager.setEnabled("provider.web-containers.platform", false) }
+            val disabling = async { runtime.pluginManager.setEnabled("feature.web-container", false) }
             closeStarted.await()
             assertFalse(disabling.isCompleted)
             assertFailsWith<IllegalStateException> { staleController.list() }
             releaseClose.complete(Unit)
             disabling.await()
             assertNull(slots.snapshot().webContainers)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.web-containers" }.state)
-            runtime.pluginManager.setEnabled("provider.web-containers.platform", true)
+            assertSame(initial.chat, slots.snapshot().chat)
+            assertFalse("consumer.tools.web-container" in runtime.diagnostics().toolContributions)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.web-container" }.state)
+            runtime.pluginManager.setEnabled("feature.web-container", true)
             assertTrue(slots.snapshot().webContainers != null)
         } finally {
             releaseClose.complete(Unit)
@@ -304,7 +422,7 @@ class PluginCompositionTest {
             assertTrue(slots.snapshot().standaloneConversation != null)
             runtime.pluginManager.setEnabled("provider.artifacts.platform", false)
             assertNull(slots.snapshot().artifacts)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.artifacts" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.artifacts" }.state)
             runtime.pluginManager.setEnabled("provider.artifacts.platform", true)
             assertTrue(slots.snapshot().artifacts != null)
         } finally {
@@ -313,32 +431,33 @@ class PluginCompositionTest {
     }
 
     @Test
-    fun modelSettingsVisibilityFollowsTheCommittedProviderCatalog() = runTest {
+    fun settingsSectionsFollowTheirFeatureProvidersWhileThePageRemainsAvailable() = runTest {
         lateinit var slots: KcodeUiSlots
         val capture = kcodePlugin(descriptor("test.settings-catalog"),
             plugin<Unit>(name = "settings-catalog", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
                 slots = ctx.require(KcodeUiSlots.Key)
             }, Unit)
         val runtime = KcodePluginRuntime.create(config().copy(featurePlugins = listOf(capture)))
-        suspend fun request() = ai.meteor.kcode.plugin.ui.api.SettingsPageRequest(
-            current = null, appSettings = StoredAppSettings(), persistenceFailure = null,
-            shellSettingsAvailable = false, onSettingsChange = {}, onModelSettingsChange = { _, _ -> },
-            onDismiss = {}, modelCatalog = runtime.modelCatalog(),
-        )
         try {
-            val modelSection = slots.snapshot().settingsSections.first { it.id == "model" }
-            assertTrue(modelSection.isVisible(request()))
-            runtime.diagnostics().plugins.filter { it.id.startsWith("provider.llm.koog.") }.forEach {
-                runtime.pluginManager.setEnabled(it.id, false)
+            val page = slots.snapshot().settings
+            assertNotNull(page)
+            assertEquals(listOf("language", "model", "search"), slots.snapshot().settingsSections.map { it.id })
+            runtime.pluginManager.setEnabled("feature.web-search", false)
+            assertEquals(listOf("language", "model"), slots.snapshot().settingsSections.map { it.id })
+            assertFalse("consumer.tools.web-search" in runtime.diagnostics().toolContributions)
+            assertSame(page, slots.snapshot().settings)
+            runtime.updateSettings(ai.meteor.kcode.settings.SettingsUpdate(mapOf("temperature" to "0.4")))
+            assertFailsWith<IllegalArgumentException> {
+                runtime.updateSettings(ai.meteor.kcode.settings.SettingsUpdate(mapOf("search-provider" to "google")))
             }
-            assertTrue(runtime.modelCatalog().providers.isEmpty())
-            assertFalse(modelSection.isVisible(request()))
-            runtime.pluginManager.setEnabled("provider.llm.koog.DeepSeek", true)
-            assertTrue(modelSection.isVisible(request()))
-            runtime.pluginManager.setEnabled("provider.ui.settings.model", false)
-            assertEquals(listOf("language", "search", "shell"), slots.snapshot().settingsSections.map { it.id })
-            runtime.pluginManager.setEnabled("provider.ui.settings.model", true)
-            assertEquals(listOf("language", "model", "search", "shell"), slots.snapshot().settingsSections.map { it.id })
+            runtime.pluginManager.setEnabled("feature.web-search", true)
+            assertEquals(listOf("language", "model", "search"), slots.snapshot().settingsSections.map { it.id })
+            runtime.pluginManager.setEnabled("provider.model-settings.catalog", false)
+            assertEquals(listOf("language", "search"), slots.snapshot().settingsSections.map { it.id })
+            assertSame(page, slots.snapshot().settings)
+            runtime.updateSettings(ai.meteor.kcode.settings.SettingsUpdate(mapOf("search-provider" to "google")))
+            runtime.pluginManager.setEnabled("provider.model-settings.catalog", true)
+            assertEquals(listOf("language", "model", "search"), slots.snapshot().settingsSections.map { it.id })
         } finally {
             runtime.close()
         }
@@ -361,7 +480,7 @@ class PluginCompositionTest {
                     ai.meteor.kcode.plugin.ui.api.ConversationDecoration("custom.decoration", 0,
                         ai.meteor.kcode.plugin.ui.api.ConversationDecorationPresenter {
                             DisposableEffect(Unit) { presented += 1; onDispose { removed += 1 } }
-                            null
+                            emptyList()
                         }),
                 ))
             }, Unit)
@@ -380,7 +499,10 @@ class PluginCompositionTest {
         val runner = backgroundScope.launch(clock) { recomposer.runRecomposeAndApplyChanges() }
         val composition = Composition(UnitApplier(), recomposer)
         suspend fun renderChanges() {
-            testScheduler.runCurrent(); Snapshot.sendApplyNotifications(); testScheduler.runCurrent(); recomposer.awaitIdle()
+            Snapshot.withMutableSnapshot { testScheduler.runCurrent() }
+            Snapshot.sendApplyNotifications()
+            testScheduler.runCurrent()
+            recomposer.awaitIdle()
         }
         try {
             composition.setContent { runtime.Render(ApplicationHostOptions()) }
@@ -428,6 +550,68 @@ class PluginCompositionTest {
         } finally {
             runtime.close()
         }
+    }
+
+    @Test
+    fun formerSearchPackagesMigrateToOneFeatureAndPreserveDisabledState() = runTest {
+        var saved: ai.meteor.kcode.plugin.api.PluginCompositionSnapshot? = null
+        val store = object : ai.meteor.kcode.plugin.api.PluginCompositionStore {
+            override suspend fun load() = ai.meteor.kcode.plugin.api.PluginCompositionSnapshot(
+                builtinsEnabled = mapOf(
+                    "provider.search-settings.http" to true,
+                    "provider.web.search-http" to true,
+                    "consumer.tools.web-search" to false,
+                ),
+            )
+            override suspend fun save(snapshot: ai.meteor.kcode.plugin.api.PluginCompositionSnapshot) { saved = snapshot }
+        }
+        val runtime = KcodePluginRuntime.create(config().copy(pluginCompositionStore = store))
+        try {
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.single { it.id == "feature.web-search" }.state)
+            assertFalse("consumer.tools.web-search" in runtime.diagnostics().toolContributions)
+            assertEquals(setOf("feature.web-search"), checkNotNull(saved).builtinsEnabled.filterKeys { it.contains("search") }.keys)
+            runtime.pluginManager.setEnabled("feature.web-search", true)
+            assertTrue("consumer.tools.web-search" in runtime.diagnostics().toolContributions)
+        } finally { runtime.close() }
+    }
+
+    @Test
+    fun verifiedFormerSearchReleasesAreRetiredBeforeLoading() = runTest {
+        val oldIds = listOf("provider.search-settings.http", "provider.web.search-http", "consumer.tools.web-search")
+        val digest = "a".repeat(64)
+        val stored = oldIds.mapIndexed { index, id ->
+            ai.meteor.kcode.plugin.api.StoredDynamicPlugin.from(DynamicPluginSpec(
+                id = id,
+                version = "old-search",
+                artifactPath = java.io.File("build/retired-search.jar").absolutePath,
+                sha256 = digest,
+                entryClass = "retired.SearchPlugin",
+                config = Unit,
+                enabled = index != 1,
+                packageInstallation = PluginPackageInstallation(
+                    archivePath = java.io.File("build/retired-search.kplugin").absolutePath,
+                    archiveSha256 = digest,
+                    variantId = "desktop",
+                    runtimeAbi = digest,
+                ),
+            )).copy(apiVersion = 44)
+        }
+        var saved: ai.meteor.kcode.plugin.api.PluginCompositionSnapshot? = null
+        val store = object : ai.meteor.kcode.plugin.api.PluginCompositionStore {
+            override suspend fun load() = ai.meteor.kcode.plugin.api.PluginCompositionSnapshot(
+                external = stored,
+                bundledPackages = oldIds.associateWith { digest },
+            )
+            override suspend fun save(snapshot: ai.meteor.kcode.plugin.api.PluginCompositionSnapshot) { saved = snapshot }
+        }
+        val runtime = KcodePluginRuntime.create(config().copy(pluginCompositionStore = store))
+        try {
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.single { it.id == "feature.web-search" }.state)
+            assertTrue(runtime.pluginManager.installed().isEmpty())
+            assertTrue(checkNotNull(saved).bundledPackages.keys.none { it in oldIds })
+            runtime.pluginManager.setEnabled("feature.web-search", true)
+            assertTrue("consumer.tools.web-search" in runtime.diagnostics().toolContributions)
+        } finally { runtime.close() }
     }
 
     @Test
@@ -480,7 +664,7 @@ class PluginCompositionTest {
             val previous = execution
             runtime.pluginManager.setEnabled("provider.conversation-execution.history", false)
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.chat" }.state)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.schedules.application" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
             runtime.pluginManager.setEnabled("provider.conversation-execution.history", true)
             assertFalse(previous === execution)
             assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.ui.chat" }.state)
@@ -494,77 +678,39 @@ class PluginCompositionTest {
     }
 
     @Test
-    fun actualScheduleEffectStopsWhenUnregisteredAndRestartsWithoutDuplicatedRunner() = runTest {
-        var starts = 0
-        var stops = 0
+    fun scheduleDispatchRunsWithoutRenderingAndRestartsWithoutDuplicatedRunner() = kotlinx.coroutines.runBlocking {
+        val starts = java.util.concurrent.atomic.AtomicInteger()
+        val stops = java.util.concurrent.atomic.AtomicInteger()
         val coordinator = object : ScheduledTaskCoordinator {
             override fun sessionFor(conversationId: Long, title: String): ScheduledTaskSession? = null
             override fun notifyChanged() = Unit
             override suspend fun run(onDue: suspend (ScheduledTask) -> Boolean) {
-                starts += 1
-                try { awaitCancellation() } finally { stops += 1 }
+                starts.incrementAndGet()
+                try { awaitCancellation() } finally { stops.incrementAndGet() }
             }
         }
-        val generationRunner = OwnedChatGenerationRunner(scope = backgroundScope)
-        val renderer = DefaultUiRenderer { services, _ ->
-            val session = remember(services.conversationSessions) { services.conversationSessions!!.create(backgroundScope) }
-            DisposableEffect(session) { onDispose { session.cancel() } }
-            LaunchedEffect(session) { session.load() }
-            services.uiSlots.effects.forEach { effect ->
-                key(effect) {
-                    effect.renderer.Render(ApplicationEffectRequest(
-                        conversationSession = session,
-                        conversationExecution = services.conversationExecution,
-                        configuration = null,
-                        chatService = services.chatService,
-                        generationRunner = generationRunner,
-                        historyRepository = services.historyRepository,
-                        goalSessionFactory = services.goalSessions,
-                        scheduledTaskCoordinator = services.schedules,
-                        language = AppLanguage.English,
-                    ))
-                }
-            }
-        }
-        val scheduleMount = kcodePlugin(descriptor("provider.schedules.history"),
-            plugin<Unit>(name = "recording-scheduler") { ctx, _ -> KcodeSchedules(ctx, coordinator) }, Unit)
-        val runtime = KcodePluginRuntime.create(config(KcodePluginProfile(overrides = listOf(uiMount(renderer), scheduleMount))))
-        val frameClock = object : MonotonicFrameClock {
-            override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {
-                yield()
-                return onFrame(System.nanoTime())
-            }
-        }
-        val recomposer = Recomposer(backgroundScope.coroutineContext + frameClock)
-        val runner = backgroundScope.launch(frameClock) { recomposer.runRecomposeAndApplyChanges() }
-        val composition = Composition(UnitApplier(), recomposer)
-        suspend fun renderChanges() {
-            // Apply collector writes synchronously instead of racing Compose's global
-            // snapshot notification thread before awaitIdle observes pending work.
-            Snapshot.withMutableSnapshot { testScheduler.runCurrent() }
-            Snapshot.sendApplyNotifications()
-            testScheduler.runCurrent()
-            recomposer.awaitIdle()
+        val scheduleMount = kcodePlugin(descriptor("feature.schedule"),
+            plugin<Unit>(name = "recording-schedule-feature") { ctx, _ ->
+                val provider = ctx.plugin(plugin<Unit>(name = "recording-scheduler") { child, _ -> KcodeSchedules(child, coordinator) }, Unit)
+                collect { provider.dispose() }
+                val dispatch = ctx.plugin(ScheduleDispatchPlugin, Unit)
+                collect { dispatch.dispose() }
+            }, Unit)
+        val runtime = KcodePluginRuntime.create(config(KcodePluginProfile(overrides = listOf(scheduleMount))))
+        suspend fun awaitStarts(count: Int) = kotlinx.coroutines.withTimeout(5_000) {
+            while (starts.get() != count) kotlinx.coroutines.delay(10)
         }
         try {
-            composition.setContent { runtime.Render(ApplicationHostOptions()) }
-            renderChanges()
-            assertEquals(1, starts)
-            runtime.pluginManager.setEnabled("consumer.schedules.application", false)
-            renderChanges()
-            assertEquals(1, stops)
-            assertEquals(1, starts)
-            runtime.pluginManager.setEnabled("consumer.schedules.application", true)
-            renderChanges()
-            assertEquals(2, starts)
-            assertEquals(1, stops)
+            awaitStarts(1)
+            runtime.pluginManager.setEnabled("feature.schedule", false)
+            assertEquals(1, stops.get())
+            runtime.pluginManager.setEnabled("feature.schedule", true)
+            awaitStarts(2)
+            assertEquals(1, stops.get())
         } finally {
-            composition.dispose()
-            recomposer.close()
-            runner.cancel()
             runtime.close()
         }
-        assertEquals(2, stops)
+        assertEquals(2, stops.get())
     }
 
     @Test
@@ -595,7 +741,7 @@ class PluginCompositionTest {
             assertTrue(conversation.runningJob!!.isCompleted)
             assertFailsWith<IllegalStateException> { session.ensureConversation("Stale session") }
             assertFailsWith<IllegalStateException> { previousFactory.create(backgroundScope) }
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.schedules.application" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
             runtime.pluginManager.setEnabled("provider.sessions.history", true)
             assertFalse(previousFactory === factory)
             val restored = factory.create(backgroundScope)
@@ -621,17 +767,17 @@ class PluginCompositionTest {
         try {
             val first = coordinator
             val firstSession = first.sessionFor(1, "Scheduled")!!
-            runtime.pluginManager.setEnabled("provider.schedules.history", false)
+            runtime.pluginManager.setEnabled("feature.schedule", false)
             assertFailsWith<IllegalStateException> { first.sessionFor(1, "stale") }
             assertFailsWith<IllegalStateException> { first.notifyChanged() }
             assertFailsWith<IllegalStateException> { firstSession.list() }
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "test.schedule-consumer" }.state)
-            runtime.pluginManager.setEnabled("provider.schedules.history", true)
+            runtime.pluginManager.setEnabled("feature.schedule", true)
             assertFalse(first === coordinator)
             val previous = coordinator
             runtime.pluginManager.setEnabled("provider.history.platform", false)
             assertFailsWith<IllegalStateException> { previous.notifyChanged() }
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.schedules.history" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
             runtime.pluginManager.setEnabled("provider.history.platform", true)
             assertFalse(previous === coordinator)
             assertTrue(coordinator.sessionFor(1, "Scheduled") != null)
@@ -658,11 +804,11 @@ class PluginCompositionTest {
             assertSame(first, sessions.create(conversation))
             val goal = first.createGoal("Plugin goal")
             assertEquals(goal, conversation.goal)
-            runtime.pluginManager.setEnabled("provider.goal-sessions.history", false)
+            runtime.pluginManager.setEnabled("feature.goal", false)
             assertFailsWith<IllegalStateException> { firstFactory.create(conversation) }
             assertFailsWith<IllegalStateException> { first.getGoal() }
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "test.goal-session-consumer" }.state)
-            runtime.pluginManager.setEnabled("provider.goal-sessions.history", true)
+            runtime.pluginManager.setEnabled("feature.goal", true)
             val second = sessions.create(conversation)!!
             assertFalse(first === second)
             assertEquals(goal, second.getGoal())
@@ -681,13 +827,13 @@ class PluginCompositionTest {
         assertFailsWith<IllegalArgumentException> {
             KcodePluginRuntime.create(config(KcodePluginProfile(disabled = setOf("typo"))))
         }
-        val runtime = KcodePluginRuntime.create(config(KcodePluginProfile(disabled = setOf("consumer.tools.goal"))))
+        val runtime = KcodePluginRuntime.create(config(KcodePluginProfile(disabled = setOf("feature.goal"))))
         try {
             assertFalse("core/goal" in runtime.diagnostics().toolContributions)
-            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "consumer.tools.goal" }.state)
-            runtime.pluginManager.setEnabled("consumer.tools.goal", true)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.goal" }.state)
+            runtime.pluginManager.setEnabled("feature.goal", true)
             assertTrue("core/goal" in runtime.diagnostics().toolContributions)
-            runtime.pluginManager.uninstall("consumer.tools.goal")
+            runtime.pluginManager.uninstall("feature.goal")
             assertFalse("core/goal" in runtime.diagnostics().toolContributions)
         } finally {
             runtime.close()
@@ -869,7 +1015,7 @@ class PluginCompositionTest {
         val consumer = kcodePlugin(
             descriptor("test.settings-consumer"),
             plugin<Unit>(name = "test-settings-consumer", inject = dependencies(KcodeSettings.Key)) { ctx, _ ->
-                observedSettings += ctx.require(KcodeSettings.Key).store
+                observedSettings += ctx.require(KcodeSettings.Key).mutationStore
             },
             Unit,
         )
@@ -935,57 +1081,61 @@ class PluginCompositionTest {
             assertSame(remembered, firstRenderer.remembered)
             assertEquals(listOf("goal"), firstRenderer.commands.contributions.map { it.id })
             assertTrue(firstRenderer.commands.allowedDuringGeneration("/goal pause"))
-            runtime.pluginManager.setEnabled("consumer.commands.goal", false)
+            runtime.pluginManager.setEnabled("feature.goal", false)
             renderChanges()
             assertTrue(firstRenderer.commands.contributions.isEmpty())
             assertFalse(firstRenderer.commands.allowedDuringGeneration("/goal pause"))
+            assertEquals(listOf("subagents", "conversation-export"), firstRenderer.slots.conversationDecorations.map { it.id })
+            assertTrue(firstRenderer.slots.conversationEffects.isEmpty())
+            assertFalse("core/goal" in runtime.diagnostics().toolContributions)
             assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("consumer.commands.goal", true)
+            runtime.pluginManager.setEnabled("feature.goal", true)
             renderChanges()
             assertEquals(listOf("goal"), firstRenderer.commands.contributions.map { it.id })
-            runtime.pluginManager.setEnabled("provider.goal-sessions.history", false)
+            assertTrue("core/goal" in runtime.diagnostics().toolContributions)
+            runtime.pluginManager.setEnabled("feature.goal", false)
             renderChanges()
             assertTrue(firstRenderer.commands.contributions.isEmpty())
-            assertTrue(firstRenderer.slots.conversationDecorations.isEmpty())
+            assertEquals(listOf("subagents", "conversation-export"), firstRenderer.slots.conversationDecorations.map { it.id })
             assertTrue(firstRenderer.slots.conversationEffects.isEmpty())
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.commands.goal" }.state)
-            runtime.pluginManager.setEnabled("provider.goal-sessions.history", true)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.goal" }.state)
+            runtime.pluginManager.setEnabled("feature.goal", true)
             renderChanges()
             assertEquals(listOf("goal"), firstRenderer.commands.contributions.map { it.id })
-            assertEquals(listOf("goal"), firstRenderer.slots.conversationDecorations.map { it.id })
+            assertEquals(listOf("goal", "subagents", "conversation-export"), firstRenderer.slots.conversationDecorations.map { it.id })
             assertEquals(listOf("goal.restore"), firstRenderer.slots.conversationEffects.map { it.id })
-            runtime.pluginManager.setEnabled("provider.ui.chat.goal", false)
+            runtime.pluginManager.setEnabled("feature.goal", false)
             renderChanges()
-            assertTrue(firstRenderer.slots.conversationDecorations.isEmpty())
-            assertEquals(listOf("goal.restore"), firstRenderer.slots.conversationEffects.map { it.id })
-            assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("provider.ui.chat.goal", true)
-            renderChanges()
-            runtime.pluginManager.setEnabled("consumer.goals.chat-restoration", false)
-            renderChanges()
-            assertEquals(listOf("goal"), firstRenderer.slots.conversationDecorations.map { it.id })
+            assertEquals(listOf("subagents", "conversation-export"), firstRenderer.slots.conversationDecorations.map { it.id })
             assertTrue(firstRenderer.slots.conversationEffects.isEmpty())
-            runtime.pluginManager.setEnabled("consumer.goals.chat-restoration", true)
+            assertSame(remembered, firstRenderer.remembered)
+            runtime.pluginManager.setEnabled("feature.goal", true)
+            renderChanges()
+            runtime.pluginManager.setEnabled("feature.goal", false)
+            renderChanges()
+            assertEquals(listOf("subagents", "conversation-export"), firstRenderer.slots.conversationDecorations.map { it.id })
+            assertTrue(firstRenderer.slots.conversationEffects.isEmpty())
+            runtime.pluginManager.setEnabled("feature.goal", true)
             renderChanges()
             val originalChat = firstRenderer.slots.chat
-            val originalExporter = firstRenderer.exporter
+            val originalExporter = firstRenderer.exportPresentation
             assertTrue(originalExporter != null)
-            runtime.pluginManager.setEnabled("provider.export.image-rendering", false)
+            runtime.pluginManager.setEnabled("feature.conversation-export", false)
             renderChanges()
-            assertNull(firstRenderer.exporter)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.export.conversation" }.state)
+            assertNull(firstRenderer.exportPresentation)
+            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.conversation-export" }.state)
             assertSame(originalChat, firstRenderer.slots.chat)
             assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("provider.export.image-rendering", true)
+            runtime.pluginManager.setEnabled("feature.conversation-export", true)
             renderChanges()
-            assertTrue(firstRenderer.exporter != null)
-            assertFalse(originalExporter === firstRenderer.exporter)
-            runtime.pluginManager.setEnabled("provider.export.conversation", false)
+            assertTrue(firstRenderer.exportPresentation != null)
+            assertFalse(originalExporter === firstRenderer.exportPresentation)
+            runtime.pluginManager.setEnabled("feature.conversation-export", false)
             renderChanges()
-            assertNull(firstRenderer.exporter)
-            runtime.pluginManager.setEnabled("provider.export.conversation", true)
+            assertNull(firstRenderer.exportPresentation)
+            runtime.pluginManager.setEnabled("feature.conversation-export", true)
             renderChanges()
-            assertTrue(firstRenderer.exporter != null)
+            assertTrue(firstRenderer.exportPresentation != null)
             assertEquals(listOf("chat", "artifacts"), firstRenderer.slots.navigation.map { it.id })
             val originalNavigation = firstRenderer.slots.navigation.first()
             runtime.pluginManager.setEnabled("provider.ui.navigation.custom", true)
@@ -1013,14 +1163,14 @@ class PluginCompositionTest {
             }
             renderChanges()
             assertEquals(listOf("chat", "artifacts"), firstRenderer.slots.navigation.map { it.id })
-            assertEquals(listOf("schedule.dispatch"), firstRenderer.slots.effects.map { it.id })
-            runtime.pluginManager.setEnabled("consumer.schedules.application", false)
+            assertTrue(firstRenderer.slots.effects.none { it.id == "schedule.dispatch" })
+            runtime.pluginManager.setEnabled("feature.schedule", false)
             renderChanges()
             assertTrue(firstRenderer.slots.effects.isEmpty())
             assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("consumer.schedules.application", true)
+            runtime.pluginManager.setEnabled("feature.schedule", true)
             renderChanges()
-            assertEquals(listOf("schedule.dispatch"), firstRenderer.slots.effects.map { it.id })
+            assertTrue(firstRenderer.slots.effects.none { it.id == "schedule.dispatch" })
             assertEquals(listOf("assistant", "error", "user"), firstRenderer.slots.messagePresentations.map { it.id })
             runtime.pluginManager.setEnabled("provider.ui.message.assistant", false)
             renderChanges()
@@ -1039,38 +1189,20 @@ class PluginCompositionTest {
             runtime.pluginManager.setEnabled("provider.ui.tool.default", true)
             renderChanges()
             assertEquals(listOf("default"), firstRenderer.slots.toolUsePresentations.map { it.id })
-            assertEquals(listOf("language", "model", "search", "shell"), firstRenderer.slots.settingsSections.map { it.id })
-            runtime.pluginManager.setEnabled("provider.ui.settings.search", false)
+            assertEquals(listOf("language", "model", "search"), firstRenderer.slots.settingsSections.map { it.id })
+            runtime.pluginManager.setEnabled("feature.web-search", false)
             renderChanges()
-            assertEquals(listOf("language", "model", "shell"), firstRenderer.slots.settingsSections.map { it.id })
+            assertEquals(listOf("language", "model"), firstRenderer.slots.settingsSections.map { it.id })
             assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("provider.ui.settings.search", true)
+            runtime.pluginManager.setEnabled("feature.web-search", true)
             renderChanges()
-            val originalModel = firstRenderer.slots.settingsSections.first { it.id == "model" }
-            val replacementModel = originalModel.copy(renderer = UiRenderer { })
-            runtime.replacePlugin(settingsSectionPlugin(replacementModel))
-            renderChanges()
-            assertSame(replacementModel, firstRenderer.slots.settingsSections.first { it.id == "model" })
-            assertFailsWith<IllegalArgumentException> {
-                runtime.replacePlugin(kcodePlugin(
-                    descriptor("provider.ui.settings.model"),
-                    plugin<Unit>(name = "duplicate-section", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
-                        collect(ctx.require(KcodeUiSlots.Key).registerSettings(
-                            originalModel.copy(id = "language"),
-                        ))
-                    },
-                    Unit,
-                ))
-            }
-            renderChanges()
-            assertSame(replacementModel, firstRenderer.slots.settingsSections.first { it.id == "model" })
-            runtime.pluginManager.setEnabled("provider.ui.artifacts", false)
+            runtime.pluginManager.setEnabled("feature.artifacts", false)
             renderChanges()
             assertNull(firstRenderer.slots.artifacts)
             assertEquals(listOf("chat"), firstRenderer.slots.navigation.filter { it.isAvailable(firstRenderer.slots) }.map { it.id })
             assertSame(originalChat, firstRenderer.slots.chat)
             assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("provider.ui.artifacts", true)
+            runtime.pluginManager.setEnabled("feature.artifacts", true)
             renderChanges()
             assertTrue(firstRenderer.slots.artifacts != null)
             val replacementChat = UiRenderer<ChatPageRequest> { }
@@ -1083,7 +1215,7 @@ class PluginCompositionTest {
             }
             renderChanges()
             assertSame(replacementChat, firstRenderer.slots.chat)
-            runtime.pluginManager.setEnabled("consumer.tools.goal", false)
+            runtime.pluginManager.setEnabled("feature.goal", false)
             renderChanges()
             assertSame(remembered, firstRenderer.remembered)
             val staleSettings = checkNotNull(firstRenderer.settings)
@@ -1133,7 +1265,7 @@ private fun uiMount(renderer: DefaultUiRenderer) = kcodePlugin(descriptor("provi
 
 private class MemorySettings(language: String) : AppSettingsStore {
     override val protection = SettingsProtection.Transient
-    private var settings = StoredAppSettings(language = language)
+    private var settings = LegacySettings(language = language)
     override suspend fun load() = settings
     override suspend fun save(settings: StoredAppSettings) { this.settings = settings }
 }
@@ -1145,7 +1277,7 @@ private class RecordingRenderer(
 ) : DefaultUiRenderer {
     var commands = ai.meteor.kcode.chat.ConversationCommandSnapshot()
     var catalog = ai.meteor.kcode.model.ModelCatalogSnapshot()
-    var exporter: ai.meteor.kcode.export.ConversationExporter? = null
+    var exportPresentation: ai.meteor.kcode.plugin.ui.api.ConversationDecoration? = null
     var settings: AppSettingsStore? = null
     var slots = ApplicationUiSlots()
     var remembered: Any? = null
@@ -1171,7 +1303,7 @@ private class RecordingRenderer(
                 modelDescription = ai.meteor.kcode.plugin.ui.api.modelDescription(option)
             }
         }
-        exporter = services.conversationExporter
+        exportPresentation = services.uiSlots.conversationDecorations.singleOrNull { it.id == "conversation-export" }
         slots = services.uiSlots
         layoutContext?.let { request ->
             RenderApplicationLayout(request.copy(sidebarRenderer = slots.sidebar), slots.layout)

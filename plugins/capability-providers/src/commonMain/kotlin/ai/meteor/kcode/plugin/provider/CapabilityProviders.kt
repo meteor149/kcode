@@ -9,7 +9,7 @@ import ai.meteor.kcode.plugin.api.FileInfo
 import ai.meteor.kcode.plugin.api.FileKind
 import ai.meteor.kcode.plugin.api.FileSystemBackend
 import ai.meteor.kcode.plugin.api.KcodeFileSystem
-import ai.meteor.kcode.plugin.api.KcodeSettings
+import ai.meteor.kcode.plugin.api.KcodeShellMode
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.plugin.api.KcodeShell
 import ai.meteor.kcode.plugin.api.KcodeUbuntuShell
@@ -86,7 +86,7 @@ private fun settingsShellProvider(
 
 object SettingsShellProviderPlugin : Plugin<(suspend () -> ShellExecutionMode) -> AgentShellExecutor> {
     override val name = "kcode-settings-shell-provider"
-    override val inject = dependencies(KcodeSettings.Key)
+    override val inject = dependencies(KcodeShellMode.Key)
     override suspend fun apply(
         ctx: Context,
         config: (suspend () -> ShellExecutionMode) -> AgentShellExecutor,
@@ -96,7 +96,7 @@ object SettingsShellProviderPlugin : Plugin<(suspend () -> ShellExecutionMode) -
 
 object SettingsUbuntuShellProviderPlugin : Plugin<(suspend () -> ShellExecutionMode) -> AgentShellExecutor> {
     override val name = "kcode-settings-ubuntu-shell-provider"
-    override val inject = dependencies(KcodeSettings.Key)
+    override val inject = dependencies(KcodeShellMode.Key)
     override suspend fun apply(
         ctx: Context,
         config: (suspend () -> ShellExecutionMode) -> AgentShellExecutor,
@@ -110,11 +110,11 @@ private suspend fun applySettingsShell(
     effect: EffectScope,
     ubuntu: Boolean,
 ) {
-    val store = ctx.require(KcodeSettings.Key).store
+    val modePolicy = ctx.require(KcodeShellMode.Key).policy
     val owner = PluginOperationOwner("settings shell provider")
     effect.collect(Disposable { owner.close() })
     val executor = factory {
-        owner.run { ShellExecutionMode.fromCode(store.load().shellExecutionMode) ?: ShellExecutionMode.App }
+        owner.run { modePolicy.mode() }
     }
     if (ubuntu) KcodeUbuntuShell(ctx, adaptShell(executor, owner))
     else KcodeShell(ctx, adaptShell(executor, owner))

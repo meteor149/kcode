@@ -2,6 +2,8 @@
 
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.session.HistoryConversationState
 
 import ai.meteor.kcode.plugin.execution.OwnedChatGenerationRunner
@@ -36,7 +38,6 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -82,7 +83,7 @@ class AndroidPluginCompositionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.layout-ui", version = "external", entryClass = AndroidFixtureLayoutUi::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "layout-ui",
             ))
             val snapshot = slots.snapshot()
@@ -138,7 +139,7 @@ class AndroidPluginCompositionTest {
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
             featurePlugins = listOf(capture),
-            profile = KcodePluginProfile(disabled = setOf("provider.ui.web-containers")),
+            profile = KcodePluginProfile(disabled = setOf("feature.web-container")),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
@@ -147,7 +148,7 @@ class AndroidPluginCompositionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.web-ui", version = "external", entryClass = AndroidFixtureWebUi::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "web-ui",
             ))
             val renderer = checkNotNull(slots.snapshot().webContainers)
@@ -200,7 +201,7 @@ class AndroidPluginCompositionTest {
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
             featurePlugins = listOf(capture),
-            profile = KcodePluginProfile(disabled = setOf("provider.ui.chat.goal", "consumer.goals.chat-restoration")),
+            profile = KcodePluginProfile(disabled = setOf("feature.goal")),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
@@ -209,13 +210,13 @@ class AndroidPluginCompositionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.conversation-ui", version = "external", entryClass = AndroidFixtureConversationUi::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "conversation-ui",
             ))
             val snapshot = slots.snapshot()
-            assertEquals(listOf("external"), snapshot.conversationDecorations.map { it.id })
+            assertEquals(listOf("external", "subagents", "conversation-export"), snapshot.conversationDecorations.map { it.id })
             assertEquals(listOf("external"), snapshot.conversationEffects.map { it.id })
-            assertFalse(snapshot.conversationDecorations.single().presenter.javaClass.classLoader === AndroidFixtureConversationUi::class.java.classLoader)
+            assertFalse(snapshot.conversationDecorations.single { it.id == "external" }.presenter.javaClass.classLoader === AndroidFixtureConversationUi::class.java.classLoader)
             val target = HistoryConversationState(1, "initial")
             val page = ai.meteor.kcode.plugin.ui.api.ConversationPageContext(target, true, null, runtime.chatService,
                 ai.meteor.kcode.plugin.execution.OwnedChatGenerationRunner(scope = this), ai.meteor.kcode.chat.UnavailableScheduledTasks,
@@ -233,12 +234,12 @@ class AndroidPluginCompositionTest {
             } finally { composition.dispose(); recomposer.close() }
             assertEquals("disposed effect", target.title)
             runtime.pluginManager.setEnabled("fixture.conversation-ui", false)
-            assertTrue(slots.snapshot().conversationDecorations.isEmpty())
+            assertEquals(listOf("subagents", "conversation-export"), slots.snapshot().conversationDecorations.map { it.id })
             assertTrue(slots.snapshot().conversationEffects.isEmpty())
             runtime.pluginManager.setEnabled("fixture.conversation-ui", true)
-            assertEquals(listOf("external"), slots.snapshot().conversationDecorations.map { it.id })
+            assertEquals(listOf("external", "subagents", "conversation-export"), slots.snapshot().conversationDecorations.map { it.id })
             runtime.pluginManager.uninstall("fixture.conversation-ui")
-            assertTrue(slots.snapshot().conversationDecorations.isEmpty())
+            assertEquals(listOf("subagents", "conversation-export"), slots.snapshot().conversationDecorations.map { it.id })
             assertTrue(slots.snapshot().conversationEffects.isEmpty())
         } finally {
             runtime.close()
@@ -336,7 +337,7 @@ class AndroidPluginCompositionTest {
             runtime.pluginManager.replace(DynamicPluginSpec(
                 id = "provider.skills.platform", version = "external", entryClass = AndroidFixtureSkills::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "external-skills",
             ))
             val old = current
@@ -397,7 +398,7 @@ class AndroidPluginCompositionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.command", version = "external", entryClass = AndroidFixtureCommand::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "command-api",
             ))
             assertTrue(commands.committedSnapshot.allowedDuringGeneration("/external"))
@@ -464,7 +465,7 @@ class AndroidPluginCompositionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "test.external-tools", version = "external", entryClass = AndroidFixtureOwnedTools::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName,
             ))
             val turn = ai.meteor.kcode.AgentToolContext("/root", coordinator, null, null, null)
@@ -530,12 +531,12 @@ class AndroidPluginCompositionTest {
                 id = "provider.llm.koog.DeepSeek", version = "external",
                 entryClass = AndroidFixtureModelAdapter::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "model-api",
             ))
             assertEquals(listOf("external-model"), runtime.modelCatalog().modelsFor(provider).map { it.id })
             val customProvider = ai.meteor.kcode.model.ModelProvider("external.gateway")
-            val customSettings = ai.meteor.kcode.settings.StoredAppSettings(provider = customProvider.id,
+            val customSettings = ai.meteor.kcode.test.LegacySettings(provider = customProvider.id,
                 modelId = "external-model", modelApiKeys = mapOf(customProvider.id to "fixture"))
             assertEquals("External Gateway", runtime.modelCatalog().provider(customProvider)?.displayName)
             assertEquals(customProvider, checkNotNull(modelSettings.resolve(customSettings, runtime.modelCatalog())).provider)
@@ -606,10 +607,19 @@ class AndroidPluginCompositionTest {
         }
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
-            featurePlugins = listOf(capture),
-            conversationImageSaverFactory = ai.meteor.kcode.plugin.api.ConversationImageSaverFactory {
-                ai.meteor.kcode.plugin.api.ConversationImageSaverResource(saver) {}
-            },
+            profile = KcodePluginProfile(disabled = setOf("feature.conversation-export")),
+            featurePlugins = listOf(
+                capture,
+                kcodePlugin(PluginDescriptor("test.export.rendering", "test", "test", emptySet()),
+                    ai.meteor.kcode.plugin.export.ConversationImageRenderingPlugin, Unit),
+                kcodePlugin(PluginDescriptor("test.export.saving", "test", "test", emptySet()),
+                    ai.meteor.kcode.plugin.export.ConversationImageSavingProviderPlugin,
+                    ai.meteor.kcode.plugin.api.ConversationImageSaverFactory {
+                        ai.meteor.kcode.plugin.api.ConversationImageSaverResource(saver) {}
+                    }),
+                kcodePlugin(PluginDescriptor("test.export.orchestration", "test", "test", emptySet()),
+                    ai.meteor.kcode.plugin.export.ConversationExportPlugin, Unit),
+            ),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
@@ -626,10 +636,10 @@ class AndroidPluginCompositionTest {
         try {
             val previous = exporter
             runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "provider.export.image-rendering", version = "external",
+                id = "test.export.rendering", version = "external",
                 entryClass = AndroidFixtureImageRenderer::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName, config = "export-api",
             ))
             assertFalse(previous === exporter)
@@ -638,8 +648,8 @@ class AndroidPluginCompositionTest {
             assertTrue(shared)
             assertTrue(result.truncated)
             assertEquals(ai.meteor.kcode.export.ImageSaveResult.Shared, result.saved)
-            runtime.pluginManager.setEnabled("provider.export.image-rendering", false)
-            assertEquals(ai.meteor.kcode.plugin.api.PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.export.conversation" }.state)
+            runtime.pluginManager.setEnabled("test.export.rendering", false)
+            assertEquals(ai.meteor.kcode.plugin.api.PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "test.export.orchestration" }.state)
         } finally {
             runtime.close()
             artifact.setWritable(true)
@@ -677,7 +687,7 @@ class AndroidPluginCompositionTest {
                 version = "external",
                 entryClass = AndroidFixtureNavigation::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName,
                 config = "external",
             ))
@@ -739,7 +749,7 @@ class AndroidPluginCompositionTest {
                 version = "external",
                 entryClass = AndroidFixtureSessionProvider::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName,
                 config = "session-api",
             ))
@@ -777,26 +787,26 @@ class AndroidPluginCompositionTest {
         var runtime = KcodePluginRuntime.create(config)
         try {
             runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "consumer.tools.goal",
+                id = "feature.goal",
                 version = "persisted",
                 entryClass = AndroidFixtureOne::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName,
             ))
-            runtime.pluginManager.setEnabled("consumer.tools.goal", false)
-            runtime.pluginManager.setEnabled("provider.ui.settings.search", false)
+            runtime.pluginManager.setEnabled("feature.goal", false)
+            runtime.pluginManager.setEnabled("feature.web-search", false)
             runtime.close()
             runtime = KcodePluginRuntime.create(config)
             assertEquals("persisted", runtime.pluginManager.installed().single().version)
             assertFalse(runtime.pluginManager.installed().single().enabled)
             assertFalse("android/one" in runtime.diagnostics().toolContributions)
             assertEquals(ai.meteor.kcode.plugin.api.PluginState.Disabled,
-                runtime.diagnostics().plugins.first { it.id == "provider.ui.settings.search" }.state)
-            runtime.pluginManager.setEnabled("consumer.tools.goal", true)
+                runtime.diagnostics().plugins.first { it.id == "feature.web-search" }.state)
+            runtime.pluginManager.setEnabled("feature.goal", true)
             assertTrue("android/one" in runtime.diagnostics().toolContributions)
-            runtime.pluginManager.uninstall("consumer.tools.goal")
-            runtime.pluginManager.setEnabled("consumer.tools.goal", true)
+            runtime.pluginManager.uninstall("feature.goal")
+            runtime.pluginManager.setEnabled("feature.goal", true)
             runtime.close()
             runtime = KcodePluginRuntime.create(config)
             assertTrue(runtime.pluginManager.installed().isEmpty())
@@ -843,7 +853,7 @@ class AndroidPluginCompositionTest {
                 version = "external",
                 entryClass = AndroidFixtureShellProvider::class.java.name,
                 artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
                 packageName = instrumentation.context.packageName,
                 capabilities = setOf("shell"),
             ))
@@ -876,11 +886,11 @@ class AndroidPluginCompositionTest {
         val second = artifact("second.apk")
         val failed = artifact("failed.apk")
         fun spec(file: File, entryClass: String, version: String) = DynamicPluginSpec(
-            id = "consumer.tools.goal",
+            id = "feature.goal",
             version = version,
             entryClass = entryClass,
             artifactPath = file.path,
-            sha256 = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) },
+            sha256 = packageFileSha256(file),
             packageName = instrumentation.context.packageName,
             capabilities = setOf("tools"),
         )
@@ -895,9 +905,9 @@ class AndroidPluginCompositionTest {
             manager.replace(spec(first, AndroidFixtureOne::class.java.name, "1"))
             assertFalse("core/goal" in runtime.diagnostics().toolContributions)
             assertTrue("android/one" in runtime.diagnostics().toolContributions)
-            manager.setEnabled("consumer.tools.goal", false)
+            manager.setEnabled("feature.goal", false)
             assertFalse("android/one" in runtime.diagnostics().toolContributions)
-            manager.setEnabled("consumer.tools.goal", true)
+            manager.setEnabled("feature.goal", true)
             assertTrue("android/one" in runtime.diagnostics().toolContributions)
             manager.replace(spec(second, AndroidFixtureTwo::class.java.name, "2"))
             assertFalse("android/one" in runtime.diagnostics().toolContributions)
@@ -907,8 +917,8 @@ class AndroidPluginCompositionTest {
             }
             assertEquals("2", manager.installed().single().version)
             assertTrue("android/two" in runtime.diagnostics().toolContributions)
-            manager.uninstall("consumer.tools.goal")
-            manager.setEnabled("consumer.tools.goal", true)
+            manager.uninstall("feature.goal")
+            manager.setEnabled("feature.goal", true)
             assertTrue("core/goal" in runtime.diagnostics().toolContributions)
         } finally {
             runtime.close()
@@ -1061,10 +1071,10 @@ class AndroidFixtureConversationUi : Plugin<String> {
         )))
         effect.collect(slots.registerConversationDecoration(ai.meteor.kcode.plugin.ui.api.ConversationDecoration(
             "external", 0, ai.meteor.kcode.plugin.ui.api.ConversationDecorationPresenter { request ->
-                ai.meteor.kcode.plugin.ui.api.ConversationDecorationContent(androidx.compose.ui.unit.Dp(17f),
+                listOf(ai.meteor.kcode.plugin.ui.api.ConversationDecorationContent(androidx.compose.ui.unit.Dp(17f),
                     ai.meteor.kcode.plugin.ui.api.UiRenderer {
                         androidx.compose.runtime.SideEffect { request.conversation?.executionFailure = "external decoration" }
-                    })
+                    }))
             },
         )))
     }
@@ -1177,13 +1187,13 @@ class AndroidFixtureOwnedTools : Plugin<Unit> {
                         override suspend fun execute(command: String, workingDirectory: String?): ai.meteor.kcode.AgentShellExecutor.ExecutionResult {
                             check(javaClass.classLoader !== ai.meteor.kcode.AgentShellExecutor::class.java.classLoader)
                             if (command == "wait") {
-                                turn.coordinator.sendMessage(turn.agentPath, turn.agentPath, "entered")
+                                requireNotNull(turn.coordinator).sendMessage(turn.agentPath, turn.agentPath, "entered")
                                 try {
                                     awaitCancellation()
                                 } finally {
                                     kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                                         kotlinx.coroutines.delay(75)
-                                        turn.coordinator.sendMessage(turn.agentPath, turn.agentPath, "cleaned")
+                                        requireNotNull(turn.coordinator).sendMessage(turn.agentPath, turn.agentPath, "cleaned")
                                     }
                                 }
                             }

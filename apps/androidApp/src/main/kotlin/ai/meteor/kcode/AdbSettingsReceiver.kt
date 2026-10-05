@@ -39,41 +39,11 @@ class AdbSettingsReceiver : BroadcastReceiver() {
 
 private const val ConfigureSettingsAction = "ai.meteor.kcode.action.CONFIGURE_SETTINGS"
 
-private fun Intent.toSettingsUpdate(): SettingsUpdate {
-    val unknownExtras = extras?.keySet().orEmpty() - AdbSettingExtra.entries.mapTo(mutableSetOf()) { it.key }
-    require(unknownExtras.isEmpty()) { "Unknown setting: ${unknownExtras.sorted().joinToString()}" }
-    fun stringExtra(extra: AdbSettingExtra): String? = if (hasExtra(extra.key)) {
-        requireNotNull(getStringExtra(extra.key)) { "${extra.key} must be passed with --es" }
-    } else {
-        null
-    }
-    return SettingsUpdate(
-        modelProvider = stringExtra(AdbSettingExtra.ModelProvider),
-        model = stringExtra(AdbSettingExtra.Model),
-        modelApiKey = stringExtra(AdbSettingExtra.ModelApiKey),
-        modelEndpoint = stringExtra(AdbSettingExtra.ModelEndpoint),
-        modelRegion = stringExtra(AdbSettingExtra.ModelRegion),
-        modelDeployment = stringExtra(AdbSettingExtra.ModelDeployment),
-        modelApiVersion = stringExtra(AdbSettingExtra.ModelApiVersion),
-        dashscopeRegion = stringExtra(AdbSettingExtra.DashscopeRegion),
-        temperature = stringExtra(AdbSettingExtra.Temperature),
-        searchProvider = stringExtra(AdbSettingExtra.SearchProvider),
-        searchApiKey = stringExtra(AdbSettingExtra.SearchApiKey),
-    )
-}
-
-private enum class AdbSettingExtra(val key: String) {
-    ModelProvider("model-provider"),
-    Model("model"),
-    ModelApiKey("model-api-key"),
-    ModelEndpoint("model-endpoint"),
-    ModelRegion("model-region"),
-    ModelDeployment("model-deployment"),
-    ModelApiVersion("model-api-version"),
-    DashscopeRegion("dashscope-region"),
-    Temperature("temperature"),
-    SearchProvider("search-provider"),
-    SearchApiKey("search-api-key"),
-}
+/** Transport accepts feature identities; mounted contributions decide which fields exist. */
+internal fun Intent.toSettingsUpdate(): SettingsUpdate = SettingsUpdate(
+    extras?.keySet().orEmpty().associateWith { key ->
+        requireNotNull(getStringExtra(key)) { "$key must be passed with --es" }
+    },
+)
 
 internal const val SettingsChangedAction = "ai.meteor.kcode.action.SETTINGS_CHANGED"

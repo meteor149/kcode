@@ -1,5 +1,6 @@
 package ai.meteor.kcode.localization
 
+import ai.meteor.kcode.settings.StoredAppSettings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -31,15 +32,28 @@ data class LocalizationSnapshot(
     fun selectLanguage(code: String): AppLanguage = languages.firstOrNull { it.language.code == code }?.language ?: defaultLanguage
 }
 
+/** Optional feature-owned configuration projection; rendering catalogs need not provide it. */
+interface LanguageSettingsPolicy {
+    fun preferredLanguage(settings: StoredAppSettings): AppLanguage
+    fun update(settings: StoredAppSettings, language: AppLanguage): StoredAppSettings
+}
+
 interface TranslationCatalog {
+    val languageSettings: LanguageSettingsPolicy? get() = null
     val available: StateFlow<Boolean>
     /** Null after withdrawal, for safe composition teardown without reviving a dictionary. */
     fun snapshot(): LocalizationSnapshot?
     /** Strict headless call. Disposed references and unknown keys are rejected. */
     fun translate(language: AppLanguage, value: LocalizedText, vararg arguments: Any): String
-    /** Rendering may finish while its owner is retiring; null means render no text. */
+    /** Rendering lookup returns null for missing keys or after withdrawal; callers may use their own defaults. */
     fun displayText(language: AppLanguage, value: LocalizedText, arguments: List<Any>): String?
 }
+
+/** Borrow the feature's settings capability; rendering-only catalogs use their declared default. */
+fun TranslationCatalog.configuredLanguage(settings: StoredAppSettings): AppLanguage =
+    languageSettings?.preferredLanguage(settings) ?: requireNotNull(snapshot()) {
+        "Localization catalog has been disposed"
+    }.defaultLanguage
 
 val LocalAppLanguage = compositionLocalOf { AppLanguage("und") }
 val LocalTranslationCatalog = compositionLocalOf<TranslationCatalog?> { null }

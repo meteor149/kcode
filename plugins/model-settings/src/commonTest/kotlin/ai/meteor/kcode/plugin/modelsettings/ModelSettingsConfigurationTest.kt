@@ -6,6 +6,9 @@ import ai.meteor.kcode.model.ModelOption
 import ai.meteor.kcode.model.ModelProvider
 import ai.meteor.kcode.model.ModelProviderSpec
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.temperature
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,7 +25,7 @@ class ModelSettingsConfigurationTest {
             0,
             requirements = ModelConnectionRequirements(endpoint = true, region = true, deployment = true),
         )))
-        val settings = StoredAppSettings(
+        val settings = LegacySettings(
             provider = provider.id,
             modelId = "private-model",
             modelApiKeys = mapOf(provider.id to "fixture"),

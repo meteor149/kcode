@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.cordis.Context
+import org.cordis.InterceptKey
 import org.cordis.Service
 import org.cordis.ServiceKey
 
@@ -22,6 +23,16 @@ fun interface ConversationOverlayFactory {
 class ConversationOverlayHostState(
     val uiSlots: StateFlow<UiContributionsSnapshot> = MutableStateFlow(UiContributionsSnapshot()).asStateFlow(),
 ) {
+    /** Borrowed runtime state survives registry/provider generations; it owns no native resources. */
+    fun bind(context: Context): Context = context.intercept(HostStateKey, this)
+
+    companion object {
+        private val HostStateKey = InterceptKey<ConversationOverlayHostState>("kcode.conversation-overlay.host-state")
+
+        fun current(context: Context): ConversationOverlayHostState? =
+            context.interceptValues(HostStateKey).lastOrNull()
+    }
+
     private val foreground = MutableStateFlow(true)
     val isForeground: Boolean get() = foreground.value
     fun setForeground(value: Boolean) { foreground.value = value }

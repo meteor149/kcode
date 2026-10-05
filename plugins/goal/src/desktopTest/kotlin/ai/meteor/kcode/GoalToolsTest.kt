@@ -3,6 +3,8 @@ package ai.meteor.kcode
 import ai.meteor.kcode.plugin.goal.goalContinuationPrompt
 import ai.meteor.kcode.plugin.GoalContinuationPlugin
 import ai.meteor.kcode.plugin.api.KcodeContinuations
+import ai.meteor.kcode.plugin.api.KcodeGoals
+import ai.meteor.kcode.chat.GoalSessionFactory
 import org.cordis.Context
 import org.cordis.plugin
 import ai.meteor.kcode.chat.GoalSession
@@ -35,6 +37,7 @@ class GoalToolsTest {
         val ctx = Context()
         val service = ctx.plugin(plugin<Unit>(name = "test-continuation-registry") { context, _ ->
             KcodeContinuations(context)
+            KcodeGoals(context, GoalSessionFactory { FakeGoalSession() })
         }, Unit).await()
         val contribution = ctx.plugin(GoalContinuationPlugin, Unit).await()
         val active = FakeGoalSession(

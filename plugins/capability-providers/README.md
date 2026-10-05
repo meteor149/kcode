@@ -25,11 +25,13 @@ The interruptible wait exits on cancellation, and cleanup joins the process tree
 Android privileged/Ubuntu process cancellation still needs its platform-specific
 verification; an adapter cleanup test does not prove a Binder call is cancellable.
 
-Native Android settings-aware Shell providers declare `KcodeSettings` dependencies.
-Each mount constructs its platform executor and supplies a revocable mode reader that
-loads the currently committed settings for each command. Settings replacement remounts
-both worlds; withdrawal makes them Pending, cancels/joins calls and revokes retained
-executors/readers. Android Main uses this path without a separate AtomicReference or UI
-mode callback. Explicit external-mode callers can retain the generic provider path.
+Settings-named system/Ubuntu factory adapters consume `KcodeShellMode` and pass its
+revocable mode reader to the caller's executor factory. They do not decode persistence
+fields or allocate a settings policy. Compositions explicitly mount a settings-backed
+policy or a caller callback policy. Settings replacement remounts the former and therefore
+rebinds its consumers; callback policies can run these adapters without settings storage.
+Policy replacement/withdrawal remounts or suspends adapters, joins active calls and rejects
+retired executors/readers. Legacy entry names and callback configuration remain available.
+
 Private APK providers and actual native App UID commands are tested independently;
 mode selection tests do not prove privileged authorization or Ubuntu installation.

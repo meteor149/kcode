@@ -18,7 +18,6 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":plugins:api"))
-            implementation("ai.koog:agents-ext:1.1.1-beta")
         }
         androidUnitTest.dependencies { implementation(project(":plugins:native-filesystem")) }
         commonTest.dependencies {

@@ -1,8 +1,12 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
 import ai.meteor.kcode.tools.search.WebSearchBackend
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
@@ -25,7 +29,6 @@ import ai.meteor.kcode.plugin.api.KcodeConversationExport
 import ai.meteor.kcode.plugin.api.KcodeWebSearch
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
-import ai.meteor.kcode.plugin.feature.ArtifactToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.SkillToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.FilesystemToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.WebContainerToolConsumerPlugin
@@ -33,7 +36,6 @@ import ai.meteor.kcode.plugin.feature.WebSearchToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.DesktopShellToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.AndroidShellToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.UbuntuShellToolConsumerPlugin
-import ai.meteor.kcode.plugin.feature.artifactToolPlugin
 import ai.meteor.kcode.plugin.feature.skillToolPlugin
 import ai.meteor.kcode.plugin.feature.filesystemToolPlugin
 import ai.meteor.kcode.plugin.feature.webContainerToolPlugin
@@ -43,15 +45,15 @@ import ai.meteor.kcode.plugin.feature.androidShellToolPlugin
 import ai.meteor.kcode.plugin.feature.ubuntuShellToolPlugin
 import ai.meteor.kcode.plugin.provider.HttpWebSearchProviderPlugin
 import ai.meteor.kcode.plugin.provider.SearchSettingsProviderPlugin
+import ai.meteor.kcode.plugin.websearch.WebSearchFeaturePlugin
 import ai.meteor.kcode.plugin.api.KcodeSearchSettings
 import ai.meteor.kcode.tools.search.SearchSettingsPolicy
 import ai.meteor.kcode.plugin.provider.webSearchProviderPlugin
 import ai.meteor.kcode.plugin.export.ConversationImageRenderingPlugin
-import ai.meteor.kcode.plugin.export.ConversationExportPlugin
+import ai.meteor.kcode.plugin.export.ConversationExportFeaturePlugin
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
 import java.lang.reflect.Proxy
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import org.cordis.Context
 import org.cordis.dependencies
@@ -67,11 +69,11 @@ import org.junit.Test
 class AndroidFormalRuntimeEntryPrivateLoadingTest {
     @Test(timeout = 90000)
     fun privateApkFileArtifactSkillAndWebConsumers(): Unit = runBlocking { verifyEntries { it.id in setOf(
-        "consumer.tools.artifact", "consumer.tools.skill", "consumer.tools.filesystem", "consumer.tools.web-container", "consumer.tools.web-search") } }
+        "feature.artifacts", "consumer.tools.skill", "consumer.tools.filesystem", "feature.web-container", "consumer.tools.web-search") } }
 
     @Test(timeout = 90000)
     fun privateApkShellSearchAndExportEntries(): Unit = runBlocking { verifyEntries { it.id !in setOf(
-        "consumer.tools.artifact", "consumer.tools.skill", "consumer.tools.filesystem", "consumer.tools.web-container", "consumer.tools.web-search") } }
+        "feature.artifacts", "consumer.tools.skill", "consumer.tools.filesystem", "feature.web-container", "consumer.tools.web-search") } }
 
     private suspend fun verifyEntries(select: (Entry) -> Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -80,7 +82,7 @@ class AndroidFormalRuntimeEntryPrivateLoadingTest {
         val artifact = File(directory, "runtime.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         lateinit var tools: KcodeTools
         lateinit var capturedContext: Context
         val capture = kcodePlugin(PluginDescriptor("test.formal-runtime", "test", "test", emptySet()),
@@ -103,6 +105,12 @@ class AndroidFormalRuntimeEntryPrivateLoadingTest {
         val releaseSearchCleanup = CompletableDeferred<Unit>()
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
+            hostInputs = ai.meteor.kcode.plugin.api.AndroidPluginHostInputs(
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                    object : android.app.Activity() {
+                        override fun getApplicationContext(): android.content.Context = context
+                    }
+                }),
             settingsStore = object : AppSettingsStore {
                 override val protection = SettingsProtection.Transient
                 override suspend fun load(): StoredAppSettings {
@@ -112,37 +120,34 @@ class AndroidFormalRuntimeEntryPrivateLoadingTest {
                             withContext(NonCancellable) { searchCleaning.complete(Unit); releaseSearchCleanup.await() }
                         }
                     }
-                    return StoredAppSettings(webSearchProvider = "exa")
+                    return LegacySettings(webSearchProvider = "exa")
                 }
                 override suspend fun save(settings: StoredAppSettings) = Unit
             },
             featurePlugins = listOf(capture, fsFixture, shellFixture, filesystemToolPlugin(), desktopShellToolPlugin(),
                 androidShellToolPlugin("Android fixture shell"), ubuntuShellToolPlugin("Ubuntu fixture shell"),
-                artifactToolPlugin(), skillToolPlugin(), webContainerToolPlugin(), webSearchProviderPlugin(), webSearchToolPlugin()),
+                skillToolPlugin()),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 capturedContext = ctx
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
         ))
         val entries = listOf(
-            Entry("consumer.tools.artifact", ArtifactToolConsumerPlugin::class.java),
+            Entry("feature.artifacts", ArtifactFeaturePlugin::class.java),
             Entry("consumer.tools.skill", SkillToolConsumerPlugin::class.java),
             Entry("consumer.tools.filesystem", FilesystemToolConsumerPlugin::class.java),
-            Entry("consumer.tools.web-container", WebContainerToolConsumerPlugin::class.java),
-            Entry("consumer.tools.web-search", WebSearchToolConsumerPlugin::class.java),
+            Entry("feature.web-container", ai.meteor.kcode.plugin.webcontainer.native.AndroidWebContainerFeaturePlugin::class.java),
             Entry("consumer.tools.shell", DesktopShellToolConsumerPlugin::class.java),
             Entry("consumer.tools.android-shell", AndroidShellToolConsumerPlugin::class.java, "Android fixture shell"),
             Entry("consumer.tools.ubuntu-shell", UbuntuShellToolConsumerPlugin::class.java, "Ubuntu fixture shell"),
-            Entry("provider.search-settings.http", SearchSettingsProviderPlugin::class.java),
-            Entry("provider.web.search-http", HttpWebSearchProviderPlugin::class.java),
-            Entry("provider.export.image-rendering", ConversationImageRenderingPlugin::class.java),
-            Entry("provider.export.conversation", ConversationExportPlugin::class.java),
+            Entry("feature.web-search", WebSearchFeaturePlugin::class.java),
+            Entry("feature.conversation-export", ConversationExportFeaturePlugin::class.java),
         ).filter(select)
         suspend fun contribution(id: String): Any? = when (id) {
-            "provider.export.image-rendering" -> capturedContext[KcodeConversationImageRendering.Key]?.renderer
-            "provider.export.conversation" -> capturedContext[KcodeConversationExport.Key]?.exporter
-            "provider.search-settings.http" -> capturedContext[KcodeSearchSettings.Key]?.policy
-            "provider.web.search-http" -> capturedContext[KcodeWebSearch.Key]?.backend
+            "feature.artifacts" -> capturedContext[ai.meteor.kcode.plugin.ui.api.KcodeUiSlots.Key]?.snapshot()?.artifacts
+            "feature.web-container" -> capturedContext[ai.meteor.kcode.plugin.api.KcodeWebContainers.Key]?.controller
+            "feature.conversation-export" -> capturedContext[KcodeConversationExport.Key]?.exporter
+            "feature.web-search" -> capturedContext[KcodeWebSearch.Key]?.backend
             else -> if (id in tools.contributionIds()) tools else null
         }
         try {
@@ -152,8 +157,9 @@ class AndroidFormalRuntimeEntryPrivateLoadingTest {
                     packageName = instrumentation.context.packageName,
                 )
                 runtime.pluginManager.replace(spec)
+                val oldSearchPolicy = capturedContext[KcodeSearchSettings.Key]?.policy
                 val registered = requireNotNull(contribution(id)) { "Missing $id" }
-                if (id.startsWith("provider.export.") || id == "provider.web.search-http") {
+                if (id == "feature.artifacts" || id == "feature.web-container" || id == "feature.conversation-export" || id == "feature.web-search") {
                     val privateLoader = registered.javaClass.classLoader
                     assertNotSame(entry.classLoader, privateLoader)
                     for (contract in listOf(AgentPluginManager::class.java, DynamicPluginSpec::class.java,
@@ -164,18 +170,26 @@ class AndroidFormalRuntimeEntryPrivateLoadingTest {
                         assertSame(KcodePluginMount::class.java.classLoader, Class.forName(facade, false, privateLoader).classLoader)
                     }
                 }
-                if (id == "provider.search-settings.http") {
-                    val policy = registered as SearchSettingsPolicy
+                if (id == "feature.web-search") {
+                    val policy = capturedContext[KcodeSearchSettings.Key]!!.policy
                     val loader = policy.javaClass.classLoader
                     assertNotSame(SearchSettingsProviderPlugin::class.java.classLoader, loader)
                     assertSame(loader, Class.forName("ai.meteor.kcode.plugin.searchhttp.HttpSearchSettingsPolicy", false, loader).classLoader)
-                    val configured = policy.resolve(StoredAppSettings(webSearchProvider = "exa", exaSearchApiKey = "fixture"))
+                    val configured = policy.resolve(LegacySettings(webSearchProvider = "exa", exaSearchApiKey = "fixture"))
                     assertEquals("fixture", configured.apiKeys["exa"])
                     assertEquals(listOf("google", "exa", "bright_data"), policy.providers()?.map { it.id })
                 }
                 assertFailsWith<IllegalStateException> { runtime.pluginManager.replace(spec.copy(version = "invalid", config = null)) }
                 assertSame(registered, contribution(id))
-                if (id == "provider.web.search-http") {
+                if (id == "feature.artifacts") {
+                    runtime.pluginManager.setEnabled("core.ui-slots", false)
+                    assertEquals(null, contribution(id))
+                    assertTrue("consumer.tools.artifact" in tools.contributionIds())
+                    runtime.pluginManager.setEnabled("core.ui-slots", true)
+                    assertTrue(contribution(id) != null)
+                    assertNotSame(registered, contribution(id))
+                }
+                if (id == "feature.web-search") {
                     val backend = registered as WebSearchBackend
                     val privateLoader = backend.javaClass.classLoader
                     for (type in listOf("WebSearchProvider", "WebSearchConfiguration", "WebSearchConfigurationKt")) {
@@ -200,15 +214,24 @@ class AndroidFormalRuntimeEntryPrivateLoadingTest {
                     }
                 } else runtime.pluginManager.setEnabled(id, false)
                 assertEquals(null, contribution(id))
-                if (id == "provider.search-settings.http") {
-                    val old = registered as SearchSettingsPolicy
+                if (id == "feature.artifacts") {
+                    assertFalse("consumer.tools.artifact" in tools.contributionIds())
+                    val remaining = capturedContext[ai.meteor.kcode.plugin.ui.api.KcodeUiSlots.Key]!!.snapshot()
+                    assertTrue(remaining.navigation.none { it.id == "artifacts" })
+                    assertTrue(remaining.settings != null)
+                }
+                if (id == "feature.web-search") {
+                    val old = oldSearchPolicy!!
                     assertEquals(null, old.providers())
                     assertFailsWith<IllegalStateException> { old.resolve(StoredAppSettings()) }
                     assertEquals(null, capturedContext[KcodeWebSearch.Key])
-                    assertEquals(PluginState.Pending, runtime.diagnostics().plugins.single { it.id == "consumer.settings.commands" }.state)
+                    assertEquals(PluginState.Active, runtime.diagnostics().plugins.single { it.id == "consumer.settings.commands" }.state)
                 }
                 runtime.pluginManager.setEnabled(id, true)
                 assertTrue(contribution(id) != null)
+                if (id == "feature.artifacts") {
+                    assertEquals(1, tools.contributionIds().count { it == "consumer.tools.artifact" })
+                }
             }
             if (entries.any { it.id == "consumer.tools.filesystem" }) {
                 runtime.pluginManager.setEnabled("test.formal-fs", false)

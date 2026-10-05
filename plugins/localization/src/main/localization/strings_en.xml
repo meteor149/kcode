@@ -179,4 +179,5 @@ Input
     <string name="scheduled_task_notification_channel_en">Scheduled tasks</string>
     <string name="conversation_overlay_title_en">kcode · Current conversation</string>
     <string name="conversation_overlay_close_description_en">Close conversation overlay</string>
+    <string name="select_messages_en">Select messages</string>
 </resources>

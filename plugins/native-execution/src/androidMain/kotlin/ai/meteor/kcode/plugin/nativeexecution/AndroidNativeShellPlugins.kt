@@ -2,8 +2,8 @@ package ai.meteor.kcode.plugin.nativeexecution
 
 import ai.meteor.kcode.AgentShellExecutor
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
-import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.KcodeShell
+import ai.meteor.kcode.plugin.api.KcodeShellMode
 import ai.meteor.kcode.plugin.api.KcodeUbuntuShell
 import ai.meteor.kcode.plugin.api.PluginCleanupException
 import ai.meteor.kcode.plugin.api.PluginCodeOrigin
@@ -18,24 +18,48 @@ import org.cordis.EffectScope
 import org.cordis.Plugin
 import org.cordis.dependencies
 
+/** Portable entry consumes either settings policy or an SDK-only caller callback adapter. */
+class AndroidPackagedShellPlugin : Plugin<Unit> {
+    override val name = "android-packaged-shell"
+    override val config = ConfigValidator<Unit> { it }
+    override val inject = dependencies(KcodeShellMode.Key)
+
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        val policy = ctx.require(KcodeShellMode.Key).policy
+        applyNativeShell(ctx, effect, ubuntu = false) { policy.mode() }
+    }
+}
+
+/** ARM64 deployment; both settings and caller callbacks supply the injected SDK policy. */
+class AndroidPackagedUbuntuShellPlugin : Plugin<Unit> {
+    override val name = "android-packaged-ubuntu-shell"
+    override val config = ConfigValidator<Unit> { it }
+    override val inject = dependencies(KcodeShellMode.Key)
+
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        val policy = ctx.require(KcodeShellMode.Key).policy
+        applyNativeShell(ctx, effect, ubuntu = true) { policy.mode() }
+    }
+}
+
 /** Unit configuration; mode and deployment inputs resolve through the shared SDK. */
 class AndroidNativeSettingsShellPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "android-native-settings-shell"
-    override val inject = dependencies(KcodeSettings.Key)
+    override val inject = dependencies(KcodeShellMode.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
-        val store = ctx.require(KcodeSettings.Key).store
-        applyNativeShell(ctx, effect, ubuntu = false) { ShellExecutionMode.fromCode(store.load().shellExecutionMode) ?: ShellExecutionMode.App }
+        val policy = ctx.require(KcodeShellMode.Key).policy
+        applyNativeShell(ctx, effect, ubuntu = false) { policy.mode() }
     }
 }
 
 class AndroidNativeSettingsUbuntuShellPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "android-native-settings-ubuntu-shell"
-    override val inject = dependencies(KcodeSettings.Key)
+    override val inject = dependencies(KcodeShellMode.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
-        val store = ctx.require(KcodeSettings.Key).store
-        applyNativeShell(ctx, effect, ubuntu = true) { ShellExecutionMode.fromCode(store.load().shellExecutionMode) ?: ShellExecutionMode.App }
+        val policy = ctx.require(KcodeShellMode.Key).policy
+        applyNativeShell(ctx, effect, ubuntu = true) { policy.mode() }
     }
 }
 

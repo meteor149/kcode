@@ -36,7 +36,7 @@ class NotificationCompositionTest {
         }) { current = it }.copy(profile = KcodePluginProfile(disabled = setOf(ProviderId))))
         try {
             assertEquals(0, opened)
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.schedules.application" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
             runtime.pluginManager.setEnabled(ProviderId, true)
             val previous = current
             assertTrue(current.isAppInForeground())
@@ -45,7 +45,7 @@ class NotificationCompositionTest {
             assertFailsWith<IllegalStateException> { previous.isAppInForeground() }
             runtime.pluginManager.setEnabled(ProviderId, true)
             assertNotSame(previous, current)
-            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "consumer.schedules.application" }.state)
+            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
         } finally { runtime.close() }
         assertEquals(opened, closed)
     }

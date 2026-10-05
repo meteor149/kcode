@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.ConversationSessionFactory
 import ai.meteor.kcode.chat.UnavailableGoalSessions
@@ -30,7 +32,6 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -121,7 +122,7 @@ class AndroidNotificationPermissionPluginTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "permission.policy", version = "test", entryClass = AndroidNotificationPermissionPlugin::class.java.name,
                 artifactPath = apk.path, enabled = false, packageName = instrumentation.context.packageName,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
             ))
             assertTrue(slots.snapshot().effects.none { it.id == "android.notifications.permission" })
             assertEquals(0, permissions.requests.get())

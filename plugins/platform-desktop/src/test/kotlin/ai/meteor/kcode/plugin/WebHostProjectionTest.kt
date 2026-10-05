@@ -45,18 +45,20 @@ class WebHostProjectionTest {
         val old = current
         try {
             assertEquals("first", host.launch(WebPreviewRequest("/workspace/index.html", "preview")).containerId)
-            runtime.pluginManager.setEnabled("provider.web-containers.platform", false)
+            runtime.pluginManager.setEnabled("feature.web-container", false)
+            assertFalse("consumer.tools.web-container" in runtime.diagnostics().toolContributions)
             val callsAfterDisposal = first.calls
             everyOperation(host).forEach { call -> assertFails { call() } }
             assertEquals(callsAfterDisposal, first.calls)
             assertFailsWith<IllegalStateException> { old.list() }
-            runtime.pluginManager.setEnabled("provider.web-containers.platform", true)
+            runtime.pluginManager.setEnabled("feature.web-container", true)
+            assertTrue("consumer.tools.web-container" in runtime.diagnostics().toolContributions)
             assertTrue(current !== old)
             assertEquals("first", host.list().single().id)
             val second = FixtureWebController("second")
             runtime.replacePlugin(kcodePlugin(
-                PluginDescriptor("provider.web-containers.platform", "test", "test", setOf("webContainers")),
-                WebContainersProviderPlugin, second,
+                PluginDescriptor("feature.web-container", "test", "test", setOf("webContainers")),
+                WebContainerFeaturePlugin, second,
             ))
             assertSame(host, runtime.webContainerController)
             assertEquals("second", host.launch(WebPreviewRequest("/workspace/index.html", "preview")).containerId)
@@ -94,7 +96,7 @@ class WebHostProjectionTest {
         try {
             val running = backgroundScope.async { runtime.webContainerController.launch(WebPreviewRequest("/workspace/index.html", "preview")) }
             entered.await()
-            val disabling = async { runtime.pluginManager.setEnabled("provider.web-containers.platform", false) }
+            val disabling = async { runtime.pluginManager.setEnabled("feature.web-container", false) }
             cleaning.await()
             assertFalse(disabling.isCompleted)
             assertFalse(resourcesClosed)

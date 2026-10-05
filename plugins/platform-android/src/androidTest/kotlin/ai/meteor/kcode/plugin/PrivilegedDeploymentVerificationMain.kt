@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.nativeexecution.shell.PrivilegedShellUserService
 import ai.meteor.kcode.shell.IPrivilegedPluginBridge
 import ai.meteor.kcode.shell.IPrivilegedShellService
@@ -14,7 +16,6 @@ import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -48,7 +49,7 @@ object PrivilegedDeploymentVerificationMain {
             override fun getFilesDir() = directory
         }
         val deployments = File(directory, "deployments").apply { mkdirs() }
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         fun proxy(bridge: PrivilegedPluginUserService): IPrivilegedPluginBridge =
             IPrivilegedPluginBridge.Stub.asInterface(object : Binder() {
                 override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean =

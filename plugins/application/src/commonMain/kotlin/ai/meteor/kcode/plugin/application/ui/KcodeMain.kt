@@ -2,6 +2,8 @@
 
 package ai.meteor.kcode.plugin.application.ui
 
+import ai.meteor.kcode.plugin.ui.api.SettingsEditorProjection
+import ai.meteor.kcode.plugin.api.ToolPermissionSettingsPolicy
 import ai.meteor.kcode.plugin.ui.api.LocalModelCatalog
 import ai.meteor.kcode.ui.design.Paper
 
@@ -14,7 +16,6 @@ import ai.meteor.kcode.chat.ScheduledTaskCoordinator
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.webcontainer.WebContainerController
-import ai.meteor.kcode.export.ConversationExporter
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
 import ai.meteor.kcode.settings.ShellExecutionMode
@@ -64,52 +65,54 @@ import ai.meteor.kcode.plugin.ui.api.SettingsPageRequest
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineStart
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
+import ai.meteor.kcode.plugin.api.ShellModeSettingsPolicy
 import kotlinx.coroutines.launch
 
 @Composable
 internal fun KcodeMain(
     chatService: ChatService,
-    generationRunner: ChatGenerationRunner,
+    generationRunner: ChatGenerationRunner?,
     webContainerController: WebContainerController?,
-    artifactRepository: ArtifactRepository,
+    artifactRepository: ArtifactRepository?,
     settingsStore: AppSettingsStore,
-    historyRepository: ConversationHistoryRepository,
-    shellSettingsAvailable: Boolean,
-    toolPermissionControlsAvailable: Boolean,
+    historyRepository: ConversationHistoryRepository?,
+    conversationSettingsControlsAvailable: Boolean,
     onShellExecutionModeChanged: (ShellExecutionMode) -> Unit,
     onToolPermissionModeChanged: (ToolPermissionMode) -> Unit,
     uiSlots: ApplicationUiSlots,
     goalSessionFactory: GoalSessionFactory,
     scheduledTaskCoordinator: ScheduledTaskCoordinator,
-    conversationSessionFactory: ConversationSessionFactory,
+    conversationSessionFactory: ConversationSessionFactory?,
     conversationExecution: ConversationExecution?,
-    conversationExporter: ConversationExporter?,
     settingsOwner: PluginOperationOwner,
-    modelSettings: ModelSettingsPolicy,
+    modelSettings: ModelSettingsPolicy?,
+    shellModeSettings: ShellModeSettingsPolicy?,
+    toolPermissionSettings: ToolPermissionSettingsPolicy? = null,
 ) {
     val scope = rememberCoroutineScope()
-    val conversationSession = remember(conversationSessionFactory) { conversationSessionFactory.create(scope) }
+    val conversationSession = remember(conversationSessionFactory) { conversationSessionFactory?.create(scope) }
     DisposableEffect(conversationSession) {
         onDispose {
-            conversationSession.cancel()
-            scope.launch(NonCancellable) { conversationSession.close() }
+            conversationSession?.let { session ->
+                session.cancel()
+                scope.launch(NonCancellable) { session.close() }
+            }
         }
     }
-    LaunchedEffect(conversationSession) { conversationSession.load() }
+    LaunchedEffect(conversationSession) { conversationSession?.load() }
     var sidebarOpen by remember { mutableStateOf(false) }
     var selectedDestination by rememberSaveable { mutableStateOf<String?>(null) }
     val navigation = uiSlots.navigation.filter { it.isAvailable(uiSlots) }
     val destination = resolveNavigationDestination(selectedDestination, navigation)
     val conversationDestination = navigation.firstOrNull { it.handlesConversations }?.id
-    LaunchedEffect(destination) { selectedDestination = destination }
     val settingsSession = remember(settingsStore, settingsOwner) { ApplicationSettingsSession(settingsStore, settingsOwner) }
     val appSettings = settingsSession.committed
-    val configuration = modelSettings.resolve(appSettings, LocalModelCatalog.current)
+    val configuration = modelSettings?.resolve(appSettings, LocalModelCatalog.current)
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
     fun settingsCommitted(stored: StoredAppSettings) {
-        onShellExecutionModeChanged(ShellExecutionMode.fromCode(stored.shellExecutionMode) ?: ShellExecutionMode.App)
-        onToolPermissionModeChanged(ToolPermissionMode.fromCode(stored.toolPermissionMode) ?: ToolPermissionMode.Ask)
+        shellModeSettings?.let { onShellExecutionModeChanged(it.resolve(stored)) }
+        toolPermissionSettings?.let { onToolPermissionModeChanged(it.resolve(stored)) }
     }
 
     LaunchedEffect(settingsSession) { settingsSession.load(::settingsCommitted) }
@@ -118,34 +121,41 @@ internal fun KcodeMain(
         scope.launch(start = CoroutineStart.UNDISPATCHED) { settingsSession.save(value, ::settingsCommitted) }
     }
 
-    fun updateConfiguration(value: ModelConfiguration) = updateSettings(modelSettings.update(settingsSession.draft, value))
-
-    fun updateModelSettings(value: ModelConfiguration, apiKeys: Map<String, String>) {
-        updateSettings(modelSettings.update(settingsSession.draft.copy(modelApiKeys = apiKeys), value))
+    fun updateConfiguration(value: ModelConfiguration) {
+        modelSettings?.let { updateSettings(it.update(settingsSession.draft, value)) }
     }
 
     fun newConversation() {
-        conversationSession.startNewConversation()
+        val session = conversationSession ?: return
+        session.startNewConversation()
         sidebarOpen = false
         settingsOpen = false
         selectedDestination = conversationDestination
     }
 
-    LocalizationContext(uiSlots.localization, appSettings.language) {
+    val textCatalog = remember(uiSlots.localization, uiSlots.textDictionaries) {
+        ApplicationTextCatalog(uiSlots.localization, uiSlots.textDictionaries)
+    }
+    DisposableEffect(textCatalog) { onDispose { textCatalog.close() } }
+    LocalizationContext(textCatalog,
+        (textCatalog.languageSettings?.preferredLanguage(appSettings) ?: textCatalog.snapshot()?.defaultLanguage)?.code.orEmpty(),
+    ) {
         val appLanguage = LocalAppLanguage.current
-        uiSlots.effects.forEach { effect ->
-            key(effect) {
-                effect.renderer.Render(ApplicationEffectRequest(
-                    conversationSession = conversationSession,
-                    conversationExecution = conversationExecution,
-                    configuration = configuration,
-                    chatService = chatService,
-                    generationRunner = generationRunner,
-                    historyRepository = historyRepository,
-                    goalSessionFactory = goalSessionFactory,
-                    scheduledTaskCoordinator = scheduledTaskCoordinator,
-                    language = appLanguage,
-                ))
+        if (generationRunner != null && conversationSession != null && historyRepository != null) {
+            uiSlots.effects.forEach { effect ->
+                key(effect) {
+                    effect.renderer.Render(ApplicationEffectRequest(
+                        conversationSession = conversationSession,
+                        conversationExecution = conversationExecution,
+                        configuration = configuration,
+                        chatService = chatService,
+                        generationRunner = generationRunner,
+                        historyRepository = historyRepository,
+                        goalSessionFactory = goalSessionFactory,
+                        scheduledTaskCoordinator = scheduledTaskCoordinator,
+                        language = appLanguage,
+                    ))
+                }
             }
         }
         val hazeState = rememberKcodeHazeState()
@@ -162,41 +172,42 @@ internal fun KcodeMain(
                     val mainContent: @Composable (Modifier, Boolean) -> Unit =
                         { contentModifier, isCompact ->
                             navigation.firstOrNull { it.id == destination }?.let { entry ->
-                                val active = conversationSession.conversations.firstOrNull { it.id == conversationSession.activeId }
+                                val active = conversationSession?.conversations?.firstOrNull { it.id == conversationSession.activeId }
                                 key(entry) {
                                     entry.renderer.Render(NavigationPageRequest(
                                         slots = uiSlots,
                                         conversationSession = conversationSession,
-                                        chat = ChatPageRequest(
-                                            modifier = contentModifier,
-                                            compact = isCompact,
-                                            conversation = active,
-                                            conversationExecution = conversationExecution,
-                                            service = chatService,
-                                            generationRunner = generationRunner,
-                                            configuration = configuration,
-                                            onConfigurationChange = ::updateConfiguration,
-                                            onMenu = { sidebarOpen = true },
-                                            onSettings = { settingsOpen = true },
-                                            onNewConversation = ::newConversation,
-                                            onSendToNew = conversationSession::ensureConversation,
-                                            historyRepository = historyRepository,
-                                            goalSessionFactory = goalSessionFactory,
-                                            scheduledTaskCoordinator = scheduledTaskCoordinator,
-                                            conversationExporter = conversationExporter,
-                                            toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                                            toolPermissionMode = ToolPermissionMode.fromCode(appSettings.toolPermissionMode) ?: ToolPermissionMode.Ask,
-                                            onToolPermissionModeChange = {
-                                                updateSettings(settingsSession.draft.copy(toolPermissionMode = it.code))
-                                            },
-                                        ),
-                                        artifacts = ArtifactsPageRequest(
-                                            repository = artifactRepository,
-                                            webContainerController = webContainerController,
-                                            compact = isCompact,
-                                            onMenu = { sidebarOpen = true },
-                                            modifier = contentModifier,
-                                        ),
+                                        chat = if (generationRunner != null && conversationSession != null && historyRepository != null) {
+                                            ChatPageRequest(
+                                                modifier = contentModifier,
+                                                compact = isCompact,
+                                                conversation = active,
+                                                conversationExecution = conversationExecution,
+                                                service = chatService,
+                                                generationRunner = generationRunner,
+                                                configuration = configuration,
+                                                onConfigurationChange = ::updateConfiguration,
+                                                onMenu = { sidebarOpen = true },
+                                                onSettings = { settingsOpen = true },
+                                                onNewConversation = ::newConversation,
+                                                onSendToNew = conversationSession::ensureConversation,
+                                                historyRepository = historyRepository,
+                                                goalSessionFactory = goalSessionFactory,
+                                                scheduledTaskCoordinator = scheduledTaskCoordinator,
+                                                settingsEditor = if (conversationSettingsControlsAvailable) SettingsEditorProjection(
+                                                    settingsSession.draft, ::updateSettings,
+                                                ) else null,
+                                            )
+                                        } else null,
+                                        artifacts = artifactRepository?.let { repository ->
+                                            ArtifactsPageRequest(
+                                                repository = repository,
+                                                webContainerController = webContainerController,
+                                                compact = isCompact,
+                                                onMenu = { sidebarOpen = true },
+                                                modifier = contentModifier,
+                                            )
+                                        },
                                         onNavigate = { id -> if (navigation.any { it.id == id }) selectedDestination = id },
                                     ))
                                 }
@@ -207,23 +218,26 @@ internal fun KcodeMain(
                         renderer = uiSlots.layout,
                         request = ApplicationLayoutRequest(
                             width = width,
-                            sidebarOpen = sidebarOpen,
+                            sidebarOpen = sidebarOpen || (
+                                (generationRunner == null || conversationSession == null || historyRepository == null) &&
+                                    navigation.firstOrNull { it.id == destination }?.handlesConversations == true
+                                ),
                             onSidebarOpenChange = { sidebarOpen = it },
                             sidebarRenderer = uiSlots.sidebar,
                             sidebar = SidebarPageRequest(
                                 destination = destination,
                                 navigation = navigation,
-                                conversationActionsAvailable = conversationDestination != null,
+                                conversationActionsAvailable = conversationSession != null && conversationDestination != null,
                                 settingsAvailable = uiSlots.settings != null,
-                                conversations = conversationSession.conversations,
-                                activeId = conversationSession.activeId,
+                                conversations = conversationSession?.conversations.orEmpty(),
+                                activeId = conversationSession?.activeId,
                                 onNew = ::newConversation,
                                 onSelect = {
-                                    conversationSession.selectConversation(it)
+                                    conversationSession?.selectConversation(it)
                                     selectedDestination = conversationDestination
                                 },
-                                onPin = conversationSession::toggleConversationPinned,
-                                onDelete = conversationSession::deleteConversation,
+                                onPin = { conversationSession?.toggleConversationPinned(it) },
+                                onDelete = { conversationSession?.deleteConversation(it) },
                                 onSettings = { settingsOpen = true },
                                 onDestination = { selectedDestination = it },
                             ),
@@ -237,13 +251,9 @@ internal fun KcodeMain(
                             renderer.Render(
                                 SettingsPageRequest(
                                     sections = uiSlots.settingsSections,
-                                    modelCatalog = LocalModelCatalog.current,
-                                    current = modelSettings.resolve(settingsSession.draft, LocalModelCatalog.current),
                                     appSettings = settingsSession.draft,
                                     persistenceFailure = settingsSession.failure,
-                                    shellSettingsAvailable = shellSettingsAvailable,
                                     onSettingsChange = ::updateSettings,
-                                    onModelSettingsChange = ::updateModelSettings,
                                     onDismiss = { settingsOpen = false },
                                 ),
                             )
@@ -260,16 +270,17 @@ internal fun KcodeMain(
                 }
             }
             uiSlots.standaloneConversation?.let { renderer ->
-                conversationSession.floatingConversations.firstOrNull()?.let { floating ->
+                val session = conversationSession ?: return@let
+                session.floatingConversations.firstOrNull()?.let { floating ->
                     key(renderer, floating.id) {
                         renderer.Render(StandaloneConversationRequest(
                             conversation = floating,
-                            pendingCount = conversationSession.floatingConversations.size,
+                            pendingCount = session.floatingConversations.size,
                             onAddToRecent = {
-                                conversationSession.promoteFloatingConversation(floating.id)
+                                session.promoteFloatingConversation(floating.id)
                                 selectedDestination = conversationDestination
                             },
-                            onClose = { conversationSession.discardFloatingConversation(floating.id) },
+                            onClose = { session.discardFloatingConversation(floating.id) },
                         ))
                     }
                 }

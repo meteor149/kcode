@@ -39,11 +39,13 @@ class KoogChatService(
     private val lifecycle: AgentLifecycle = AgentLifecycle.None,
     private val toolLifecycle: ToolExecutionLifecycle = ToolExecutionLifecycle.None,
     private val continuationProvider: suspend (AgentContinuationContext) -> String?,
-    private val subagentCoordinatorFactory: SubagentCoordinatorFactory,
+    private val subagentCoordinatorFactory: SubagentCoordinatorFactory? = null,
     private val toolPermissionModeProvider: suspend () -> ToolPermissionMode,
     private val toolCallApprover: ToolCallApprover,
     private val skillRuntime: SkillRuntime? = null,
     private val conversationOverlayProvider: suspend () -> AgentConversationOverlayController? = { null },
+    private val skillRuntimeProvider: suspend () -> SkillRuntime? = { skillRuntime },
+    private val subagentCoordinatorFactoryProvider: suspend () -> SubagentCoordinatorFactory? = { subagentCoordinatorFactory },
 ) : ChatService {
     override suspend fun reply(
         configuration: ModelConfiguration,
@@ -69,11 +71,14 @@ class KoogChatService(
         var overlayTurn: AgentConversationOverlayTurn? = null
         val goalTurnStart = TimeSource.Monotonic.markNow()
         var accountedSeconds = 0L
-        lateinit var coordinator: SubagentCoordinator
-        coordinator = subagentCoordinatorFactory.create(
+        val skillRuntime = skillRuntimeProvider()
+        val subagentCoordinatorFactory = subagentCoordinatorFactoryProvider()
+        var coordinator: SubagentCoordinator? = null
+        coordinator = subagentCoordinatorFactory?.create(
             scope = this,
             rootContext = conversationContext,
             runAgent = { launch ->
+                val childCoordinator = requireNotNull(coordinator)
                 val childSkillTurn = skillRuntime?.prepareTurn(launch.prompt)
                 val childContext = buildString {
                     if (launch.inheritedContext.isNotBlank()) {
@@ -90,11 +95,11 @@ class KoogChatService(
                     input = childInput,
                     agentPath = launch.path,
                     multiAgentInstructions = subAgentInstructions(subagentCoordinatorFactory.maxConcurrency),
-                    coordinator = coordinator,
+                    coordinator = childCoordinator,
                     goalSession = goalSession,
                     scheduledTaskSession = scheduledTaskSession,
                     scheduledTaskCompletionSession = null,
-                    onToolUse = { event -> coordinator.onToolUse(launch.path, event) },
+                    onToolUse = { event -> childCoordinator.onToolUse(launch.path, event) },
                     onDelta = {},
                     continuationAfterResponse = { null },
                     skillCatalogInstructions = childSkillTurn?.catalogInstructions,
@@ -113,7 +118,7 @@ class KoogChatService(
                 configuration = configuration,
                 input = skillTurn?.let { appendSelectedSkillFragments(it, conversationContext) } ?: conversationContext,
                 agentPath = RootAgentPath,
-                multiAgentInstructions = rootMultiAgentInstructions(subagentCoordinatorFactory.maxConcurrency),
+                multiAgentInstructions = subagentCoordinatorFactory?.let { rootMultiAgentInstructions(it.maxConcurrency) }.orEmpty(),
                 coordinator = coordinator,
                 goalSession = goalSession,
                 scheduledTaskSession = scheduledTaskSession,
@@ -131,7 +136,7 @@ class KoogChatService(
                 continuationAfterResponse = {
                     continuationProvider(
                         AgentContinuationContext(
-                            subagentContinuation = coordinator::continuationAfterRootResponse,
+                            subagentContinuation = { coordinator?.continuationAfterRootResponse() },
                             goalContinuation = {
                                 goalSession?.continuationPrompt()
                             },
@@ -151,7 +156,7 @@ class KoogChatService(
             throw error
         } finally {
             withContext(NonCancellable) {
-                try { overlayTurn?.finish() } finally { coordinator.shutdown() }
+                try { overlayTurn?.finish() } finally { coordinator?.shutdown() }
             }
         }
     }
@@ -161,7 +166,7 @@ class KoogChatService(
         input: String,
         agentPath: String,
         multiAgentInstructions: String,
-        coordinator: SubagentCoordinator,
+        coordinator: SubagentCoordinator?,
         goalSession: GoalSession?,
         scheduledTaskSession: ScheduledTaskSession?,
         scheduledTaskCompletionSession: ScheduledTaskCompletionSession?,
@@ -191,7 +196,7 @@ class KoogChatService(
                 approver = toolCallApprover,
                 onToolUse = onToolUse,
                 onDelta = onDelta,
-                additionalContextProvider = { coordinator.drainMailbox(agentPath) },
+                additionalContextProvider = { coordinator?.drainMailbox(agentPath).orEmpty() },
                 continuationAfterResponse = continuationAfterResponse,
                 onUsage = onUsage,
                 toolLifecycle = toolLifecycle,

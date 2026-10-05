@@ -74,6 +74,8 @@ class ConversationPolicyPrivateLoadingTest {
             }
             val session = factory.create(CoroutineScope(coroutineContext))
             try {
+                session.load()
+                assertTrue(session.isLoaded)
                 assertNotSame(ConversationSessionFactory::class.java.classLoader, session.javaClass.classLoader)
                 assertNotSame(SessionHistoryProviderPlugin::class.java.classLoader, session.javaClass.classLoader)
                 val titleClass = Class.forName("ai.meteor.kcode.session.DefaultConversationTitleKt", false, session.javaClass.classLoader)
@@ -85,6 +87,20 @@ class ConversationPolicyPrivateLoadingTest {
                 assertEquals(1L, conversation.reserveMessageIds(2))
                 conversation.messages += ChatMessage(50L, MessageRole.User, "restored")
                 assertEquals(51L, conversation.reserveMessageIds())
+                val background = factory.create(CoroutineScope(coroutineContext))
+                try {
+                    background.load()
+                    val standalone = background.createPendingStandaloneConversation("private scheduled")
+                    background.setPendingStandaloneResult(standalone.id, "private background result")
+                    background.appendPendingStandaloneResultMessage(standalone.id)
+                    background.revealStandaloneConversation(standalone.id)
+                    val visible = session.floatingConversations.single { it.id == standalone.id }
+                    assertEquals("private background result", visible.standaloneResult)
+                    assertEquals("private background result", visible.messages.last().content)
+                    assertSame(session.javaClass.classLoader, visible.javaClass.classLoader)
+                } finally {
+                    background.close()
+                }
                 assertNotSame(ConversationExecution::class.java.classLoader, execution.javaClass.classLoader)
                 assertNotSame(ConversationExecutionProviderPlugin::class.java.classLoader, execution.javaClass.classLoader)
                 assertNotSame(ChatService::class.java.classLoader, chat.javaClass.classLoader)

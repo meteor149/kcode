@@ -1,5 +1,8 @@
 package ai.meteor.kcode
 
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
+
 import ai.meteor.kcode.plugin.KcodePluginRuntime
 import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.kcodePlugin
@@ -10,10 +13,15 @@ import ai.meteor.kcode.settings.SettingsUpdate
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.modelEndpoint
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.model.ModelProvider
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import android.os.ParcelFileDescriptor
+import android.content.Intent
+import kotlin.test.assertFailsWith
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlin.test.assertEquals
@@ -30,6 +38,13 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AdbSettingsPluginTest {
+    @Test
+    fun broadcastTransportAcceptsFeatureFieldsAndRequiresStringValues() {
+        val intent = Intent().putExtra("plugin.example/display.scale", "1.5").putExtra("plugin.example/api-key", "")
+        assertEquals(SettingsUpdate(mapOf("plugin.example/display.scale" to "1.5", "plugin.example/api-key" to "")), intent.toSettingsUpdate())
+        assertFailsWith<IllegalArgumentException> { Intent().putExtra("plugin.example/display.scale", 2).toSettingsUpdate() }
+    }
+
     @Test(timeout = 60_000)
     fun actionBroadcastUpdatesModelAndKeyWithoutAnExplicitReceiver(): Unit = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -54,10 +69,10 @@ class AdbSettingsPluginTest {
                 assertTrue(result.contains("result=-1"), result)
                 assertTrue(result.contains("model-api-key"), result)
                 assertFalse(result.contains("broadcast-fixture-key"))
-                assertEquals(ModelProvider.DeepSeek.name, store.value.provider)
-                assertEquals("deepseek-v4-pro", store.value.modelId)
-                assertEquals("broadcast-fixture-key", store.value.modelApiKeys[ModelProvider.DeepSeek.name])
-                assertEquals("preserved-key", store.value.modelApiKeys[ModelProvider.OpenAI.name])
+                assertEquals(ModelProvider.DeepSeek.name, checkNotNull(store.value.namespaces["feature.model-settings"]?.get("provider")).jsonPrimitive.content)
+                assertEquals("deepseek-v4-pro", checkNotNull(store.value.namespaces["feature.model-settings"]?.get("modelId")).jsonPrimitive.content)
+                assertEquals("broadcast-fixture-key", checkNotNull(store.value.namespaces["feature.model-settings"]?.get("modelApiKeys")).jsonObject[ModelProvider.DeepSeek.name]?.jsonPrimitive?.content)
+                assertEquals("preserved-key", checkNotNull(store.value.namespaces["feature.model-settings"]?.get("modelApiKeys")).jsonObject[ModelProvider.OpenAI.name]?.jsonPrimitive?.content)
                 assertEquals("preserved-endpoint", store.value.modelEndpoint)
             }
             assertEquals(2, store.saved)
@@ -88,7 +103,7 @@ class AdbSettingsPluginTest {
         try {
             assertTrue(configure("exa").contains("result=-1"))
             assertEquals(1, first.saved)
-            assertEquals("exa", first.value.webSearchProvider)
+            assertEquals(kotlinx.serialization.json.JsonPrimitive("exa"), first.value.namespaces["feature.web-search"]?.get("provider"))
             assertEquals("first", first.value.modelEndpoint)
             runtime.replacePlugin(kcodePlugin(
                 PluginDescriptor("provider.settings.platform", "test", "test", setOf("settings")),
@@ -127,7 +142,7 @@ class AdbSettingsPluginTest {
         val second = runtime(secondStore)
         try {
             val waiting = async(start = CoroutineStart.UNDISPATCHED) {
-                application.updateSettings(SettingsUpdate(searchProvider = "exa"))
+                application.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa")))
             }
             assertFalse(waiting.isCompleted)
             assertEquals(0, firstStore.saved)
@@ -136,7 +151,7 @@ class AdbSettingsPluginTest {
             application.attachContent(second)
             application.detachContent(first)
             assertEquals("second", application.updateSettings(
-                SettingsUpdate(searchProvider = "exa"),
+                SettingsUpdate(mapOf("search-provider" to "exa")),
             ).settings.modelEndpoint)
             assertEquals(1, firstStore.saved)
             assertEquals(1, secondStore.saved)
@@ -150,7 +165,7 @@ class AdbSettingsPluginTest {
 
     private class MemorySettings(endpoint: String) : AppSettingsStore {
         override val protection = SettingsProtection.Transient
-        var value = StoredAppSettings(modelEndpoint = endpoint)
+        var value = LegacySettings(modelEndpoint = endpoint)
         var saved = 0
         override suspend fun load() = value
         override suspend fun save(settings: StoredAppSettings) { saved++; value = settings }

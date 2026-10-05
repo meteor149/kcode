@@ -22,7 +22,6 @@ import androidx.compose.runtime.key
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.MessageRole
 import ai.meteor.kcode.model.ModelConfiguration
-import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.ui.component.BubblePlacement
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressClickable
@@ -101,9 +100,7 @@ fun Welcome(
     onSend: (String) -> Unit,
     onModelClick: () -> Unit,
     onConfigurationChange: (ModelConfiguration) -> Unit,
-    toolPermissionControlsAvailable: Boolean,
-    toolPermissionMode: ToolPermissionMode,
-    onToolPermissionModeChange: (ToolPermissionMode) -> Unit,
+    composerActions: @Composable () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
     if (compact) {
@@ -160,9 +157,7 @@ fun Welcome(
                     onConfigurationChange = onConfigurationChange,
                     onSend = onSend,
                     onStop = {},
-                    toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                    toolPermissionMode = toolPermissionMode,
-                    onToolPermissionModeChange = onToolPermissionModeChange,
+                    composerActions = composerActions,
                 )
             }
         }
@@ -201,9 +196,7 @@ fun Welcome(
                 onFocus = onFocus,
                 onSend = onSend,
                 onStop = {},
-                toolPermissionControlsAvailable = toolPermissionControlsAvailable,
-                toolPermissionMode = toolPermissionMode,
-                onToolPermissionModeChange = onToolPermissionModeChange,
+                composerActions = composerActions,
             )
             Row(
                 Modifier.widthIn(max = 760.dp).fillMaxWidth(.78f).padding(top = 16.dp),

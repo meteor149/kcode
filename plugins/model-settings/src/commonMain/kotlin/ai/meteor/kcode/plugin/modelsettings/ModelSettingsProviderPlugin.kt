@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin.modelsettings
 
+import ai.meteor.kcode.plugin.DefaultModelSettingsSectionPlugin
 import ai.meteor.kcode.plugin.api.KcodeModelSettings
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -43,5 +44,11 @@ object ModelSettingsProviderPlugin : Plugin<Any?> {
         val policy = CatalogModelSettingsPolicy(config as TemperatureRange)
         effect.collect(Disposable { policy.close() })
         KcodeModelSettings(ctx, policy)
+        val mutations = ctx.plugin(ModelSettingsMutationsPlugin(config as TemperatureRange), Unit)
+        effect.collect { mutations.dispose() }
+        val commands = ctx.plugin(ModelSettingsCommandsPlugin(config as TemperatureRange), Unit)
+        effect.collect { commands.dispose() }
+        val settingsSection = ctx.plugin(DefaultModelSettingsSectionPlugin, Unit)
+        effect.collect { settingsSection.dispose() }
     }
 }

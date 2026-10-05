@@ -35,3 +35,21 @@ Real JAR/APK formal-entry tests cover private implementation identity, stale-cal
 rejection, durable data after remount, and uninstall. Desktop storage packages
 include the private Room runtime/common and collection dependencies; DataStore
 and its Okio types preserve the host SDK identity.
+
+## Distribution artifacts
+
+`:plugins:history-repository:packagedDesktopJar` produces a reproducible JAR containing
+this module and private Room runtime/common and collection classes. Duplicate archive
+entries fail the build. `:distribution:history-repository-android:assembleRelease`
+produces the equivalent APK with explicit non-transitive private dependencies. Neither
+artifact includes SDK, Cordis, Kotlin, coroutines or SQLite/JNI implementations.
+
+`DesktopNativeStorageTest` loads the built history JAR, checks private Room/collection
+and shared SQLite identities, and verifies durable data after withdrawal/remount.
+The default catalog contains `provider.history.platform` with both native variants.
+Production hosts exclude this module and its Room dependencies from their classpath.
+Desktop configures the existing `~/.kcode/history.db` path; Android uses the existing
+`kcode_history.db` in the host application's database directory. The database lives
+outside immutable plugin generations. The shared SQLite/JNI peer was introduced in SDK API 39 (current API 43);
+the schema remains version 6. Explicit caller inputs bind through an SDK-only bridge
+with owned operation cancellation and resource closure, without importing Room.

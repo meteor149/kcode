@@ -5,6 +5,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+apply(from = rootProject.file("gradle/feature-ui-texts.gradle.kts"))
+
 kotlin {
     jvm("desktop") {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
@@ -13,12 +15,15 @@ kotlin {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
     }
     sourceSets {
+        commonMain { kotlin.srcDir(layout.buildDirectory.dir("generated/uiTexts/kotlin")) }
         commonMain.dependencies {
             api(project(":plugins:api"))
             api(project(":plugins:default-ui-api"))
+            implementation(project(":libraries:ui"))
             implementation(compose.runtime)
             implementation(compose.ui)
             implementation(compose.foundation)
+            implementation(compose.material3)
         }
         androidMain.dependencies {
             implementation("androidx.core:core-ktx:1.15.0")

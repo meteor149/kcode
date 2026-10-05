@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin.api
 
+import ai.meteor.kcode.settings.StoredAppSettings
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import ai.koog.agents.core.environment.ReceivedToolResult
@@ -190,9 +191,16 @@ class KcodeLlm(ctx: Context) : Service<Unit>(ctx, Key) {
     }
 }
 
+/** Optional configuration capability; schema and validation belong to its provider. */
+interface ToolPermissionSettingsPolicy {
+    fun resolve(settings: StoredAppSettings): ToolPermissionMode
+    fun update(settings: StoredAppSettings, mode: ToolPermissionMode): StoredAppSettings
+}
+
 data class InteractionPolicy(
     val permissionModeProvider: suspend () -> ToolPermissionMode = { ToolPermissionMode.Ask },
     val approver: ToolCallApprover,
+    val settings: ToolPermissionSettingsPolicy? = null,
 )
 
 /** Service Definition for human approval and permission policy. */

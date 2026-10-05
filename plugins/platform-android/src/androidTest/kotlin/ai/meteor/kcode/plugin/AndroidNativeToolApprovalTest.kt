@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.ConfirmationDialogHost
 import ai.meteor.kcode.plugin.api.ConfirmationDialogRequest
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -9,12 +11,14 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.toolPermissionMode
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -37,7 +41,7 @@ import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.Dispatchers
-import ai.meteor.kcode.plugin.localization.LocalizationProviderPlugin
+import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,7 +61,7 @@ class AndroidNativeToolApprovalTest {
         }
         val store = object : AppSettingsStore {
             override val protection = SettingsProtection.Transient
-            var value = StoredAppSettings(toolPermissionMode = ToolPermissionMode.Deny.code)
+            var value = LegacySettings(toolPermissionMode = ToolPermissionMode.Deny.code)
             override suspend fun load() = value
             override suspend fun save(settings: StoredAppSettings) { value = settings }
         }
@@ -77,7 +81,7 @@ class AndroidNativeToolApprovalTest {
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { error("obsolete host approval") }),
             hostInputs = root, settingsStore = store, featurePlugins = listOf(capture),
             profile = KcodePluginProfile(overrides = listOf(kcodePlugin(
-                descriptor("provider.interaction.platform"), HostModeToolInteractionPlugin(), { ToolPermissionMode.Ask },
+                descriptor("provider.interaction.platform"), HostToolPermissionModeInputPlugin(), { ToolPermissionMode.Ask },
             ))),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
@@ -85,7 +89,7 @@ class AndroidNativeToolApprovalTest {
         ))
         fun spec(config: Any? = configuration) = DynamicPluginSpec(
             id = "provider.tool-approvals.native", version = "test", artifactPath = artifact.path,
-            sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
+            sha256 = packageFileSha256(artifact),
             entryClass = if (config == Unit) LocalizedNativeToolApprovalPlugin::class.java.name else NativeToolApprovalPlugin::class.java.name, config = config,
         )
         try {
@@ -100,21 +104,24 @@ class AndroidNativeToolApprovalTest {
             assertEquals("fallback|input", dialogs.last?.message)
             val dictionary = artifact
             val localized = DynamicPluginSpec(
-                id = "provider.localization.default", version = "private-native-text", artifactPath = dictionary.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(dictionary.readBytes()).joinToString("") { "%02x".format(it) },
-                entryClass = LocalizationProviderPlugin::class.java.name,
+                id = "feature.localization", version = "private-native-text", artifactPath = dictionary.path,
+                sha256 = packageFileSha256(dictionary),
+                entryClass = LocalizationFeaturePlugin::class.java.name,
                 packageName = instrumentation.context.packageName,
-                config = Json.parseToJsonElement("""{"defaultLanguage":"en","translations":{"en":{"tool_confirmation_title":"Private %1${'$'}s","tool_confirmation_message":"%1${'$'}s|%2${'$'}s","tool_confirmation_allow":"Private allow","tool_confirmation_deny":"Private deny"}}}"""),
+                config = Json.parseToJsonElement("""{"defaultLanguage":"en","translations":{"en":{"tool_confirmation_title":"Private %1${'$'}s","tool_confirmation_message":"%1${'$'}s|%2${'$'}s","tool_confirmation_allow":"Private allow","tool_confirmation_deny":"Private deny"},"zh":{"tool_confirmation_title":"Legacy language %1${'$'}s","tool_confirmation_message":"Legacy %1${'$'}s|%2${'$'}s","tool_confirmation_allow":"Legacy allow","tool_confirmation_deny":"Legacy deny"}}}"""),
             )
+            store.save(LegacySettings(toolPermissionMode = "deny", language = "zh", namespaces = mapOf(
+                "feature.localization" to (Json.parseToJsonElement("""{"language":"en"}""") as kotlinx.serialization.json.JsonObject),
+            )))
             runtime.pluginManager.replace(localized)
             runtime.pluginManager.replace(spec(Unit))
             assertFalse(policy.approver.approve(ToolApprovalRequest("native", "input", "purpose")))
             assertEquals(ConfirmationDialogRequest("Private native", "purpose|input", "Private allow", "Private deny"), dialogs.last)
             val translatedApprover = approver
-            runtime.pluginManager.setEnabled("provider.localization.default", false)
+            runtime.pluginManager.setEnabled("feature.localization", false)
             assertFailsWith<IllegalStateException> { translatedApprover.approve(request) }
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.single { it.id == "provider.tool-approvals.native" }.state)
-            runtime.pluginManager.setEnabled("provider.localization.default", true)
+            runtime.pluginManager.setEnabled("feature.localization", true)
             assertFalse(policy.approver.approve(ToolApprovalRequest("restored", "input", "purpose")))
             assertEquals("Private restored", dialogs.last?.title)
             runtime.pluginManager.replace(spec())
@@ -151,13 +158,21 @@ class AndroidNativeToolApprovalTest {
             ))
             assertNotSame(SettingsToolInteractionPlugin::class.java.classLoader, policy.permissionModeProvider.javaClass.classLoader)
             assertEquals(ToolPermissionMode.Deny, policy.permissionModeProvider())
-            store.save(StoredAppSettings(toolPermissionMode = "unknown-mode"))
+            val settingsPolicy = requireNotNull(policy.settings)
+            assertNotSame(SettingsToolInteractionPlugin::class.java.classLoader, settingsPolicy.javaClass.classLoader)
+            val namespaced = settingsPolicy.update(LegacySettings(toolPermissionMode = "deny"), ToolPermissionMode.Bypass)
+            store.save(namespaced)
+            assertEquals("deny", store.load().toolPermissionMode)
+            assertEquals(ToolPermissionMode.Bypass, policy.permissionModeProvider())
+            store.save(LegacySettings(toolPermissionMode = "unknown-mode"))
             assertEquals(ToolPermissionMode.Ask, policy.permissionModeProvider())
-            store.save(StoredAppSettings(toolPermissionMode = ToolPermissionMode.Bypass.code))
+            store.save(LegacySettings(toolPermissionMode = ToolPermissionMode.Bypass.code))
             assertEquals(ToolPermissionMode.Bypass, policy.permissionModeProvider())
             val oldPolicy = policy
             runtime.pluginManager.setEnabled("provider.settings.platform", false)
             assertFailsWith<IllegalStateException> { oldPolicy.permissionModeProvider() }
+            assertFailsWith<IllegalStateException> { settingsPolicy.resolve(namespaced) }
+            assertFailsWith<IllegalStateException> { settingsPolicy.update(namespaced, ToolPermissionMode.Ask) }
             runtime.pluginManager.setEnabled("provider.settings.platform", true)
             assertEquals(ToolPermissionMode.Bypass, policy.permissionModeProvider())
             val restored = approver

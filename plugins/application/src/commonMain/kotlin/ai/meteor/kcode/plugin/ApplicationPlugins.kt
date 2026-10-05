@@ -8,12 +8,8 @@ import ai.meteor.kcode.plugin.api.ApplicationFrame
 import ai.meteor.kcode.plugin.ui.api.DefaultUiRenderer
 import ai.meteor.kcode.plugin.ui.api.ApplicationViewServices
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
-import ai.meteor.kcode.plugin.api.KcodeGeneration
-import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
-import ai.meteor.kcode.plugin.api.KcodeLocalization
 import ai.meteor.kcode.plugin.api.KcodeModelSettings
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
@@ -23,7 +19,6 @@ import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
-import ai.meteor.kcode.plugin.api.KcodeSessions
 import org.cordis.dependencies
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
 import org.cordis.Disposable
@@ -44,7 +39,7 @@ object ApplicationUiPlugin : Plugin<DefaultUiRenderer> {
             if (!available.value) return@ApplicationRenderer null
             val services = defaultApplicationServices(servicesLookup) ?: return@ApplicationRenderer null
             ApplicationFrame { options ->
-                key(config, services.settingsStore, services.historyRepository, services.artifactRepository) {
+                key(config, services.settingsStore) {
                     if (available.collectAsState().value) {
                         if (config === DefaultApplicationRenderer) DefaultApplicationRenderer.Render(services, options, owner)
                         else config.Render(services, options)
@@ -58,7 +53,7 @@ object ApplicationUiPlugin : Plugin<DefaultUiRenderer> {
 object DefaultApplicationUiPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "kcode-default-application-ui"
-    override val inject = dependencies(KcodeSettings.Key, KcodeHistory.Key, KcodeArtifacts.Key, KcodeSessions.Key, KcodeGeneration.Key, KcodeModelSettings.Key, KcodeLocalization.Key)
+    override val inject = dependencies(KcodeSettings.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         ApplicationUiPlugin.apply(ctx, DefaultApplicationRenderer, effect)
     }

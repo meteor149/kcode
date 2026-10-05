@@ -27,7 +27,7 @@ class FilePluginCompositionStore(directory: File) : PluginCompositionStore {
             require(!Files.isSymbolicLink(manifest) && Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS)) { "Invalid plugin manifest file" }
             val bytes = Files.newInputStream(manifest).use { it.readNBytes(MaxManifestBytes + 1) }
             require(bytes.size <= MaxManifestBytes) { "Plugin manifest is too large" }
-            json.decodeFromString<PluginCompositionSnapshot>(bytes.decodeToString(throwOnInvalidSequence = true)).also { it.validate() }
+            json.decodeFromString<PluginCompositionSnapshot>(bytes.decodeToString(throwOnInvalidSequence = true)).also { it.validateForRestore() }
         }
     }
 

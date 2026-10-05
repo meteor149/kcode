@@ -1,11 +1,18 @@
-# Localization providers
+# Localization feature
 
-`provider.localization.default` supplies `KcodeLocalization` through the neutral
-`TranslationCatalog` contract. `consumer.localization.ui` binds the same catalog to
-`ApplicationSlots.Localization`. The default application, localized page contributions,
-settings, Goal commands, schedule dispatch and native Android conversation overlay declare
-localization dependencies. Disabling the provider suspends consumers and removes its UI
-binding; no host dictionary is restored.
+`feature.localization` / `LocalizationFeaturePlugin` owns the dictionary provider,
+language settings form, and optional default UI projection in one install/enable
+boundary. Its internal provider supplies `KcodeLocalization` through the neutral
+`TranslationCatalog` contract; its projection binds the same catalog to
+`ApplicationSlots.Localization`. The default application borrows an optional catalog and
+uses page/feature-owned English defaults when it is absent. Headless Goal commands,
+schedule dispatch and native Android conversation overlay declare their own localization
+dependencies. Disabling the provider suspends those consumers and removes its language
+settings/UI binding; the core settings page remains usable. Missing UI services suspend only the UI children;
+the dictionary remains available for headless consumers. The former
+`provider.localization.default` and `consumer.localization.ui` releases migrate together,
+retaining the old group when needed by an external dependency and preserving disable
+choices and failed-commit rollback.
 
 Shared retains opaque `AppLanguage` identifiers, stable `LocalizedText` keys, locale
 metadata and an explicit `LocalizationContext`. Its undefined language marker is `und`;
@@ -52,3 +59,41 @@ The private dictionaries currently contain 174 keys in each language, including 
 approval, generation foreground notifications, scheduled notification channels and overlay
 controls. Default native entries explicitly consume Localization and Settings; independently
 String-configured native entries use their supplied text without those dependencies.
+
+The same feature JAR/APK contains its default settings form. The feature entry mounts an
+optional settings contribution as a child Fiber; missing `uiSlots` suspends only this
+child. Disabling/replacing the feature withdraws its setting item, without withdrawing
+the settings page. Restoring the feature registers a fresh contribution. There is no
+separate UI-only settings package.
+
+Rendering `displayText` returns null for unknown keys as of API 51, allowing a
+consumer to use its own defaults. Strict `translate` still rejects unknown keys
+and withdrawn catalogs. The default shell can survive feature withdrawal using
+page/feature-owned texts; no replacement headless service is implicitly installed.
+
+API 56 exposes optional `TranslationCatalog.languageSettings: LanguageSettingsPolicy?`.
+Rendering-only catalogs return null. The dictionary feature owns a revocable policy that
+interprets `feature.localization` JSON (`language` string), resolves available choices and
+uses its configured dictionary default for missing or unsupported preferences. The language
+form is visible only when the active catalog supplies that configuration capability.
+The default root borrows this projection and does not decode language persistence fields.
+
+With no namespace, the feature reads its raw historical key from `legacyValues`. Updates write only the
+namespace, preserving unknown fields, unrelated feature data and the legacy migration input.
+An existing empty namespace uses the dictionary default without recovering the legacy value.
+Unknown stored locale identities remain stored while rendering uses the provider's fallback.
+Updates reject undeclared locales; retained policies reject work after catalog withdrawal.
+Root text projection closure releases its own view without closing a borrowed language policy.
+
+API 59 removes fixed legacy fields and storage product defaults. Language, execution and
+permission configuration belong to their features; durable UI validation remains tracked in
+the plugin audit. Rebuild packages for ABI 59; existing localization SDK exports cover this
+neutral interface, with no private policy implementation exported.
+
+API 60 registers feature-owned namespace validation with `KcodeSettings.mutations`.
+The default root uses `KcodeSettings.mutationStore`: proposals merge into the latest
+transaction state before validation, and the registration lifetime covers durable save.
+Withdrawal rejects subsequent edits of this namespace while preserving its saved data;
+other active settings owners remain usable. Validation is independent of settings-command
+and default UI availability. Feature rules validate types and newly selected values while
+retaining unchanged future identities and unknown document fields.

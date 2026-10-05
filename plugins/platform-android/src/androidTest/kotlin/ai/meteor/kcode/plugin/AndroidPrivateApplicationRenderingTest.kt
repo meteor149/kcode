@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.ui.design.Ink
 import ai.meteor.kcode.ui.design.Paper
 import ai.meteor.kcode.ui.design.Panel
@@ -26,7 +28,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertNull
 
-import ai.meteor.kcode.plugin.export.ConversationImageRenderingPlugin
+import ai.meteor.kcode.plugin.export.ConversationExportFeaturePlugin
 import ai.meteor.kcode.export.ComposeConversationImageRenderContext
 import ai.meteor.kcode.export.ConversationImageRenderRequest
 import ai.meteor.kcode.export.ConversationExportMessage
@@ -36,10 +38,9 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.platform.LocalLayoutDirection
-import ai.meteor.kcode.plugin.localization.LocalizationProviderPlugin
-import ai.meteor.kcode.plugin.localization.LocalizationUiContributionPlugin
+import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin
-import ai.meteor.kcode.plugin.markdown.MarkdownProviderPlugin
+import ai.meteor.kcode.plugin.markdown.MarkdownFeaturePlugin
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.ui.api.ConversationTranscriptRequest
@@ -61,6 +62,9 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import ai.meteor.kcode.test.copy
+import ai.meteor.kcode.test.temperature
 import android.app.Activity
 import android.os.Bundle
 import androidx.compose.runtime.SideEffect
@@ -73,7 +77,6 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -92,7 +95,7 @@ class AndroidPrivateApplicationRenderingTest {
         val artifact = File(directory, "application.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         val themeValues = AtomicReference<List<Any>?>(null)
         val resolvedTemperature = AtomicReference<Double?>(null)
         lateinit var slots: KcodeUiSlots
@@ -122,7 +125,7 @@ class AndroidPrivateApplicationRenderingTest {
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
             settingsStore = object : AppSettingsStore {
                 override val protection = SettingsProtection.Transient
-                private var settings = StoredAppSettings(provider = "OpenAI", modelId = "gpt-4o-mini", language = "en", temperature = 1.75, modelApiKeys = mapOf("OpenAI" to "fixture"))
+                private var settings = LegacySettings(provider = "OpenAI", modelId = "gpt-4o-mini", language = "en", temperature = 1.75, modelApiKeys = mapOf("OpenAI" to "fixture"))
                 override suspend fun load(): StoredAppSettings = settings
                 override suspend fun save(settings: StoredAppSettings) { this.settings = settings }
             },
@@ -136,11 +139,10 @@ class AndroidPrivateApplicationRenderingTest {
         instrumentation.uiAutomation.adoptShellPermissionIdentity("android.permission.START_ACTIVITIES_FROM_BACKGROUND")
         try {
             val entries = listOf(
-                "provider.localization.default" to LocalizationProviderPlugin::class.java,
-                "consumer.localization.ui" to LocalizationUiContributionPlugin::class.java,
+                "feature.localization" to LocalizationFeaturePlugin::class.java,
                 "provider.model-settings.catalog" to ModelSettingsProviderPlugin::class.java,
-                "provider.markdown.default" to MarkdownProviderPlugin::class.java,
-                "provider.export.image-rendering" to ConversationImageRenderingPlugin::class.java,
+                "feature.markdown" to MarkdownFeaturePlugin::class.java,
+                "feature.conversation-export" to ConversationExportFeaturePlugin::class.java,
                 "provider.ui.compose" to DefaultApplicationUiPlugin::class.java,
                 "provider.ui.layout" to DefaultLayoutUiPlugin::class.java,
                 "provider.ui.sidebar" to DefaultSidebarUiPlugin::class.java,
@@ -164,7 +166,7 @@ class AndroidPrivateApplicationRenderingTest {
                 )
                 if (id == "provider.ui.theme") themeDeployment = deployment
                 if (id == "provider.model-settings.catalog") modelSettingsDeployment = deployment
-                if (id == "provider.localization.default") localizationDeployment = deployment
+                if (id == "feature.localization") localizationDeployment = deployment
                 runtime.pluginManager.replace(deployment)
             }
             window = NativeAndroidPluginWindowHost(context).open(AndroidPluginWindowFactory { activity: Activity ->
@@ -269,11 +271,11 @@ class AndroidPrivateApplicationRenderingTest {
                 runtime.pluginManager.replace(configuredLocale.copy(config = Json.parseToJsonElement("""{"defaultLanguage":"absent"}""")))
             }
             assertSame(retainedLocale, slots.snapshot().localization)
-            runtime.pluginManager.setEnabled("provider.localization.default", false)
+            runtime.pluginManager.setEnabled("feature.localization", false)
             delay(500)
             instrumentation.waitForIdleSync()
             assertTrue("Private composer" !in withContext(Dispatchers.Main.immediate) { semanticsLabels(view) })
-            runtime.pluginManager.setEnabled("provider.localization.default", true)
+            runtime.pluginManager.setEnabled("feature.localization", true)
             awaitLabel("Private composer")
             runtime.pluginManager.replace(localizationDeployment)
             awaitLabel("Message kcode…")

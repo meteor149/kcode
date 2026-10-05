@@ -1,7 +1,8 @@
 package ai.meteor.kcode.plugin.localization
 
-import ai.meteor.kcode.plugin.ui.api.ApplicationSlots
+import ai.meteor.kcode.plugin.DefaultLanguageSettingsSectionPlugin
 import ai.meteor.kcode.plugin.api.KcodeLocalization
+import ai.meteor.kcode.plugin.ui.api.ApplicationSlots
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
 import org.cordis.ConfigValidator
 import org.cordis.Context
@@ -18,6 +19,10 @@ object LocalizationProviderPlugin : Plugin<Any?> {
         val catalog = DictionaryTranslationCatalog(config as DictionaryConfiguration)
         effect.collect(Disposable { catalog.close() })
         KcodeLocalization(ctx, catalog)
+        val mutations = ctx.plugin(LanguageSettingsMutationsPlugin, Unit)
+        effect.collect { mutations.dispose() }
+        val settingsSection = ctx.plugin(DefaultLanguageSettingsSectionPlugin, Unit)
+        effect.collect { settingsSection.dispose() }
     }
 }
 

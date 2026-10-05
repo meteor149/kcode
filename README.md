@@ -140,13 +140,22 @@ Native hosts provide platform primitives, `plugins/runtime` manages the Cordis t
 | `plugins/installation-store` | Installed packages and enable-state persistence |
 | `apps/*`, `plugins/platform-*` | Application hosts, loaders, and platform adapters |
 
-Product implementations live in feature modules: `application`, `ui-pages`, and `ui-settings` provide the default interface; repository, execution, model, search, and native capability providers own their services. Android and desktop share Room schemas and bundled SQLite. Module declarations are maintained in [settings.gradle.kts](settings.gradle.kts).
+Product implementations live in feature modules: `ui-contributions` owns the neutral UI registry, `default-ui-bridge` supplies its optional default projection, and `application` and `ui-pages` provide the default interface; feature packages own and withdraw their settings forms; repository, execution, model, search, and native capability providers own their services. Android and desktop share Room schemas and bundled SQLite. Module declarations are maintained in [settings.gradle.kts](settings.gradle.kts).
+
+Web Search, Goal, Subagent, Localization, Markdown, Conversation Export and WebContainer each include their related providers and contributions within one feature release. Their internal children remain independently reactive to available services.
+
+WebContainer owns its default overlay implementation; default pages consume its optional UI slot.
 
 Use the plugin manager to load, enable, disable, replace, or unload external packages. Finish or cancel active agent turns before changing composition. Installed state persists across restarts, and failed replacement or manifest publication restores the committed composition. Withdrawal cancels and waits for owned operations before releasing resources. Replacing storage does not automatically migrate data.
 
-External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 34**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
+External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 60**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
 
 Read the [architecture guide](docs/plugin-architecture.md) and [plugin development guide](docs/plugin-development.md) for implementation rules. The [feature audit](docs/plugin-feature-audit.md) records current coverage; the [Harness specification](docs/deepseek-harness-plugin-spec.md) and [reserved API guide](docs/harness-reserved-api.md) distinguish implemented features from contracts that have no providers yet. All guides are indexed in [docs](docs/README.md).
+
+The [cross-platform plugin package format](docs/plugin-package-format.md) uses platform and architecture variants. Native builds load default implementations from independently replaceable `.kplugin` archives, preserving configuration, disabled state, user replacements and uninstalls. Artifact, Web Search, Goal, Schedule, Subagent, Localization, Markdown, Conversation Export and WebContainer each own one feature release, including their related tools, commands, settings and optional presentation. Model adapters and reusable infrastructure keep independent releases. `:distribution:packager:stageBundledPlugins` exports the trusted catalog and archives; `settings.gradle.kts` and that catalog define current modules and platform variants. Hosts retain SDK contracts, composition/installation infrastructure and SDK-only input adapters. iOS is metadata only; runtime imports currently support desktop JAR and Android APK variants with SDK validation, dependency-set transactions and restart recovery.
+
+Explicit interaction callbacks use SDK-only host input adapters. Production hosts exclude
+the legacy interaction implementation module; the default settings policy runs from its package.
 
 ## Permissions and data
 
@@ -200,3 +209,9 @@ Contributions are welcome. Read [AGENTS.md](AGENTS.md) for repository structure,
 Copyright 2026 The kcode Authors.
 
 Licensed under [Apache License 2.0](LICENSE). Third-party components retain their own licenses. See [NOTICE](NOTICE) for attribution.
+
+Permission configuration and composer controls belong to the interaction feature. Default chat pages expose generic settings editing and contribution slots; disabling the feature removes its controls and preserves saved configuration.
+
+Settings persistence stores opaque feature namespaces and raw historical migration values.
+Feature plugins own configuration schemas and defaults; v2 snapshots preserve unknown data
+and no longer write feature-specific legacy scalars.

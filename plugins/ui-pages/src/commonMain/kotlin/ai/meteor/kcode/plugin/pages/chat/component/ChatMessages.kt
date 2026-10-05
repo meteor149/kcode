@@ -20,7 +20,6 @@ import ai.meteor.kcode.plugin.ui.api.MessageContentRequest
 import androidx.compose.runtime.key
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.MessageRole
-import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.ui.component.BubblePlacement
 import ai.meteor.kcode.ui.component.PressScaleStyle
 import ai.meteor.kcode.ui.component.pressClickable

@@ -12,17 +12,74 @@ when their settings generation changes.
 
 Shared retains the neutral AgentShellExecutor contract and AIDL transport protocol.
 Shizuku SDK and AIDL types preserve host ClassLoader identity; these implementation classes
-stay private. Native binaries, Ubuntu archive/licenses and the Shizuku provider manifest
-are packaged here. API 11 retains the rejection of dependencies on the former shared
+stay private. Native binaries and Ubuntu archive/licenses are packaged here. The Shizuku
+provider declaration belongs to the native host adapter. API 11 retains the rejection of dependencies on the former shared
 execution implementation classes.
+
+## Independent Android artifact
+
+`:distribution:native-execution-android:assembleDebug` builds a separate APK from the
+real provider module. It carries private archive codecs (Commons Compress and its
+dependencies, plus XZ), the ARM64 PRoot executables, Ubuntu rootfs and licenses.
+SDK, Cordis, Kotlin/coroutines and Shizuku classes are compile-only host identities.
+The distribution manifest removes `ShizukuProvider`: only the installed native host
+publishes that bridge. The SDK supplies Shizuku client/provider peers, and
+`platform-android` owns the installed provider declaration. This implementation module
+no longer supplies that declaration.
+
+`AndroidSettingsShellTest` loads the actual preparation archives for its native system
+Shell and Ubuntu entries. It verifies app-UID shell execution,
+Ubuntu/Python startup, settings rebinding, withdrawal, command cancellation, native
+temporary-file cleanup, and preservation of installed rootfs. This does not establish
+Shizuku UID-2000 authorization or root execution. The framework/class and resource audit
+checks both entries, private codecs, absence of shared defined types, and exact hashes
+for the two executables, Ubuntu archive and both licenses.
+
+`:distribution:native-shell-android` builds the ordinary Shell APK from the same compiled
+provider AAR after removing deployment-only assets and JNI. Private provider classes and
+archive codecs remain intact; this is a resource split, not a second source implementation.
+The resulting APK carries neither Ubuntu rootfs/licenses nor PRoot executables and declares
+the separate package name `ai.meteor.kcode.external.nativeshell`.
+`:distribution:packager:packageNativeSystemShell` wraps it as an Android-only ARM/x86, 32/64-bit
+release, using the Unit-configured `AndroidPackagedShellPlugin` entry.
+The real device fixture imports the archive, checks resource independence, shares Shizuku
+SDK identities, executes an app-UID shell, rebinds settings and waits for process cancellation
+before uninstall.
+
+The trusted `provider.shell.platform` release now includes desktop and Android variants.
+Android's factory loads the bytecode-only APK and no longer mounts a linked system Shell.
+API 43 adds `KcodeShellMode`/`ShellModePolicy`, injected by the packaged entry. Settings-driven
+hosts load `policy.shell-mode.platform`; explicit callback hosts provide the same SDK service
+through `HostShellModeInputPlugin`. Disabling or replacing the policy suspends the executor
+and cancels/joins its work before policy release. Both policy and executor reject stale calls.
+`AndroidPackagedUbuntuShellPlugin` consumes the same SDK policy and owns its Ubuntu executor.
+The trusted `provider.shell.ubuntu` package is Android-only ARM64. Host-aware staging skips
+its payload on unsupported architectures before reading resources, leaving service-dependent
+tool consumers Pending. The Android host no longer links this implementation module.
+
+`:distribution:packager:packageNativeUbuntu` wraps the built APK as an Android-only ARM64
+preparation archive. Its SDK ABI/configuration and payload are verified through normal
+`AgentPluginManager.importPackages`; the Ubuntu device test now exercises that archive
+path, including variant selection, before starting private PRoot/Python and revoking it.
+The same entry/payload is also published in the default catalog with the explicit ARM64
+selector. Explicit imports on incompatible hosts still fail normal manifest validation.
+
+## Independent desktop release
+
+The trusted catalog includes `provider.shell.platform` as a dual-target `.kplugin`,
+with `DesktopNativeShellPlugin` as its String-configured entry. The native desktop factory
+stages the verified JAR with its existing absolute workspace configuration, including
+profiles with default product composition disabled. Saved configuration and enable state
+continue through normal package transactions. The production desktop host does not link
+native execution implementations; tests declare their implementation dependencies explicitly.
 
 Desktop native process tests, Android request/quoting unit tests and Android CPU/process
 instrumentation tests live with their implementations. Actual root authorization and
 foreground permission UI still require independent device verification.
 
 `DesktopNativeShellPlugin` accepts an absolute workspace String and constructs its
-executor during each activation. The desktop host selects this formal entry instead of
-preconstructing an executor. Real JAR tests cover independent private instances, failed
+executor during each activation. The desktop host loads this formal entry from the verified
+archive. Real archive tests cover independent private instances, failed
 replacement recovery, active-process cancellation/exit, disable/restore and stale calls.
 Pure configuration rejection preserves the exact current service and active process.
 If candidate apply has already retired the old mount, recovery resolves a fresh service
@@ -75,3 +132,11 @@ commands, including apt and Python. The
 [UID-2000 verification entry](../../docs/verification.md#privileged-verification) covers private shell/Ubuntu execution,
 command retirement, stale references, independent engines and resource cleanup. Shizuku cross-process
 authorization/delivery and root execution remain separate device verification gates.
+
+The legacy Unit-configured `AndroidNativeSettingsShellPlugin` and
+`AndroidNativeSettingsUbuntuShellPlugin` now consume `KcodeShellMode`, matching the
+packaged entry points. They forward execution identity through the SDK policy instead of
+interpreting fixed storage fields. Explicit compositions must supply that policy separately;
+settings-backed policy/schema/UI ownership belongs to `execution-settings`, and callback
+policies may run without a settings repository. Legacy entry class names/configuration stay
+available. Production consumers add no implementation dependency on the settings provider.

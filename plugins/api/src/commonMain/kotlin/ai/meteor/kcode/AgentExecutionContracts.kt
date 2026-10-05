@@ -15,7 +15,8 @@ interface AgentLifecycle {
 
 data class AgentToolContext(
     val agentPath: String,
-    val coordinator: SubagentCoordinator,
+    /** Present only when the turn has an installed subagent capability. */
+    val coordinator: SubagentCoordinator?,
     val goalSession: GoalSession?,
     val scheduledTaskSession: ScheduledTaskSession?,
     val scheduledTaskCompletionSession: ScheduledTaskCompletionSession?,

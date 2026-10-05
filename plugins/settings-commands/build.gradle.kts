@@ -19,7 +19,9 @@ kotlin {
             api(project(":plugins:api"))
         }
         commonTest.dependencies {
-            implementation(project(":plugins:web-search-provider"))
+            implementation(project(":plugins:test-support"))
+            implementation(project(":plugins:web-search"))
+            implementation(project(":plugins:model-settings"))
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }

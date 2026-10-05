@@ -7,6 +7,8 @@ import ai.meteor.kcode.settings.native.openMmkvSettingsLease
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,16 +18,16 @@ import kotlin.test.assertFailsWith
 @RunWith(AndroidJUnit4::class)
 class AndroidSettingsSnapshotTest {
     @Test
-    fun partialSnapshotsRestorePrivateDefaultsThroughTheNativeStore(): Unit = runBlocking {
+    fun partialSnapshotsRetainRawValuesWithoutInventingFeatureDefaults(): Unit = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = File(context.cacheDir, "partial-snapshot-${System.nanoTime()}").apply { mkdirs() }
         val lease = openMmkvSettingsLease(context, "partial-snapshot", rootDirectory = directory)
         try {
             val store = MmkvAppSettingsStore(lease, SettingsProtection.Transient)
             check(lease.access { it.encodeString("settings_snapshot.v1", """{"provider":"private.gateway","language":"en"}""") })
-            assertEquals(defaultSettings().copy(provider = "private.gateway", language = "en"), store.load())
+            assertEquals(Json.parseToJsonElement("""{"provider":"private.gateway","language":"en"}"""), store.load().legacyValues)
             check(lease.access { it.encodeString("settings_snapshot.v1", """{"provider":"","language":"","temperature":0}""") })
-            assertEquals(defaultSettings().copy(provider = "", language = "", temperature = 0.0), store.load())
+            assertEquals(kotlinx.serialization.json.Json.parseToJsonElement("""{"provider":"","language":"","temperature":0}"""), store.load().legacyValues)
         } finally {
             lease.close()
             directory.deleteRecursively()
@@ -35,14 +37,15 @@ class AndroidSettingsSnapshotTest {
     @Test(timeout = 60_000)
     fun failedScalarOrCommitWritesRetainThePreviousSnapshotAcrossNativeReopen(): Unit = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        for (failedKey in listOf("ui_language", "settings_snapshot.v1")) {
+        for (failedKey in listOf("settings_snapshot.v2")) {
             val directory = File(context.cacheDir, "snapshot-failure-${System.nanoTime()}").apply { mkdirs() }
             val id = "snapshot-failure"
             var current: MmkvSettingsLease? = openMmkvSettingsLease(context, id, rootDirectory = directory)
             try {
-                val previous = StoredAppSettings(provider = "old-provider", modelApiKeys = mapOf("obsolete" to "old-fixture"))
-                val replacement = previous.copy(provider = "new-provider", language = "en", shellExecutionMode = "root",
-                    toolPermissionMode = "bypass", modelApiKeys = mapOf("custom" to "new-fixture"))
+                val previous = StoredAppSettings(namespaces = mapOf("fixture.settings" to
+                    (Json.parseToJsonElement("""{"credential":"old-fixture","future":[null,{}]}""") as JsonObject)))
+                val replacement = previous.copy(namespaces = mapOf("fixture.settings" to
+                    (Json.parseToJsonElement("""{"credential":"new-fixture","future":[null,{}],"unknown.key":""}""") as JsonObject)))
                 val first = requireNotNull(current)
                 val store = MmkvAppSettingsStore(first, SettingsProtection.Transient)
                 store.save(previous)
@@ -56,7 +59,7 @@ class AndroidSettingsSnapshotTest {
                         ScalarSettingsCodec().save(failing, replacement)
                     }
                 }
-                assertEquals("new-provider", first.access { it.decodeString("model_provider") })
+                assertEquals(null, first.access { it.decodeString("model_provider") })
                 assertEquals(previous, store.load())
                 first.close()
                 current = null
@@ -66,7 +69,7 @@ class AndroidSettingsSnapshotTest {
                 assertEquals(previous, restored.load())
                 restored.save(replacement)
                 assertEquals(replacement, restored.load())
-                assertEquals("", reopened.access { it.decodeString("model_api_key.obsolete") })
+                assertEquals(null, reopened.access { it.decodeString("model_api_key.obsolete") })
             } finally {
                 current?.let { lease -> try { lease.access { it.clearAll() } } finally { lease.close() } }
                 directory.deleteRecursively()

@@ -179,4 +179,5 @@
     <string name="scheduled_task_notification_channel_zh">定时任务</string>
     <string name="conversation_overlay_title_zh">kcode · 当前会话</string>
     <string name="conversation_overlay_close_description_zh">关闭会话浮窗</string>
+    <string name="select_messages_zh">选择消息</string>
 </resources>

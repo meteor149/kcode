@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeInteraction
 import ai.meteor.kcode.plugin.api.KcodeSettings
@@ -7,6 +9,7 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
 import ai.meteor.kcode.settings.ToolPermissionMode
 import ai.meteor.kcode.tools.permission.ToolApprovalRequest
 import ai.meteor.kcode.tools.permission.ToolCallApprover
@@ -19,7 +22,6 @@ import kotlinx.coroutines.withContext
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -50,6 +52,7 @@ class AndroidSettingsInteractionTest {
         try {
             withContext(Dispatchers.Main.immediate) {
                 val activity = object : Activity() {
+                    init { attachBaseContext(isolated) }
                     override fun getApplicationContext(): android.content.Context = isolated
                     override fun getFilesDir() = directory
                 }
@@ -62,12 +65,24 @@ class AndroidSettingsInteractionTest {
                 try {
                     val root = runtime.owner as KcodePluginRuntime
                     val previous = requireNotNull(policy)
+                    assertTrue(previous.permissionModeProvider.javaClass.classLoader !== HostToolApprovalsInputPlugin::class.java.classLoader)
                     assertEquals(ToolPermissionMode.Deny, previous.permissionModeProvider())
+                    assertTrue(previous.approver.approve(ToolApprovalRequest("test", "fixture", "borrowed")))
                     root.replacePlugin(kcodePlugin(descriptor("provider.settings.platform"), plugin<MemorySettings>(
                         name = "native-replacement-settings",
                     ) { ctx, config -> KcodeSettings(ctx, config) }, MemorySettings(ToolPermissionMode.Bypass)))
                     assertFailsWith<IllegalStateException> { previous.permissionModeProvider() }
                     assertEquals(ToolPermissionMode.Bypass, requireNotNull(policy).permissionModeProvider())
+                    val beforeApprovalReplacement = requireNotNull(policy)
+                    root.replacePlugin(kcodePlugin(
+                        PluginDescriptor("provider.tool-approvals.native", "test", "test", setOf("toolApprovals")),
+                        HostToolApprovalsInputPlugin,
+                        ToolCallApprover { false },
+                    ))
+                    assertFailsWith<IllegalStateException> {
+                        beforeApprovalReplacement.approver.approve(ToolApprovalRequest("test", "fixture", "stale"))
+                    }
+                    assertEquals(false, requireNotNull(policy).approver.approve(ToolApprovalRequest("test", "fixture", "replacement")))
                 } finally { runtime.close() }
             }
         } finally { directory.deleteRecursively() }
@@ -99,14 +114,14 @@ class AndroidSettingsInteractionTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.settings-interaction", version = "test", entryClass = AndroidFixtureSettingsInteraction::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName, config = "fixture",
             ))
-            assertTrue(policy.permissionModeProvider.javaClass.classLoader !== SettingsInteractionProviderPlugin::class.java.classLoader)
+            assertTrue(policy.permissionModeProvider.javaClass.classLoader !== SettingsApproverInteractionPlugin::class.java.classLoader)
             val mode = policy.permissionModeProvider()
             assertTrue(mode.javaClass === ToolPermissionMode::class.java)
             assertEquals(ToolPermissionMode.Deny, mode)
-            store.save(StoredAppSettings(toolPermissionMode = ToolPermissionMode.Bypass.code))
+            store.save(LegacySettings(toolPermissionMode = ToolPermissionMode.Bypass.code))
             assertEquals(ToolPermissionMode.Bypass, policy.permissionModeProvider())
             val previous = policy
             val replacement = MemorySettings(ToolPermissionMode.Ask)
@@ -131,7 +146,7 @@ class AndroidSettingsInteractionTest {
     private fun descriptor(id: String) = PluginDescriptor(id, "test", "test", emptySet())
     private class MemorySettings(mode: ToolPermissionMode) : AppSettingsStore {
         override val protection = SettingsProtection.Transient
-        private var value = StoredAppSettings(toolPermissionMode = mode.code)
+        private var value = LegacySettings(toolPermissionMode = mode.code)
         override suspend fun load() = value
         override suspend fun save(settings: StoredAppSettings) { value = settings }
     }
@@ -141,6 +156,6 @@ class AndroidFixtureSettingsInteraction : Plugin<String> {
     override val name = "fixture-settings-interaction"
     override val inject = dependencies(KcodeSettings.Key)
     override suspend fun apply(ctx: Context, config: String, effect: EffectScope) {
-        SettingsInteractionProviderPlugin.apply(ctx, ToolCallApprover { true }, effect)
+        SettingsApproverInteractionPlugin.apply(ctx, ToolCallApprover { true }, effect)
     }
 }

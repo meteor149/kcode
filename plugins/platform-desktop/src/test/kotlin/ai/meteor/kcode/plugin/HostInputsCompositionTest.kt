@@ -2,7 +2,7 @@ package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.ImageSaveResult
-import ai.meteor.kcode.plugin.export.DesktopNativeImageSavingPlugin
+import ai.meteor.kcode.plugin.export.ConversationExportFeaturePlugin
 import ai.meteor.kcode.plugin.api.KcodeConversationImageSaving
 import androidx.compose.ui.graphics.ImageBitmap
 import ai.meteor.kcode.chat.ScheduledTaskPlatformHost
@@ -25,7 +25,7 @@ class HostInputsCompositionTest {
     fun actualNativeImageJarRestoresAndRevokesItsSaver(): Unit = runBlocking {
         val directory = java.nio.file.Files.createTempDirectory("native-image-inputs").toFile()
         val artifact = java.io.File(directory, "images.jar")
-        java.io.File(DesktopNativeImageSavingPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
+        java.io.File(ConversationExportFeaturePlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
         check(artifact.setReadOnly())
         var root = DesktopPluginHostInputs { null }
         lateinit var saver: ConversationImageSaver
@@ -45,22 +45,22 @@ class HostInputsCompositionTest {
         try {
             val digest = java.security.MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
             runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "provider.export.image-saving", version = "external", artifactPath = artifact.path,
-                sha256 = digest, entryClass = DesktopNativeImageSavingPlugin::class.java.name,
+                id = "feature.conversation-export", version = "external", artifactPath = artifact.path,
+                sha256 = digest, entryClass = ConversationExportFeaturePlugin::class.java.name,
             ))
             kotlin.test.assertTrue(saver.javaClass.classLoader !== ConversationImageSaver::class.java.classLoader)
             assertEquals(ImageSaveResult.Unsupported, saver.share(bitmap, "test.png"))
             val retired = saver
-            runtime.pluginManager.setEnabled("provider.export.image-saving", false)
+            runtime.pluginManager.setEnabled("feature.conversation-export", false)
             assertFailsWith<IllegalStateException> { retired.share(bitmap, "test.png") }
-            runtime.pluginManager.setEnabled("provider.export.image-saving", true)
+            runtime.pluginManager.setEnabled("feature.conversation-export", true)
             assertEquals(ImageSaveResult.Unsupported, saver.share(bitmap, "test.png"))
             runtime.close()
             root = DesktopPluginHostInputs { null }
             runtime = KcodePluginRuntime.create(configuration())
             assertEquals(ImageSaveResult.Unsupported, saver.share(bitmap, "test.png"))
             val beforeUninstall = saver
-            runtime.pluginManager.uninstall("provider.export.image-saving")
+            runtime.pluginManager.uninstall("feature.conversation-export")
             assertFailsWith<IllegalStateException> { beforeUninstall.share(bitmap, "test.png") }
         } finally {
             runtime.close()

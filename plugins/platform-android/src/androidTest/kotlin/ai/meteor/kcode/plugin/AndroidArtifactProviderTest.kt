@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.artifact.Artifact
 import ai.meteor.kcode.artifact.ArtifactFileStore
 import ai.meteor.kcode.artifact.ArtifactManifestPath
@@ -20,7 +22,6 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
@@ -62,7 +63,7 @@ class AndroidArtifactProviderTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.artifact-files", version = "test", entryClass = AndroidFixtureFileArtifacts::class.java.name,
                 artifactPath = apk.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName, config = "APK repository",
             ))
             val old = current
@@ -112,7 +113,7 @@ class AndroidArtifactProviderTest {
             runtime.pluginManager.install(DynamicPluginSpec(
                 id = "fixture.native-artifact", version = "test", entryClass = AndroidFixtureNativeArtifacts::class.java.name,
                 artifactPath = apk.path, config = directory.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(apk),
                 packageName = instrumentation.context.packageName,
             ))
             assertTrue(current.javaClass.classLoader !== ArtifactRepository::class.java.classLoader)

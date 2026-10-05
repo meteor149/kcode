@@ -36,6 +36,31 @@ dependencies {
     add("kspDesktop", "androidx.room3:room3-compiler:3.0.1")
 }
 room3 { schemaDirectory(layout.projectDirectory.dir("schemas")) }
+
+// Room and its collection implementation are private to the repository generation.
+// SQLite/JNI, Kotlin and coroutines retain the host SDK identity.
+tasks.register<Jar>("packagedDesktopJar") {
+    dependsOn("desktopJar")
+    archiveClassifier.set("packaged-desktop")
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    from({ zipTree((tasks.getByName("desktopJar") as Jar).archiveFile.get().asFile) })
+    from({
+        val privateArtifacts = configurations.getByName("desktopRuntimeClasspath")
+            .resolvedConfiguration.resolvedArtifacts.filter {
+                it.moduleVersion.id.group == "androidx.room3" ||
+                    it.moduleVersion.id.group == "androidx.collection"
+            }
+        check(privateArtifacts.size == 3) {
+            "History package requires Room runtime/common and collection; found " +
+                privateArtifacts.joinToString { it.moduleVersion.id.toString() }
+        }
+        privateArtifacts.sortedBy { it.moduleVersion.id.toString() }.map { zipTree(it.file) }
+    })
+    exclude("META-INF/MANIFEST.MF")
+}
+
 android {
     namespace = "ai.meteor.kcode.plugin.history"
     compileSdk = 35

@@ -28,7 +28,7 @@ class GoalSchedulePrivateLoadingTest {
         val goalArtifact = File(directory, "goal.jar")
         val scheduleArtifact = File(directory, "schedule.jar")
         File(GoalSessionProviderPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(goalArtifact)
-        File(ScheduledTaskProviderPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(scheduleArtifact)
+        File(ScheduleFeaturePlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(scheduleArtifact)
         check(goalArtifact.setReadOnly())
         check(scheduleArtifact.setReadOnly())
         lateinit var goals: GoalSessionFactory
@@ -51,8 +51,8 @@ class GoalSchedulePrivateLoadingTest {
             entryClass = entry,
         )
         try {
-            runtime.pluginManager.replace(spec("provider.goal-sessions.history", goalArtifact, GoalSessionProviderPlugin::class.java.name))
-            runtime.pluginManager.replace(spec("provider.schedules.history", scheduleArtifact, ScheduledTaskProviderPlugin::class.java.name))
+            runtime.pluginManager.replace(spec("feature.goal", goalArtifact, GoalFeaturePlugin::class.java.name))
+            runtime.pluginManager.replace(spec("feature.schedule", scheduleArtifact, ScheduleFeaturePlugin::class.java.name))
             val originalGoals = goals
             val originalSchedules = schedules
             assertEquals("ai.meteor.kcode.plugin.goal.HistoryGoalSessions", originalGoals.javaClass.name)
@@ -69,16 +69,16 @@ class GoalSchedulePrivateLoadingTest {
             goal.setGoalFromUser("verify private implementation")
             val task = schedule.create("private task", "check state", 60, null, null)
             assertTrue(schedule.list().any { it.taskId == task.taskId })
-            runtime.pluginManager.setEnabled("provider.goal-sessions.history", false)
+            runtime.pluginManager.setEnabled("feature.goal", false)
             assertFailsWith<IllegalStateException> { originalGoals.create(conversation) }
             assertFailsWith<IllegalStateException> { goal.getGoal() }
-            runtime.pluginManager.setEnabled("provider.goal-sessions.history", true)
+            runtime.pluginManager.setEnabled("feature.goal", true)
             assertNotSame(originalGoals, goals)
             assertEquals("verify private implementation", requireNotNull(goals.create(conversation)).getGoal()?.objective)
-            runtime.pluginManager.setEnabled("provider.schedules.history", false)
+            runtime.pluginManager.setEnabled("feature.schedule", false)
             assertFailsWith<IllegalStateException> { originalSchedules.sessionFor(91, "stale") }
             assertFailsWith<IllegalStateException> { schedule.list() }
-            runtime.pluginManager.setEnabled("provider.schedules.history", true)
+            runtime.pluginManager.setEnabled("feature.schedule", true)
             assertNotSame(originalSchedules, schedules)
             assertTrue(requireNotNull(schedules.sessionFor(91, conversation.title)).list().any { it.taskId == task.taskId })
         } finally {

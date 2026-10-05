@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeShell
 import ai.meteor.kcode.plugin.api.PluginDescriptor
@@ -11,7 +13,6 @@ import ai.meteor.kcode.tools.permission.ToolCallApprover
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -43,7 +44,7 @@ class AndroidConfigurationBoundaryTest {
         val artifact = File(directory, "text.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         val approval = toolApprovalConfig("Tool", "%s %s", "Allow", "Deny")
         val foreground = ai.meteor.kcode.plugin.notifications.generationForegroundConfig("Channel", "Title", "Text")
         val entries = listOf(
@@ -104,7 +105,7 @@ class AndroidConfigurationBoundaryTest {
         val artifact = File(directory, "unit.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         val entries = listOf(
             "ai.meteor.kcode.plugin.settingsstorage.AndroidNativeSettingsPlugin",
             "ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin",
@@ -161,7 +162,7 @@ class AndroidConfigurationBoundaryTest {
         val artifact = File(directory, "configuration.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         lateinit var current: ShellBackend
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             profile = KcodePluginProfile(includeDefaults = false),

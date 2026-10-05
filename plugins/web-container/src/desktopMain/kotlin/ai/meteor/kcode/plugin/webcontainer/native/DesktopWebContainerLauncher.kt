@@ -20,6 +20,7 @@ import ai.meteor.kcode.webcontainer.WebVirtualPath
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.awt.Desktop
+import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
@@ -615,12 +616,22 @@ private class DesktopChromiumSession private constructor(
 
         private fun awaitDevToolsPort(userData: Path, process: Process): Int {
             val portFile = userData.resolve("DevToolsActivePort")
+            var lastReadFailure: IOException? = null
             repeat(200) {
-                if (Files.isRegularFile(portFile)) return Files.readAllLines(portFile).first().toInt()
                 check(process.isAlive) { "Chromium exited before the Web container opened" }
+                if (Files.isRegularFile(portFile)) {
+                    // Chromium can create the file before releasing its Windows write handle.
+                    val port = try {
+                        Files.readAllLines(portFile).firstOrNull()?.toIntOrNull()
+                    } catch (error: IOException) {
+                        lastReadFailure = error
+                        null
+                    }
+                    if (port != null && port in 1..65535) return port
+                }
                 Thread.sleep(50)
             }
-            error("Timed out waiting for the Web container browser")
+            throw IllegalStateException("Timed out waiting for the Web container browser", lastReadFailure)
         }
 
         private fun browserSocket(port: Int, client: HttpClient): URI {

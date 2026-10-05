@@ -2,6 +2,8 @@ plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
     id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -18,6 +20,12 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":plugins:api"))
+            api(project(":plugins:default-ui-api"))
+            implementation(project(":libraries:ui"))
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
+            implementation(compose.animation)
         }
         androidMain.dependencies {
             implementation("androidx.core:core-ktx:1.15.0")

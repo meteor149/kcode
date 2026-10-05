@@ -38,6 +38,18 @@ The entry owns factory creation and delegates allocation, revocation and release
 to the owned provider. Default hosts no longer supply a business factory closure.
 Explicit caller-owned stores/repositories and custom profile overrides remain supported.
 Real JAR/APK formal-entry tests cover private implementation identity, stale-call
-rejection, durable data after remount, and uninstall. Desktop storage packages
-include the private Room runtime/common and collection dependencies; DataStore
-and its Okio types preserve the host SDK identity.
+rejection, durable data after remount, and uninstall.
+
+The default `provider.artifacts.platform` archive contains both desktop JAR and Android
+APK variants. Both native hosts exclude this implementation from their runtime dependencies.
+The package has no private framework dependencies: serialization and SDK contracts remain
+host peers, while the manifest codec and native file operations are private. Desktop keeps
+the existing `~/.kcode/workspace` path; Android keeps `filesDir/agent_workspace`. Neither
+the manifest nor its resources reside in immutable plugin generations. Package withdrawal
+closes the provider without deleting durable data. Explicit repositories use an SDK-only
+borrowed-input bridge; in-process file-store compositions still select this module's
+repository provider and own/borrow resources according to their existing contracts.
+
+Bundled production-classpath tests save actual web resources, withdraw the provider,
+check stale reads/writes and suspended tool consumers, then remount and verify the same
+manifest entry and resource bytes. The manifest format is unchanged; The package migration did not change the ABI; authors use the current SDK API 43.

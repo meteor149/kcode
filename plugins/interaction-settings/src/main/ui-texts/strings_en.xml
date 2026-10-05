@@ -1,0 +1,8 @@
+<resources>
+    <string name="permission_level">Permission level</string>
+    <string name="tool_permission_ask_desc">Ask before every tool call</string>
+    <string name="tool_permission_bypass_desc">Run tool calls without confirmation</string>
+    <string name="tool_permission_deny_desc">Deny every tool call without prompting</string>
+    <string name="tool_permission_mode">Tool permission</string>
+    <string name="tool_permission_short">Permission</string>
+</resources>

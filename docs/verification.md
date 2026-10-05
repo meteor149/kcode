@@ -29,6 +29,85 @@ actual Shizuku authorization, or root environment verification. Start with tests
 changed module. Expand the scope when new failures, interface effects, or unresolved issues
 justify it.
 
+## Cross-platform package distribution
+
+Run foreground Activity suites exclusively on their device. Concurrent applications or
+instrumentation runs can steal focus and prevent `ActivityScenario` from resuming. Check
+window/lifecycle evidence and rerun after interference ends; headless lifecycle checks do
+not replace the native UI verification.
+
+`BundledPackageCatalogTest` verifies that invalid records anywhere in the catalog prevent
+all payload reads/cache writes, even when the invalid record targets another platform.
+It also covers target defaults, verified cache reuse and corruption repair without
+publishing failed copies. Actual archive validation and loading remain covered by the
+native integration suites below.
+
+`PluginPackageIntegrationTest` loads actual desktop JARs and covers package graph transactions,
+failed composition/persistence rollback, cancellation, stale resolvers, tampered restarts,
+bundled upgrades, user replacements and explicit uninstalls. Desktop
+`BundledPluginDistributionTest` starts a separate JVM with production dependencies, proves
+74 desktop provider/consumer entry classes are absent from that classpath, and loads the supported embedded packages.
+Its resource callback rejects attempts to open the Android-only notification permission,
+generation foreground and Shell consumer packages; the installed inventory also excludes them.
+Android staging rejects attempts to open the desktop-only Shell package. Both hosts test
+the supported Shell consumers' registration withdrawal/recovery. The desktop fixture also
+decodes a private Shell argument object through shared serialization and invokes a harmless
+echo command before and after consumer replacement; retained tool handles reject calls.
+It also checks System Prompt and Tools withdrawal/rebinding across private plugin loaders.
+Filesystem, skill, Artifact and Web Search consumer packages register contributions through
+the shared tool service. Both native package fixtures disable/re-enable each consumer and
+check removal and exactly one restored registration. The desktop fixture invokes its
+private filesystem consumer's read tool, rejects the retained tool after filesystem withdrawal,
+and reads the preserved file through a rebuilt tool after recovery. Package fixtures mount
+the current host HTTP provider through its actual entry without making network requests.
+The packaged schedule consumer loses its effect and becomes Pending when notifications
+are withdrawn; restoring notifications registers exactly one effect. Desktop and Android
+package tests also disable/re-enable the schedule consumer itself and check effect removal
+and single registration after recovery.
+The same production-classpath process renders the private default application through
+`ImageComposeScene` and checks that its controls appear in the scene's semantics.
+The Android app test with the same name proves these implementations are absent from the target
+APK's host ClassLoader and loads all 76 supported archives in an Activity-backed codec fixture;
+its native Activity startup test also loads all 76. Both include the filesystem package
+that requires native host-input leases.
+The platform test independently
+checks Android variant selection and disabled-state restoration from the real dual-target APK.
+The app test also launches the real `MainActivity`, checks that all 76 supported packages are installed,
+waits for application controls in the accessibility tree before invoking diagnostics, and
+then verifies that every default plugin is Active. It temporarily adopts the background
+Activity launch permission used by the existing native window tests and releases it even
+when launch or assertions fail. The production UI check does not depend on private provider
+implementations or extra default UI SDK dependencies in the test APK.
+The desktop production process also writes/reads through the packaged skill workspace,
+disables the filesystem, rejects the withdrawn workspace handle, and restores the provider
+while preserving the file. Its JAR and the Android APK both carry the private capability
+provider adapter rather than borrowing its implementation from the host.
+The private skills provider becomes Pending when its workspace disappears. Retained skill
+runtime handles reject catalog requests after withdrawal; restoration creates a fresh runtime.
+Desktop notification handles also reject calls after withdrawal and are replaced on recovery.
+The private native approval package delivers localized requests through a recording SDK
+dialog adapter on both hosts; adapters decline the synthetic request. Disable rejects the
+old approver, and re-enable supplies a fresh one. The real Android Activity still uses its
+native host dialogs. Recording adapters do not establish actual user approval consent.
+The private desktop export renderer produces an image with visible Markdown message pixels;
+withdrawing it suspends the export coordinator and rejects the old renderer. Android's private
+saving provider writes a PNG into MediaStore; the test decodes its pixels, checks saver
+withdrawal/recovery and removes only its own uniquely named image. These checks do not open
+the desktop file picker or establish Android share-receiver behavior.
+The Activity-backed Android codec fixture supplies a test permission adapter; its persistence
+checks do not establish real user permission consent. The native Activity test uses the actual
+host permission broker and the private Android-only UI contribution.
+
+```powershell
+.\gradlew.bat :plugins:platform-desktop:test
+.\gradlew.bat :apps:androidApp:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest'
+.\gradlew.bat :plugins:platform-android:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidPluginPackageIntegrationTest'
+```
+
+These package tests establish JVM/app-UID loading and isolation, not Shizuku/root authorization
+or independent packaging of the entire remaining product. See [package format](plugin-package-format.md)
+for current migration limits.
+
 ## Android instrumentation
 
 ```powershell
@@ -90,3 +169,727 @@ See [feature ownership](plugin-feature-audit.md) for current implementation and 
 When recording results, include the code revision, commands, tests actually executed, and
 environment limitations. Old test counts or installation state do not establish acceptance
 of the current version.
+
+The bundled distribution fixtures also withdraw the independent `core.llm` registry,
+verify that all platform-compatible adapter mounts become Pending and retained adapter handles reject
+support, then restore a fresh registry and verify that providers become Active again.
+These checks establish package/service lifecycle behavior; they do not establish live
+model endpoint connectivity or independent packaging of the provider-specific clients.
+
+`FormalModelAdapterPrivateLoadingTest` constructs the Bedrock client through an actual
+private adapter JAR, including its Smithy identity provider, and closes the client without
+sending requests. This exercises constructor type identity beyond catalog registration;
+it does not establish AWS credentials or endpoint connectivity.
+
+Device UI suites also need exclusive access to the system UiAutomation service. An
+`already registered`/`Not connected` failure before fixture startup does not establish
+a package or UI behavior failure. Inspect the active test processes and UiAutomation
+registration, and rerun the UI suite when the service is available. A successful headless
+`AndroidPluginPackageIntegrationTest` verifies package import and restoration, but cannot
+replace the real Activity/UI fixture.
+
+Model package fixtures restore the former aggregate enable flag into package-owned adapter
+IDs while preserving an explicit disabled DeepSeek choice. Android also retires the old
+nonfunctional Bedrock builtin flag, without altering model settings or credentials.
+`PackageIoCancellationTest` interrupts a real blocked pipe read and verifies that cancelled
+package IO does not fail its parent, while an active owner's IO failure retains its identity.
+
+The bundled Activity fixtures adopt the shell `POST_NOTIFICATIONS` permission identity before
+startup so the first-run system permission dialog does not obscure the application controls.
+They still require all plugins to be Active and the actual application controls to appear.
+These fixtures do not establish user notification consent; permission-request behavior is
+covered separately by `AndroidNotificationPermissionPluginTest`.
+
+The bundled search settings fixtures load the policy from its private JAR/APK, preserve
+legacy and custom credentials, withdraw the provider, and check that retained handles reject
+work and settings-command consumers become Pending. Restoring it supplies a fresh policy
+and reactivates those consumers.
+
+## Per-system package targets (API 44, 2026-10-05)
+
+The package manifest and durable composition snapshot declare `formatVersion: 1`.
+Cordis revision `4e408b0c99133e88acfe3eb8400d4a05be0c01af` passed its JVM tests.
+Source integration passed `allTests`, desktop tests, packager tests, desktop compilation
+and Android assembly. Inspection of the generated APK verified that all 90 embedded
+package manifests declare format 1 and that archive and payload hashes match the catalog.
+
+The Cordis package format is execution-neutral: a variant has an open runtime ID/entry point, an opaque
+artifact and Windows/macOS/Linux/Android/iOS targets. Targets constrain ARM/x86 families,
+32/64 bits, optional inclusive system version bounds, independent Linux distribution
+ID/version bounds and actual required system features. Unknown versions reject any bound; inverted ranges fail validation. Missing
+components compare as zero, so a short maximum is an exact bound, not a wildcard.
+Only kcode's actual JVM and Android DEX loaders are advertised. Native/WASM/script/iOS
+metadata does not create an executable loader.
+
+Cordis's full JVM suite passed, including 18 package tests. New cases cover all five systems,
+native symbols and arbitrary artifact suffixes without Java, numeric/inclusive range
+comparison, unknown/lower/higher versions, ARM bitness, distribution constraints, required
+features, runtime availability and disjoint versus touching version intervals. kcode's seven
+catalog, two Linux distribution parsing, two IO and one Windows build/revision tests passed.
+Four packager tests cover explicit ranges, native ABI coverage and manifest-derived catalog
+variants. Windows build/update facts cannot silently become zero when detection fails.
+
+Validation with `-PcordisSource=../cordis-kotlin` passed `allTests`, 120 desktop tests,
+packager tests, desktop compilation and Android assembly. Runs used `--max-workers=2
+--no-parallel` after an earlier Gradle test-worker communication failure. The real desktop
+package suite waits for asynchronous scheduler contribution/recovery completion and reports
+unresolved states when bounded waits fail.
+
+Two real-application Android package tests and six independent APK/native Shell tests passed
+against this final source model. They cover default catalog loading/restart, independent
+entry/resource identities, app-UID Shell and Ubuntu/Python execution, cancellation and
+withdrawal/recovery. These are app-UID checks, not root or Shizuku authorization evidence.
+
+Direct APK inspection verified all 90 archive digests and payload hashes, catalog/manifest
+variant equality and Plugin API 44. Windows/macOS/Linux each have 83 default packages,
+Android has 88, and the catalog contains 171 variants. Ubuntu is Android ARM 64-bit only.
+All 88 Android product entry definitions remain absent from the host DEX. No default native
+library/script/WASM or iOS runtime variant is shipped.
+
+## Maven package integration verification (2026-10-04)
+
+The API 37 worktree was verified against published Cordis dependencies, without the
+`cordisSource` composite-build override. Cordis revision
+`9dfa87084790b1cf5c5badb0acf650eee609be47` passed its
+[test and snapshot publishing workflow](https://github.com/meteor149/cordis-kotlin/actions/runs/37201718538).
+The resolved `packages-jvm` snapshot was `20261004.122137-3`; its Gradle-cached JAR matched
+the published JAR's SHA-256:
+`a0a0963c16afe4a89131ef28e6137fb80dc3b4a25ac488c543ccbd885b50fca5`.
+
+After refreshing Maven dependencies, the following Windows/JDK 21 validation passed:
+
+```powershell
+.\gradlew.bat allTests :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug :plugins:platform-desktop:test :plugins:platform-android:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidFormalModelAdapterPrivateLoadingTest,ai.meteor.kcode.plugin.AndroidPluginPackageIntegrationTest' --offline
+.\gradlew.bat :apps:androidApp:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest' --offline
+```
+
+Desktop reported 120 tests with no failures or errors. The Android platform suite ran three
+tests and the real-application bundled suite ran two, all without failures or skips.
+The Activity fixtures adopted the notification permission identity described above; they
+did not grant actual user consent. A direct inspection of the generated application APK
+verified all 78 embedded `.kplugin` archive digests against its embedded catalog, with 74
+desktop-compatible and 76 Android-compatible records. Bedrock declares desktop only;
+the independently packaged search settings policy declares both platforms.
+
+This establishes the current package distribution and loading paths, not migration of every
+default provider. HTTP search transport, storage and other remaining default implementations
+are still linked, as documented in the package format guide.
+
+### Settings-driven interaction package migration
+
+After moving the Unit-configured settings interaction entry to `interaction-settings`, the
+same Maven dependencies and API 37 passed desktop's 120 tests and both host builds. The
+following additional checks passed:
+
+```powershell
+.\gradlew.bat allTests :apps:androidApp:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest' --offline
+.\gradlew.bat :plugins:platform-android:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidNativeToolApprovalTest' --offline
+```
+
+The real-application suite ran two tests and the independent approval lifecycle suite ran
+one, with no failures or skips. Both bundled distribution fixtures check the interaction
+implementation is absent from the production host, read Deny/Bypass/unknown-mode settings
+through the private policy, reject retained mode and approval callbacks after withdrawal,
+and verify the agent loop becomes Pending and recovers with a fresh policy. The separate
+approval fixtures retain cancellation, cleanup waiting and failed-replacement coverage.
+
+Direct inspection of the generated APK verified all 79 embedded archive digests against
+its catalog, including the new dual-target interaction package: 75 records support desktop
+and 77 support Android. The earlier 78-package result above describes the build before this
+migration. Explicit callback-configured alternatives still link into the host, while native
+desktop and settings-driven Android defaults use the independent package. No public SDK or
+Cordis change was needed for this migration.
+
+### Final cross-platform package acceptance (API 43, 2026-10-05)
+
+This acceptance covers the implemented package format and the default native product's
+independent distribution. It replaces the earlier migration-status statements, while
+the historical records below retain the results for their respective builds.
+
+| Requirement | Inspected evidence |
+| --- | --- |
+| Generic package mechanisms belong to Cordis; application policy belongs to kcode | Cordis optional `packages` module owns codec, variant selection, archive tooling and dependency ordering; kcode package resolver checks SDK/configuration/native requirements and the runtime commits composition. Neither Cordis core nor `packages` imports kcode contracts. |
+| One release supports desktop/Android together or either target alone | Actual catalog contains 81 dual-target releases, two desktop-only and seven Android-only releases; the 90 manifests describe 171 executable variants. Cordis selection tests cover dual/single targets and incompatible/ambiguous selectors. |
+| Platform/runtime/architecture compatibility | Catalog preflight tests cover target records and ARM64/x86_64/ARMv7 selection without incompatible payload reads. Ubuntu declares ARM64; imports independently validate selectors, runtime minima, SDK API 43 and generated ABI fingerprints. |
+| Archive integrity and deterministic tooling | Cordis archive tests cover deterministic packing/deployment, unselected payload verification, unsafe/colliding/symlink paths, limits and expected digests. Actual catalog and APK inspection verifies all 90 release digests and all variant payload sizes/hashes. |
+| Real independent native artifacts | Desktop's production-process fixture reads every manifest and confirms all 83 desktop entries are unavailable in the host before loading the catalog. Main APK DEX inspection confirms all 88 Android entries are absent. Filesystem, Shell, storage, Web and overlay fixtures exercise private implementations and shared SDK identities; resources belong to verified artifacts. |
+| Transactional install/update/enable/uninstall | All ten `PluginPackageIntegrationTest` cases pass, including exact dependency batches, failed persistence/application rollback, updates, disabled-state recovery, user replacements, remembered uninstalls, tampering, stale resolvers and cancelled preparation. The runtime rejects composition changes during active turns. |
+| Default startup and restart | Both native factories stage the trusted offline catalog. The formal Android application suite launches `MainActivity`, renders real controls, loads the supported packages and verifies persisted uninstall/recovery; the desktop production-process fixture starts the catalog and verifies contribution withdrawal/recovery. |
+| Reusable build/import entry points | `distribution/packager` exports independent JAR/APK releases and the trusted catalog. Cordis provides pack/inspect CLI tooling; native applications import through `AgentPluginManager.importPackages`, without bypassing persistence through Loader. |
+| Published Cordis dependency | Publishing workflow for revision `9dfa87084790b1cf5c5badb0acf650eee609be47` is completed/success. Downloaded `packages-jvm` snapshot `20261004.122137-3` and kcode's resolved Maven artifact both have SHA-256 `a0a0963c16afe4a89131ef28e6137fb80dc3b4a25ac488c543ccbd885b50fca5`. No further framework change/publication is required. |
+| Current guides and ABI authority | English/Chinese READMEs, package format, architecture, distribution and module guides describe independent defaults and the retained SDK/bootstrap/input boundaries. API authority remains `CurrentPluginApiVersion = 43`. |
+
+The full multiplatform/build command in the following record passed. The final desktop
+rerun passed all 120 tests, including the manifest-derived 83-entry check and all ten package
+transaction tests. Catalog/IO tests passed seven cases; the packager passed three; selected
+Android native tests passed three and the application suite passed two. Cordis `:packages:jvmTest`
+was rerun at the published revision and passed all 11 cases. These suites report no failures,
+errors or skips. The ordinary debug APK was installed. `git diff --check` passed.
+
+```powershell
+.\gradlew.bat :plugins:platform-desktop:test --offline
+# Run from the cordis-kotlin checkout at the published revision:
+.\gradlew.bat :packages:jvmTest --offline
+```
+
+The package implementation uses the published Maven dependency, without `cordisSource`.
+The published revision's [test and snapshot publishing workflow](https://github.com/meteor149/cordis-kotlin/actions/runs/37201718538)
+was rechecked during this acceptance. Source changes remain local in the kcode worktree.
+Package boundaries are specified in [the format guide](plugin-package-format.md): JVM
+desktop/Android execution and explicit trusted offline imports. App-UID tests do not prove
+root/Shizuku authorization; those evidence limits remain in the privileged verification guide.
+
+### Capability adapter host exclusion (API 43)
+
+Both native host projects now declare `capability-providers` only as a test dependency.
+Production factories do not call its legacy filesystem/Shell helper entries. The
+native-filesystem release continues to package its own private adapter, without borrowing
+the host's implementation. SDK API 43, shared exports and the 90-package catalog are unchanged.
+
+The Maven-based full check passed:
+
+```sh
+./gradlew :plugins:platform-desktop:test allTests :distribution:packager:test :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+./gradlew :plugins:platform-desktop:test :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidNativeFileSystemTest,ai.meteor.kcode.plugin.AndroidNativeWorkspaceTest,ai.meteor.kcode.plugin.AndroidPluginPackageIntegrationTest --offline
+./gradlew :apps:androidApp:connectedDebugAndroidTest :apps:androidApp:installDebug -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest --offline
+```
+
+An initial desktop run observed zero disposal callbacks immediately after Compose extension
+withdrawal. The isolated test passed and the full retry passed. The conversation extension
+fixture now uses the same synchronous `Snapshot.withMutableSnapshot` collector update as
+the other Compose fixtures, retaining its exact disposal assertions rather than relying
+on the global notification thread's timing.
+
+Direct inspection verified that none of all 88 Android variant entry classes is defined in
+the main APK. The capability adapter entries, top-level helpers and generated nested classes
+are also absent. All 90 embedded release digests and 171 variant payload hashes/sizes remain
+valid. Instrumentation can still include adapter implementations as fixture-only dependencies;
+the application test therefore checks their absence in the installed host DEX.
+
+The updated full desktop suite passed all 120 tests. Android passed three filesystem,
+workspace and cross-platform archive/lock recovery tests, and both formal application
+distribution tests, with no failures or skips. The ordinary debug APK was installed.
+The desktop production-process fixture additionally reads all staged release manifests and
+checks each of their 83 desktop entry classes against the production class loader, then
+starts the supported catalog. This expanded check passed:
+
+```sh
+./gradlew :plugins:platform-desktop:test --tests ai.meteor.kcode.plugin.BundledPluginDistributionTest --offline
+```
+
+### Interaction callback input boundary (API 43)
+
+Production native hosts no longer depend on `plugins/interaction`. The native bundle
+adapts borrowed policy/custom approval inputs through `HostInteractionInputPlugin` and
+`HostSettingsInteractionInputPlugin`; Android's `HostToolPermissionModeInputPlugin`
+injects the replaceable approval service while borrowing the caller's mode reader.
+These adapters depend only on SDK contracts. They do not serialize or close caller callbacks,
+and their operation owners cancel/join calls and invalidate retained references on withdrawal.
+The ordinary settings-driven default still comes from the independent interaction-settings
+package. Legacy interaction entries remain available for explicit fixtures.
+
+The following Maven-based check passed:
+
+```sh
+./gradlew :plugins:platform-desktop:test :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+./gradlew :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidSettingsInteractionTest,ai.meteor.kcode.plugin.AndroidNativeToolApprovalTest --offline
+./gradlew :apps:androidApp:connectedDebugAndroidTest :apps:androidApp:installDebug -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest --offline
+```
+
+`ProviderCallOwnershipTest` now exercises the real default callback input composition,
+checking cancellation and cleanup waiting for both mode/approval callbacks, stale reference
+rejection, and re-enabling with fresh callbacks. The production-classpath distribution test
+checks that all three legacy interaction entries are absent. Main Android APK DEX inspection
+also finds none of these classes, their generated nested classes, or `InteractionPluginConfig`.
+All 90 embedded archive hashes remain valid. SDK API 43, package counts and Cordis artifacts
+are unchanged.
+
+The three selected Android tests passed without failures or skips. They cover a custom
+approval callback with settings withdrawal/replacement, isolated APK policies, and an
+SDK-only callback-mode adapter consuming the independently loaded native approval provider.
+The factory fixture binds its isolated Context to the test Activity before reading bundled
+resources. These app-UID tests do not establish root or Shizuku authorization.
+Both formal application distribution tests passed without failures or skips and the
+ordinary debug APK was installed. Their implementation exclusion checks inspect the
+installed application DEX, allowing legacy interaction fixtures in the instrumentation
+class loader without mistaking them for production dependencies.
+
+### Android default Ubuntu archive and architecture selection (API 43)
+
+The trusted catalog now contains 90 releases and 171 executable variants: 83 desktop
+packages and 88 Android packages. `provider.shell.ubuntu` is an Android-only ARM64
+release using `AndroidPackagedUbuntuShellPlugin`; both Android executor entries inject
+`KcodeShellMode`. Native factories no longer mount linked Ubuntu implementations.
+Host-aware catalog staging validates every architecture selector before touching the cache
+and skips incompatible payloads. Other supported Android architectures select 87 packages;
+Ubuntu service consumers remain Pending. Explicit imports still verify manifest compatibility.
+The previous platform-only staging overload remains available. No public SDK ABI change
+or Cordis snapshot publication was needed for this step.
+
+Validation against the Maven Cordis dependency passed:
+
+```sh
+./gradlew :plugins:package-provider:desktopTest :plugins:platform-desktop:test :distribution:packager:test :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+./gradlew :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidSettingsShellTest --offline
+./gradlew :apps:androidApp:connectedDebugAndroidTest :apps:androidApp:installDebug -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest --offline
+```
+
+Catalog tests cover ARM64/x86_64/ARMv7 selection, target records, skipped
+resource reads, and invalid selectors rejected before cache allocation. All five Android
+Shell tests passed without skips, including real Ubuntu/Python execution and cancellation
+of owned work. These app-UID tests do not establish root or Shizuku authorization.
+
+Archive inspection verified all 90 embedded hashes, 171 variant manifests and payload
+size/hash records. The Ubuntu APK contains its own image and ARM64 libraries, and its
+2,478 DEX definitions contain no duplicate exported SDK identities. The production APK
+contains zero native-execution implementation definitions and no direct Ubuntu assets/JNI
+outside the independent archives. Its `debugRuntimeClasspath` contains no native-execution
+module. Instrumentation retains a test-only native-execution dependency for executor
+fixtures, so application distribution checks inspect the installed host DEX directly for
+these classes instead of relying on the merged instrumentation class loader.
+Both application distribution tests passed without failures or skips, using the real catalog
+without static Shell fixture mounts. The ordinary debug APK was installed on the device.
+
+### Android packaged Shell and execution policy (API 43)
+
+The default catalog contains 89 releases and 170 executable variants: 83 support desktop
+and 87 support Android. `provider.shell.platform` is dual-target, selecting the desktop
+workspace-configured JAR or bytecode-only Android APK. The Android factory now loads
+`AndroidPackagedShellPlugin` instead of mounting a linked system Shell. Ubuntu remains
+linked pending default architecture selection, so Android still retains its implementation
+module for that provider.
+
+API 43 adds `ShellModePolicy` and `KcodeShellMode`. The Android Shell entry injects this
+service, allowing either the independent `policy.shell-mode.platform` settings provider or
+the SDK-only `HostShellModeInputPlugin` callback adapter in the Android host. Settings
+replacement or policy withdrawal suspends consumers and cancels/joins their native work;
+retained policy readers and executor handles reject calls. Unknown stored mode codes keep
+the existing App fallback. Callback configurations are borrowed, not serialized as package
+configuration, and work without a settings provider/default product composition.
+
+Validation used the Maven Cordis dependency:
+
+```sh
+./gradlew :plugins:platform-desktop:test allTests :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+./gradlew :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidSettingsShellTest --offline
+./gradlew :apps:androidApp:connectedDebugAndroidTest :apps:androidApp:installDebug -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest --offline
+```
+
+All checks passed: desktop ran 120 tests, Android's Shell suite ran five, and the real
+application distribution suite ran two, with no failures or skips. Both hosts built and
+the ordinary debug APK was installed. The native factory fixture confirms its default
+Shell is a privately loaded Android variant and becomes Pending after settings withdrawal.
+The native archive fixture imports the actual policy/Shell packages, checks private policy
+and shared SDK identity, live App/Root/unknown-mode reads, settings rebinding, disable/enable,
+stale calls and process exit during uninstall. The callback fixture imports the trusted
+dual-target Shell release without settings, changes callback mode, disables the callback
+provider during a running process, checks OS process exit and Pending consumers, then
+restores the provider. Ubuntu's separate fixture still starts Ubuntu/Python and joins active
+work. These tests do not establish root or Shizuku authorization.
+
+Direct archive/APK inspection verified all embedded archive digests and 170 variant payload
+sizes/hashes, the dual-target Shell manifest and its private desktop entry/executor. Android's
+system Shell has no assets/JNI; its 2,475 DEX definitions contain no duplicate SDK identities.
+The settings policy implementation is absent from the production host. Shared export prefixes
+remain unchanged, while the new SDK contract requires rebuilding older external packages.
+No Cordis change or Maven snapshot publication was needed.
+
+### Android system Shell resource split (API 42)
+
+`distribution:native-shell-android` builds a bytecode-only system Shell APK from the real
+native-execution AAR with deployment assets/JNI removed. It retains private implementation
+code and codecs, uses `ai.meteor.kcode.external.nativeshell`, and does not copy SDK classes.
+`packageNativeSystemShell` publishes an Android-only preparation `.kplugin` with `arch=any`
+and the Unit-configured `AndroidNativeSettingsShellPlugin` entry. Ubuntu retains its separate
+ARM64 preparation release and verified image/libraries. Neither Android preparation archive
+has replaced the linked default providers yet.
+
+Validation used the Maven Cordis dependency:
+
+```sh
+./gradlew :distribution:packager:packageNativeSystemShell :distribution:packager:test --offline
+./gradlew :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidSettingsShellTest --offline
+./gradlew :plugins:platform-desktop:test :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+```
+
+All commands passed. The packager ran three architecture/archive tests, Android ran four
+Shell/settings tests, and desktop ran 120 tests, with no failures or skips. The native
+system Shell fixture now imports the actual preparation archive through the package manager,
+checks the selected Android variant/package name and absence of native/Ubuntu payload,
+preserves Shizuku SDK identity, executes `id -u` as the app UID, rebinds settings, disables and
+re-enables the provider, and uninstalls while an actual process runs. Cancellation joins the
+command and an OS process check confirms it exited; captured backends reject stale calls.
+The Ubuntu fixture still starts Ubuntu 24.04/Python from its own archive and joins active work
+before unloading. These tests do not establish Shizuku authorization or root execution.
+
+Direct inspection verified the system APK is 3,118,299 bytes, compared with 67,405,413 bytes
+for the full Ubuntu APK. The system APK has no assets/JNI; its 2,472 defined DEX types contain
+no duplicate SDK identities. Preparation manifest/payload hashes and sizes, the outer digest,
+and the `any` selector were verified. The default host APK/catalog remain at 88 releases
+(83 desktop-compatible, 85 Android-compatible), with all embedded hashes rechecked. API 42
+and the Maven Cordis snapshot are unchanged. Android host mode bindings and Ubuntu default
+architecture selection remain necessary before switching the default native providers.
+
+### Desktop native Shell distribution (API 42)
+
+The default catalog contains 88 independent releases with 168 executable variants:
+83 support desktop and 85 support Android. `provider.shell.platform` now contains a
+desktop-only variant with `DesktopNativeShellPlugin` and its private executor. The desktop
+factory stages this package with the existing absolute workspace configuration, including
+profiles that omit the default product. Its production runtime no longer links the native
+execution implementation. Android skips the record and keeps its existing linked system
+and Ubuntu providers pending their resource/policy migration.
+
+Validation used the Maven Cordis dependency:
+
+```sh
+./gradlew :plugins:platform-desktop:test :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+./gradlew :apps:androidApp:connectedDebugAndroidTest :apps:androidApp:installDebug -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest --offline
+```
+
+The desktop suite ran 120 tests and the Android application suite ran two, with no failures
+or skips; both host builds passed and the ordinary debug APK was installed. The desktop
+production-classpath fixture rejects loading the native Shell entry/executor from the host
+and invokes the packaged shell tool. `NativeShellCompositionTest` imports the actual archive
+into two runtimes, checks private classloader isolation, rejects invalid replacements without
+retiring the active service/process, cancels and waits for an actual process on withdrawal,
+and covers stale calls, re-enable, uninstall and independent runtime survival.
+
+Direct archive/APK inspection verified all catalog/archive digests, all 168 payload
+sizes/hashes, the single desktop Shell variant, both native implementation classes, and
+absence of embedded shared Kotlin/Cordis/Koog classes. Android's selected package count
+remains 85. The SDK remains API 42; this migration needs no Cordis change or Maven publication.
+
+### Conversation overlay distribution (API 42)
+
+The default catalog contains 87 independent releases: 82 support desktop and 85 support
+Android, with 167 executable variants. `core.conversation-overlays` is dual-target;
+`provider.conversation-overlay.platform` contains only the Android variant. Both have
+Unit-configured entries. Desktop has no default system-window provider.
+
+API 42 adds `ConversationOverlayHostState.bind/current`. The runtime binds its borrowed
+foreground state and read-only committed UI projection before mounting an independently
+loaded registry. Registry replacement preserves these values; private providers own their
+windows, controllers and coroutine scopes. Callback compositions use SDK-only host adapters.
+The implementation dependencies are compile-only in the production hosts.
+
+Validation used the Maven Cordis dependency, without a source composite build:
+
+```sh
+./gradlew :plugins:platform-desktop:test allTests :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug --offline
+./gradlew :plugins:platform-android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidConversationOverlayProviderTest --offline
+./gradlew :apps:androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest --offline
+```
+
+The broad checks and both builds passed. Desktop ran 120 tests; the selected Android
+overlay suite ran four and the real-application distribution suite ran two, all without
+failures or skips. The overlay test imports actual registry/provider `.kplugin` releases,
+checks shared SDK/private implementation identity, preserved foreground state and projection,
+theme withdrawal/recovery, disabled/re-enabled providers, stale turns, uninstall and joined
+controller scopes. The native host factory also initializes and closes on Main.
+
+Direct APK inspection verified all embedded catalog/archive digests and all 167 variant
+payload sizes/hashes. The independent overlay APK defines 59 classes and no duplicate SDK
+types. Production host fixtures reject loading the overlay implementation classes from
+the host. These lifecycle tests do not establish visible system-window rendering or user
+permission consent; the separate presentation/application overlay tests retain that scope.
+The final incremental broad validation also passed and the ordinary debug APK was installed.
+Native execution defaults and callback interaction policies still require packaging work.
+This migration makes no Cordis change and requires no new Maven snapshot.
+
+### Web container distribution and native Core ownership (API 41)
+
+The trusted default catalog now contains 85 independent releases: 81 support desktop and
+83 support Android. `provider.web-containers.platform` and `consumer.tools.web-container`
+are separate dual-target packages. Desktop configuration preserves the native workspace;
+Android acquires SDK windows and reads product resources from its own verified APK.
+Native factories no longer mount the linked Web implementation. Caller-supplied controllers
+use an SDK-only host binding with the previous close-all session cleanup semantics.
+
+Initial Android archive import correctly rejected 21 duplicate `android.support` types
+from the private Core dependency. The existing Android namespace boundary shares these
+legacy types with the native host. Core/Core KTX 1.15.0 and versioned-parcelable 1.1.1 are
+now explicit SDK peers, and their corresponding namespaces retain host identity.
+WebKit 1.13.0 and product engines remain private. This export-boundary change requires
+Plugin API 41 and rebuilding external packages; the duplicate-class check stays intact.
+
+Real browser fixtures import the provider `.kplugin` through the normal package manager.
+They cover independent Chromium/WebView instances, local page/script/style loading,
+inspection, interactions, stale references, withdrawal/recovery and browser/profile/server
+or worker/window/resource teardown. Android additionally checks shared Core/Parcelable
+identity and private WebKit identity. Ordinary application fixtures check that the host
+does not define Web entry classes and that the complete default composition renders.
+API 41 passed `allTests`, both native host builds and 120 desktop loading/composition
+tests. Two platform Android tests passed for imported WebView ownership and the installed
+FileProvider; both ordinary application APK instrumentation tests passed for default
+package loading, UI rendering and persisted uninstall. The archive audit verified all
+85 catalog digests, payload sizes/hashes, 164 API-41 variants and the embedded APK catalog.
+DEX inspection found no duplicated host SDK definitions in the independent Web APK.
+The ordinary API-41 debug APK was installed after instrumentation.
+Native execution, overlay and callback-configured interaction migration remain pending.
+
+### HTTP search distribution (API 40)
+
+The default catalog now has 83 independent archives: 79 support desktop and 81 support
+Android. `provider.web.search-http` has a CIO desktop JAR and OkHttp Android APK. Both
+native factories stage this package instead of mounting the linked implementation, while
+preserving their platform-feature selection for profiles with defaults disabled. The
+search-settings policy remains a separate service dependency.
+
+The desktop exporter resolves the search transport's own graph and embeds private Ktor
+and SLF4J. The Android exporter embeds Ktor, OkHttp and SLF4J; Kotlin, coroutines,
+serialization, IO and Okio remain SDK peers. Archive inspection checked that the desktop
+artifact contains CIO/HTTP/logging classes, excludes shared SDK/framework classes and
+does not copy the model clients' Apache transport. All 83 catalog/archive hashes and
+payload sizes/hashes were checked against the embedded application APK.
+
+The production-classpath desktop fixture verifies absent host search implementations,
+private transport identities, stale-call rejection, Web Search consumer suspension and
+recovery. Enabling again must allocate a new backend; it need not allocate a new code
+loader for the same verified artifact. External search endpoints are not contacted by
+the package fixture, which uses empty-query validation after allocating the real engine.
+Existing MockEngine tests cover request credentials and Google/Exa/Bright Data responses.
+The final validation passed 120 desktop composition/loading tests, five existing search
+request/response tests, desktop compilation and both Android app-APK instrumentation
+tests. Android verifies private Ktor/OkHttp/SLF4J identities, absent host implementations,
+withdrawal/recovery, persisted uninstall and a rendered native application root. Both
+native hosts build successfully. The archive audit also checked all 160 variants against
+SDK API 40. These tests do not establish live public search endpoint availability.
+Native execution and Web/overlay providers still need default-package integration. No
+public SDK or Cordis change was needed for the HTTP migration.
+
+### Native architecture packaging (API 40, default execution migration pending)
+
+The exporter accepts explicit Android architectures and rejects `any` for APKs with
+native library directories. Declared architectures must have matching ABI directories;
+mixed/duplicate/invalid selectors are rejected. Bytecode-only APKs retain the existing
+portable default. Three packager tests passed, including preservation of a previous
+release when architecture validation fails.
+
+`packageNativeUbuntu` builds an Android ARM64 preparation `.kplugin` from the actual
+execution APK. Its manifest and external archive digest were checked. The Ubuntu device
+test now imports this package through `AgentPluginManager.importPackages`, exercising
+SDK/payload checks, target selection and real Loader deployment before private
+Ubuntu/Python execution, settings rebinding, withdrawal and native process/file cleanup.
+It retains installed rootfs after uninstall. All nine selected execution, storage,
+artifact and codec device tests passed. A sibling fixture hit the Android heap limit
+hashing the enlarged instrumentation APK as one byte array; APK fixtures now use Cordis's
+bounded streaming hash without weakening their assertions or increasing the heap limit.
+
+The preparation package is not a default catalog record. Default execution policy and
+variant integration remain pending; the catalog stays at 82 archives and SDK API 40.
+These device results establish app-UID behavior, without Shizuku/root authorization.
+
+### Shizuku host ownership (API 40, execution migration pending)
+
+The Android SDK explicitly exports Shizuku API/provider 13.1.5 as shared framework
+peers. Native execution no longer supplies their implementation dependencies or the
+provider manifest. `platform-android` declares the installed Shizuku provider with the
+existing authority/permission policy. The built host APK contains exactly one declaration,
+while the independent execution APK contains none. This changes the exported dependency
+fingerprint and requires Plugin API 40; existing external packages must be rebuilt.
+
+Desktop's 120 tests and both host builds passed against Maven Cordis dependencies offline.
+The independent execution APK also builds against the new SDK. `allTests`, both Android
+app instrumentation tests and all four execution device tests passed against the same
+Maven dependencies. Independent shell and Ubuntu APK entries explicitly verify that
+Shizuku client/provider classes resolve to the identical host classes, then exercise
+app-UID execution, settings rebinding, withdrawal and native process/resource cleanup.
+These checks do not establish live Shizuku/root authorization. Default execution remains linked until platform variants
+and custom mode policy inputs have been migrated; the catalog remains 82 archives.
+The installed debug host APK's 82 archive digests were verified; all 158 platform
+variants declare API 40. The ordinary debug APK was installed after instrumentation.
+
+### Native execution distribution artifact (API 39, default migration pending)
+
+The standalone Android execution APK builds from the real native provider. Its content
+audit found 2,472 defined types and no SDK, Cordis, Kotlin/coroutines or Shizuku types.
+Commons Compress/XZ remain private. The 67,405,413-byte APK contains the exact source
+bytes for both ARM64 PRoot executables, Ubuntu archive and two licenses. Its merged
+manifest does not declare the host Shizuku provider.
+
+The native module's four desktop and six Android unit tests passed. All four
+`AndroidSettingsShellTest` device tests passed after its default-factory Activity fixture
+was given the real resource/asset context and bundled catalog. The two actual native
+entry tests now import the built APK, not a copy of the instrumentation APK. They execute
+app-UID shell commands and Ubuntu/Python, check withdrawal and settings rebinding, join
+active processes on uninstall, verify OS process exit and temporary native-file cleanup,
+and retain installed rootfs. This is app-UID evidence, not Shizuku/root authorization.
+
+No default mounts were replaced in this step. The catalog remains 82 archives (78 desktop
+/ 80 Android), SDK API stays 39, and the hosts still link native execution. Remaining work
+includes explicit host Shizuku peer ownership, platform variants, custom mode policies
+and default archive integration.
+
+### Artifact default package migration (API 39)
+
+`provider.artifacts.platform` is now an independent dual-target archive. Both native
+hosts exclude the artifact implementation from production runtime dependencies. Native
+entries retain the existing workspace directories and create private stores/codecs for
+each generation; the durable manifest/resources are outside package deployment directories.
+Explicit repositories bind through an SDK-only borrowed-input bridge, retaining read-only
+or mutable capability and revocable operations. In-process file-store configurations keep
+their existing provider allocation/cleanup contracts. No SDK ABI or manifest change was needed.
+
+Desktop's 120 tests and both host builds passed against Maven Cordis dependencies offline.
+The production-classpath fixture checks entry/repository class absence, loads the real
+archive, saves a web artifact, verifies its resource bytes, withdraws the provider, rejects
+stale reads/writes, observes Pending artifact tool consumers, and remounts with the same
+manifest entry and bytes. The trusted catalog and built APK contain 82 archives (78 desktop
+/ 80 Android), and all 82 embedded archive digests were checked. `allTests` and both
+Android app instrumentation tests passed against the same Maven dependencies. Android
+checks implementation absence from the host, loads the actual APK variant through the
+Loader, and verifies stale calls, consumer suspension/recovery and persistent manifest
+entries/resource bytes. These are app-UID storage/loading tests, without evidence of
+privileged shell authorization.
+
+### History default package migration (API 39)
+
+`provider.history.platform` now ships as a dual-target archive in the trusted catalog.
+Both production hosts exclude the history module and Room from their runtime dependencies.
+The SDK explicitly supplies SQLite bundled/JNI and SQLite async support, changing its
+exported dependency fingerprint and requiring Plugin API 39. A production-classpath test
+caught the missing async peer before it was added; test classpaths alone had masked it.
+Private Room/collection classes remain in the history artifacts. Schema version 6 and
+the existing database locations are unchanged. Caller repositories/factories use an
+SDK-only bridge that owns operation revocation and resource cleanup.
+
+Desktop's 120 tests and both host builds passed against Maven Cordis dependencies offline.
+The bundled production-classpath fixture proves Room and generated implementations are
+absent from the host, loads the actual archive, persists an atomic two-message batch and
+pinned state, withdraws the provider, checks stale reads/writes and Pending sessions, and
+re-enables it with a fresh repository containing the same durable snapshot. The catalog
+and built host APK both contain 81 archives (77 desktop / 79 Android); all 81 embedded
+archive digests were checked. `allTests` and both Android app instrumentation tests passed
+against the same Maven dependencies. Android verifies production implementation absence,
+loads the APK variant through the real Loader, and performs the same message/pinned-state
+withdrawal and remount assertions plus shared SQLite identity checks. These tests establish
+app-UID storage and loading behavior; they do not establish privileged shell authorization.
+
+### History distribution artifacts (API 38, default migration pending)
+
+The history provider now builds a reproducible desktop JAR with private Room
+runtime/common and collection dependencies and a separate Android APK with the same
+private dependencies. Both build tasks passed against Maven Cordis dependencies in
+offline mode. The archive audit found 624 desktop entries and 702 Android defined
+types, with no SDK, Cordis, Kotlin, coroutines or SQLite classes included and no Android
+native libraries. Both artifacts contain the native entry and generated database class.
+
+The 15 history desktop tests passed, including migrations and owned operations.
+`DesktopNativeStorageTest` now uses the actual built history JAR rather than reconstructing
+its Room dependencies from the test classpath. It passed with private Room/collection
+identity and shared SQLite identity checks, stale-call rejection and persistent data
+after remount. This is desktop loading evidence; the new APK has not yet been exercised
+through the Android loader. History remains linked in the production hosts, and the
+default bundled catalog still contains 80 archives. Moving SQLite ownership explicitly
+into the SDK and replacing the linked default mount are remaining migration work.
+
+### Settings storage package migration (API 38)
+
+The native settings provider now uses a dual-target package with the existing desktop file
+path and Android MMKV IDs/Keystore alias. Desktop DataStore became an explicit SDK peer,
+which changes the exported dependency fingerprint and requires Plugin API 38. Private
+settings implementations are absent from production host classpaths. Explicit caller
+stores/factories use the composition layer's resource binding, including stale protection,
+load and save checks and cancellation/cleanup ownership.
+
+Desktop's 120 tests and both host builds passed. Additional API 38 validation against the
+published Maven Cordis dependencies passed:
+
+```powershell
+.\gradlew.bat allTests :apps:androidApp:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.BundledPluginDistributionTest' --offline
+.\gradlew.bat :plugins:platform-android:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=ai.meteor.kcode.plugin.AndroidSettingsStorageTest,ai.meteor.kcode.plugin.AndroidCustomProviderSettingsTest,ai.meteor.kcode.plugin.AndroidNativeStorageTest' --offline
+```
+
+The real-application suite ran two tests and the storage suite ran four, without failures or
+skips. Bundled fixtures save complete snapshots with custom provider credentials, withdraw
+the actual settings package, reject retained load/save/protection access and reopen the
+same durable storage. Dependent interaction providers become Pending and recover. Fixtures
+restore their original settings. Storage-specific tests retain encrypted handle overlap,
+independent APK codec identity, custom/legacy provider keys and durable native data coverage.
+
+Direct APK inspection verified all 80 embedded archive digests against the catalog, with
+76 desktop-compatible and 78 Android-compatible records. This supersedes the earlier
+78/79-package counts for the current build. No Cordis change or new framework snapshot was
+needed. History/artifact repositories, native execution and Web implementations remain
+linked and still require independent distribution work.
+
+
+## Feature-owned settings (API 45, 2026-10-05)
+
+The settings page no longer carries model/Shell-specific fields or depends on settings
+item providers. Language, model, search and Shell forms moved into their owning feature
+archives and mount as optional child Fibers. The standalone `ui-settings` module and four
+UI-only packages are retired. Model/search command transforms also live in their feature
+archives; the dispatcher depends only on settings storage.
+
+Validation on JDK 21 used the supported source composite option
+`-PcordisSource=C:/Users/meteor/workspace/source/cordis-kotlin`. The locally cached Maven
+snapshot cannot compile the pre-existing package-provider execution-neutral target API;
+these checks do not establish compatibility with that older cached artifact.
+
+- SDK tests: 41 desktop and 11 Android unit tests passed; default UI SDK: five tests passed.
+- Settings dispatcher: 12 tests passed, including missing-feature mixed updates, failed
+  saves, cancellation/join during durable save and old disposer identity.
+- Search policy: two tests; model policy: four tests; localization: three tests passed.
+- UI pages: 11 tests passed. Full desktop host suite: 122 tests passed, including actual
+  packaged production-classpath loading and private JAR application/page rendering.
+- Child contribution preparation is awaited before snapshot publication. A gated-child
+  test proves mutations wait; a failed-child test proves composition rollback restores
+  the original item. Retained UI save callbacks reject after withdrawal/replacement.
+- Desktop host compilation, Android debug assembly, and both Android instrumentation
+  source compilations passed. No UI item implementation is restored to host classpaths.
+- Independent archive inspection found 86 releases / 163 variants, all declaring API 45:
+  79 compatible with each desktop OS and 84 with Android. Every payload size and SHA-256
+  matched its manifest. There are no standalone settings-item archives.
+
+These checks do not claim privileged/root execution authorization or arbitrary data
+migration. Public ABI changes require rebuilding older external packages.
+
+Android device verification completed the relevant independent APK fixtures for formal
+runtime entries, model settings, localization, settings commands and UI contributions.
+Eight methods passed in the first run. The fixture covering eight page implementations
+exceeded its shared 60-second limit; it was split into four shell/page-host contributions
+and four feature-page contributions, keeping the same timeout and assertions. Both new
+methods and the renamed schedule contribution fixture passed on rerun. Together, ten
+current test methods are verified with no skipped methods.
+
+`SettingsShellModeOwnershipTest` also passed: a headless policy remains usable, registers
+its form when UI slots appear, withdraws only its item while the page survives, rejects
+retained policy access, and registers a fresh item after restoration.
+
+## Unified Web Search package (2026-10-05)
+
+The `search-settings` and `web-search-provider` Gradle modules and distribution entries
+are consolidated into `plugins/web-search`. The only shipped entry is
+`feature.web-search` / `WebSearchFeaturePlugin`; its owned children provide HTTP search,
+the tool, settings policy, command transforms and optional settings UI. Lifecycle tests
+withdraw all these contributions through the feature ID and keep the settings page alive.
+
+JDK 21 verification used the same local Cordis source composite described above:
+
+- Web Search desktop tests: eight passed (tool, HTTP configuration and settings policy).
+- Full desktop platform suite: 124 passed, including the production classpath loading of
+  the actual bundled archive, private JAR cancellation/join and stale handles, and two
+  migration tests for former builtin IDs and verified API 44 bundled descriptors.
+- Desktop application compilation, Android debug assembly and both Android instrumentation
+  source compilations passed.
+- Staged distribution: 84 releases / 159 variants (77 compatible with each desktop OS,
+  82 Android). Every payload size and SHA-256 matched its manifest. The search JAR contains
+  its feature entry, tool, HTTP provider, policy, commands, settings renderer and private
+  Ktor classes. No old search-only component archives remain in the trusted catalog.
+
+The first desktop pass found two tests still using the former separate tool/transport
+enable boundaries; both were updated to the aggregate contract and the full suite passed.
+
+Three Android device methods passed with no skips: the two formal private APK entry
+fixtures and `apkInstallationAndDisabledContributionsSurviveRestart`. They exercise
+search feature cancellation/join, private policy/renderer identity, service/section
+withdrawal, settings-page survival and persisted disable state.
+
+The Android application's actual bundled `.kplugin` integration method
+`shippedArchiveLoadsWithoutCodecImplementationInHostAndRemembersUninstall` also passed
+with no skips. Its tool-enable loop was updated to use the feature ID, and its restart
+assertion now compares complete installed ID sets rather than an obsolete package count.
+It covers private production APK loading, feature withdrawal/recovery, stale search
+references, persistence and uninstall recovery.

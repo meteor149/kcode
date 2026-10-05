@@ -16,7 +16,10 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Path
 import java.nio.file.Files
-import java.security.MessageDigest
+import org.cordis.packages.packageFileSha256
+import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
+import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
+import ai.meteor.kcode.plugin.packages.desktopPackageHost
 import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -31,10 +34,11 @@ class NativeWebContainerCompositionTest {
     @Test
     fun actualJarMountsOwnIndependentBrowsersAndServersAcrossWithdrawal(): Unit = runBlocking {
         val directory = Files.createTempDirectory("native-web-jar").toFile()
-        val artifact = File(directory, "web.jar")
-        File(DesktopNativeWebContainerPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
-        check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val archive = File(directory, "web.kplugin")
+        requireNotNull(javaClass.classLoader.getResourceAsStream("kcode/plugins/feature.web-container-1.0.0.kplugin"))
+            .use { input -> archive.outputStream().use { input.copyTo(it) } }
+        check(archive.setReadOnly())
+        val digest = packageFileSha256(archive)
         val workspace = File(directory, "workspace").apply { mkdirs() }
         File(workspace, "index.html").writeText("<!doctype html><html><body><button onclick=\"console.log('owned-click')\">Owned content</button></body></html>")
         var first: WebContainerController? = null
@@ -46,7 +50,10 @@ class NativeWebContainerCompositionTest {
             }, Unit,
         )
         suspend fun create(capture: KcodePluginMount) = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
-            interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }), featurePlugins = listOf(capture),
+            interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }), featurePlugins = listOf(capture, kcodePlugin(
+                PluginDescriptor("provider.plugin-packages.platform", "test", "test", emptySet()),
+                NativePluginPackagesPlugin(directory, desktopPackageHost()), Unit,
+            )),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 DesktopDynamicPluginController(ctx, loader, inventory, directory)
             },
@@ -55,13 +62,10 @@ class NativeWebContainerCompositionTest {
         val b = create(capture("test.web-b") { second = it })
         val client = HttpClient.newHttpClient()
         fun request(url: String) = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(3)).build()
-        val spec = DynamicPluginSpec(
-            id = "provider.web-containers.platform", version = "jar", entryClass = DesktopNativeWebContainerPlugin::class.java.name,
-            artifactPath = artifact.path, sha256 = digest, config = workspace.absolutePath,
-        )
+        val spec = PluginPackageImport(archive.absolutePath, digest, StoredPluginConfiguration.encode(workspace.absolutePath))
         try {
-            a.pluginManager.replace(spec)
-            b.pluginManager.replace(spec)
+            a.pluginManager.importPackages(listOf(spec))
+            b.pluginManager.importPackages(listOf(spec))
             val original = requireNotNull(first)
             val other = requireNotNull(second)
             assertNotSame(DesktopNativeWebContainerPlugin::class.java.classLoader, original.javaClass.classLoader)
@@ -84,7 +88,7 @@ class NativeWebContainerCompositionTest {
             original.interact(WebInteractionRequest(openedA.containerId, WebInteractionAction.Click, selector = button.selector))
             assertEquals(2, original.console(openedA.containerId, 0, 100).entries.count { it.message == "owned-click" })
             assertEquals(200, client.send(request(page.url), HttpResponse.BodyHandlers.ofString()).statusCode())
-            a.pluginManager.setEnabled("provider.web-containers.platform", false)
+            a.pluginManager.setEnabled("feature.web-container", false)
             assertFailsWith<IllegalStateException> { original.list() }
             assertTrue(!resourcesA.process.isAlive)
             assertTrue(!Files.exists(resourcesA.profile))
@@ -94,12 +98,12 @@ class NativeWebContainerCompositionTest {
             assertFailsWith<java.io.IOException> { client.send(request(page.url), HttpResponse.BodyHandlers.ofString()) }
             assertEquals(openedB.containerId, other.list().single().id)
             assertTrue(other.inspect(openedB.containerId).elements.any { it.name == "Owned content" })
-            a.pluginManager.setEnabled("provider.web-containers.platform", true)
+            a.pluginManager.setEnabled("feature.web-container", true)
             val restored = requireNotNull(first)
             assertNotSame(original, restored)
             assertTrue(restored.list().isEmpty())
             restored.launch(WebPreviewRequest("/workspace/index.html", "Restored A"))
-            a.pluginManager.uninstall("provider.web-containers.platform")
+            a.pluginManager.uninstall("feature.web-container")
             assertFailsWith<IllegalStateException> { restored.list() }
             assertEquals(openedB.containerId, other.list().single().id)
         } finally {

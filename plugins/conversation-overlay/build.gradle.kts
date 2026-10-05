@@ -29,8 +29,10 @@ kotlin {
             implementation("androidx.lifecycle:lifecycle-runtime:2.8.7")
             implementation("androidx.savedstate:savedstate:1.3.3")
         }
-        getByName("androidInstrumentedTest").dependsOn(getByName("commonTest"))
+        getByName("desktopTest").kotlin.srcDir(layout.projectDirectory.dir("src/uiTestFixtures/kotlin"))
+        getByName("androidInstrumentedTest").kotlin.srcDir(layout.projectDirectory.dir("src/uiTestFixtures/kotlin"))
         androidInstrumentedTest.dependencies {
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
             implementation(kotlin("test"))
             implementation("androidx.test.ext:junit:1.2.1")
             implementation("androidx.test:runner:1.6.2")

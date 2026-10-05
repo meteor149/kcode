@@ -3,6 +3,7 @@ package ai.meteor.kcode.plugin.application.ui
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.settings.SettingsPatch
 import ai.meteor.kcode.plugin.ui.api.PersistenceFailure
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ internal class ApplicationSettingsSession(
         private set
     private val writes = Mutex()
     private var revision = 0L
+    private val pending = mutableListOf<Pair<Long, SettingsPatch>>()
 
     suspend fun load(onCommitted: (StoredAppSettings) -> Unit = {}) {
         val startedAt = revision
@@ -48,18 +50,24 @@ internal class ApplicationSettingsSession(
         currentCoroutineContext().ensureActive()
         owner.requireOpen()
         val requestedAt = ++revision
+        pending += requestedAt to SettingsPatch.between(draft, value)
         draft = value
         failure = null
         try {
             owner.run {
                 writes.withLock {
                     if (revision != requestedAt) return@withLock
-                    store.save(value)
+                    val patches = pending.filter { it.first <= requestedAt }.map { it.second }
+                    val saved = store.transaction {
+                        patches.fold(current) { settings, patch -> patch.apply(settings) }.also { commit(it) }
+                    }
+                    pending.removeAll { it.first <= requestedAt }
                     currentCoroutineContext().ensureActive()
                     if (revision == requestedAt) {
-                        committed = value
+                        committed = saved
+                        draft = saved
                         failure = null
-                        onCommitted(value)
+                        onCommitted(saved)
                     }
                 }
             }

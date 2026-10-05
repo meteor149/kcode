@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.nativeexecution.shell.PrivilegedShellUserService
 import ai.meteor.kcode.shell.IPrivilegedPluginBridge
 import ai.meteor.kcode.shell.IPrivilegedShellService
@@ -14,7 +16,6 @@ import android.os.Process
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
@@ -35,7 +36,7 @@ class AndroidRemotePluginBridgeTest {
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(apk)
         check(apk.setReadOnly())
         val deployments = File(directory, "deployments").apply { mkdirs() }
-        val digest = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(apk)
         fun proxy(bridge: PrivilegedPluginUserService): IPrivilegedPluginBridge {
             val forwarding = object : Binder() {
                 override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean =

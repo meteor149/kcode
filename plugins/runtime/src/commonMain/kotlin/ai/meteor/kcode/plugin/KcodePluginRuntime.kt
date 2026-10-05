@@ -54,7 +54,9 @@ import ai.meteor.kcode.plugin.api.KcodePluginInstallations
 import ai.meteor.kcode.plugin.api.PluginCompositionStore
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
 import ai.meteor.kcode.plugin.api.StoredDynamicPlugin
+import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
 import ai.meteor.kcode.plugin.api.validatePluginApi
+import ai.meteor.kcode.plugin.api.validatePackageDependencies
 import ai.meteor.kcode.plugin.api.KcodePluginInventory
 import ai.meteor.kcode.settings.SettingsUpdate
 import ai.meteor.kcode.settings.AppliedSettingsUpdate
@@ -108,6 +110,9 @@ fun interface DynamicPluginControllerFactory {
     fun create(context: Context, loader: Loader, inventory: KcodePluginInventory): DynamicPluginController
 }
 
+/** A trusted release offered by the native distribution, with a stable composition identity. */
+data class BundledPluginPackage(val id: String, val release: PluginPackageImport)
+
 data class KcodePluginRuntimeConfig(
     val interactionPolicy: InteractionPolicy,
     val hostInputs: PluginHostInputs? = null,
@@ -130,6 +135,7 @@ data class KcodePluginRuntimeConfig(
     val conversationImageSaverFactory: ConversationImageSaverFactory? = null,
     val scheduledTaskNotificationsFactory: ScheduledTaskNotificationsFactory? = null,
     val conversationOverlayFactory: (suspend (StateFlow<UiContributionsSnapshot>) -> AgentConversationOverlayController?)? = null,
+    val bundledPackages: List<BundledPluginPackage> = emptyList(),
 )
 
 /** Only inventory and the loader bridge are bootstrap infrastructure. Product providers are managed. */
@@ -172,6 +178,7 @@ class KcodePluginRuntime private constructor(
     private val turns = mutableMapOf<Job, Int>()
     private var closed = false
     private var restoring = false
+    private val bundledReleaseHistory = linkedMapOf<String, String>()
     private var committedModelCatalog = ModelCatalogSnapshot()
     override suspend fun updateSettings(update: SettingsUpdate): AppliedSettingsUpdate {
         val (handler, catalog) = lock.withLock {
@@ -259,14 +266,30 @@ class KcodePluginRuntime private constructor(
 
     /** Manages built-ins as well as external artifacts. */
     val pluginManager: DynamicPluginController = object : DynamicPluginController {
+        override suspend fun importPackages(packages: List<PluginPackageImport>) {
+            var specs = emptyList<DynamicPluginSpec>()
+            mutate(prepare = {
+                require(packages.isNotEmpty()) { "No plugin packages supplied" }
+                specs = context.require(KcodePluginPackages.Key).resolver.resolve(packages, dynamic().installed())
+            }) {
+                applyCompositionChange(PluginCompositionChange(upserts = specs))
+            }
+        }
+
+        override suspend fun applyChanges(changes: PluginCompositionChange) = mutate {
+            applyCompositionChange(changes)
+        }
+
         override suspend fun install(spec: DynamicPluginSpec) = mutate {
             validateInstallation(spec)
             require(spec.id !in records) { "plugin '${spec.id}' is configured; use replace()" }
+            validatePackageDependencies(dynamic().installed() + spec)
             dynamic().install(spec)
         }
 
         override suspend fun replace(spec: DynamicPluginSpec) = mutate {
             validateInstallation(spec)
+            validatePackageDependencies(dynamic().installed().filterNot { it.id == spec.id } + spec)
             val record = records[spec.id]
             if (record == null || dynamic().installed().any { it.id == spec.id }) {
                 dynamic().replace(spec)
@@ -285,6 +308,7 @@ class KcodePluginRuntime private constructor(
         }
 
         override suspend fun uninstall(id: String) = mutate {
+            validatePackageDependencies(external?.installed().orEmpty().filterNot { it.id == id })
             if (external?.installed()?.any { it.id == id } == true) {
                 external.uninstall(id)
                 records[id]?.let { publish(id, it) }
@@ -296,7 +320,9 @@ class KcodePluginRuntime private constructor(
         }
 
         override suspend fun setEnabled(id: String, enabled: Boolean) = mutate {
+            if (!restoring) validatePackageDependencies(external?.installed().orEmpty().map { if (it.id == id) it.copy(enabled = enabled) else it })
             if (external?.installed()?.any { it.id == id } == true) {
+                if (enabled) validateInstallation(external.installed().single { it.id == id })
                 external.setEnabled(id, enabled)
             } else {
                 val record = records[id] ?: error("plugin '$id' is not configured")
@@ -307,7 +333,7 @@ class KcodePluginRuntime private constructor(
                             record.fiber = record.mount.mount(context)
                             record.fiber?.await()
                         } catch (error: Throwable) {
-                            runCatching { detach(record) }.exceptionOrNull()?.let(error::addSuppressed)
+                            runCatching { detach(record) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
                             throw error
                         }
                     } else {
@@ -327,6 +353,65 @@ class KcodePluginRuntime private constructor(
 
     val dynamicPlugins: DynamicPluginController? get() = if (external == null) null else pluginManager
 
+    private suspend fun applyCompositionChange(changes: PluginCompositionChange) {
+        require(changes.upserts.map { it.id }.distinct().size == changes.upserts.size) { "Duplicate composition upsert" }
+        require(changes.upserts.none { it.id in changes.removals } && changes.enabled.keys.none { it in changes.removals }) { "Conflicting composition changes" }
+        val installed = dynamic().installed()
+        val current = installed.associateBy { it.id }
+        require(changes.removals.all { it in current }) { "Only external plugins can be removed in a transaction" }
+        require(changes.enabled.keys.all { it in current || it in records || changes.upserts.any { spec -> spec.id == it } }) { "Unknown plugin enable change" }
+        changes.upserts.forEach { spec ->
+            validateInstallation(spec)
+            current[spec.id]?.let { previous ->
+                val candidateRelease = spec.packageInstallation
+                val previousRelease = previous.packageInstallation
+                if (candidateRelease != null && previousRelease != null && previous.version == spec.version) {
+                    require(previousRelease.archiveSha256 == candidateRelease.archiveSha256) { "A package release cannot be republished with different bytes" }
+                }
+            }
+        }
+        val final = current.toMutableMap()
+        changes.removals.forEach(final::remove)
+        changes.upserts.forEach { final[it.id] = it }
+        changes.enabled.forEach { (id, enabled) -> final[id]?.let { final[id] = it.copy(enabled = enabled) } }
+        validatePackageDependencies(final.values.toList())
+        PluginCompositionSnapshot(external = final.values.map(StoredDynamicPlugin::from)).validate()
+
+        // Package availability is independent of Loader class linkage and Cordis inject ordering.
+        // Remove dependants before dependencies; final snapshot validation rejects dangling links.
+        installed.asReversed().filter { it.id in changes.removals }.forEach { dynamic().uninstall(it.id) }
+        val upsertIds = changes.upserts.map { it.id }.toSet()
+        val ordered = PluginCompositionSnapshot(external = final.values.map(StoredDynamicPlugin::from)).orderedExternal()
+        ordered.filter { it.id in upsertIds }.forEach { candidate ->
+            val spec = final.getValue(candidate.id)
+            val record = records[spec.id]
+            if (spec.id in current) {
+                dynamic().replace(spec)
+                dynamic().setEnabled(spec.id, spec.enabled)
+            } else {
+                if (record != null) {
+                    dynamic().validateCandidate(spec)
+                    detach(record)
+                    inventory.remove(spec.id)
+                }
+                dynamic().install(spec)
+            }
+        }
+        changes.enabled.forEach { (id, enabled) ->
+            if (id in final) dynamic().setEnabled(id, enabled)
+            else {
+                val record = records.getValue(id)
+                if (record.enabled != enabled) {
+                    if (enabled) {
+                        record.enabled = true
+                        record.fiber = record.mount.mount(context)
+                        record.fiber?.await()
+                    } else detach(record)
+                }
+            }
+        }
+    }
+
     /** Typed in-process replacement. Restore the previous implementation if apply fails. */
     suspend fun replacePlugin(replacement: KcodePluginMount) = mutate {
         val id = replacement.descriptor.id
@@ -343,7 +428,7 @@ class KcodePluginRuntime private constructor(
                 record.fiber?.await()
             }
         } catch (error: Throwable) {
-            runCatching { detach(record) }.exceptionOrNull()?.let(error::addSuppressed)
+            runCatching { detach(record) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
             record.mount = previous
             restore(id, record, wasEnabled, error)
             throw error
@@ -395,8 +480,9 @@ class KcodePluginRuntime private constructor(
         val external: List<DynamicPluginSpec>,
     )
 
-    private fun validateInstallation(spec: DynamicPluginSpec) {
+    private suspend fun validateInstallation(spec: DynamicPluginSpec) {
         spec.validatePluginApi()
+        if (spec.packageInstallation != null) context.require(KcodePluginPackages.Key).resolver.verify(spec)
         if (context[KcodePluginInstallations.Key]?.store != null) StoredDynamicPlugin.from(spec)
     }
 
@@ -408,6 +494,7 @@ class KcodePluginRuntime private constructor(
     private suspend fun compositionSnapshot(): PluginCompositionSnapshot = PluginCompositionSnapshot(
         builtinsEnabled = records.mapValues { it.value.enabled },
         external = external?.installed().orEmpty().map(StoredDynamicPlugin::from),
+        bundledPackages = bundledReleaseHistory.toMap(),
     )
 
     /** Restore interfaces and registrations, not arbitrary provider instance state. */
@@ -431,55 +518,139 @@ class KcodePluginRuntime private constructor(
         settle(publishView = false)
     }
 
-    private suspend fun mutate(block: suspend () -> Unit) {
+    private suspend fun mutate(prepare: suspend () -> Unit = {}, block: suspend () -> Unit) {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
         lock.withLock {
             check(!closed) { "plugin runtime is closed" }
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
+            // Archive preparation is cancellable and cannot modify the composition.
+            prepare()
             withContext(NonCancellable) {
                 val storeBefore = context[KcodePluginInstallations.Key]?.store
                 val before = if (!restoring) checkpoint() else null
+                var candidateApplied = false
                 try {
                     block()
+                    candidateApplied = true
                     settle(publishView = false)
+                    if (external?.installed().orEmpty().any { it.packageInstallation != null }) {
+                        context.require(KcodePluginPackages.Key)
+                    }
                     if (!restoring) {
-                        val prepared = try {
-                            prepareApplicationView()
-                        } catch (error: Throwable) {
-                            if (before != null) runCatching { rollback(before) }.exceptionOrNull()?.let(error::addSuppressed)
-                            throw error
-                        }
+                        val prepared = prepareApplicationView()
                         val store = context[KcodePluginInstallations.Key]?.store ?: storeBefore
                         if (store != null) {
-                            try {
-                                store.save(compositionSnapshot())
-                            } catch (error: Throwable) {
-                                if (before != null) runCatching { rollback(before) }.exceptionOrNull()?.let(error::addSuppressed)
-                                throw error
-                            }
+                            store.save(compositionSnapshot())
                         }
                         commitApplicationView(prepared)
                     }
                 } catch (error: Throwable) {
-                    runCatching { settle(publishView = !restoring) }.exceptionOrNull()?.let(error::addSuppressed)
+                    if (before != null && (candidateApplied || checkpoint() != before)) {
+                        runCatching { rollback(before) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                    }
+                    runCatching { settle(publishView = !restoring) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
                     throw error
                 }
             }
         }
     }
 
-    private suspend fun restoreInstalledComposition() {
-        val store = context[KcodePluginInstallations.Key]?.store ?: return
-        val loaded = store.load().also { it.validate() }
+    private suspend fun restoreInstalledComposition(bundled: List<BundledPluginPackage>, disabled: Set<String>) {
+        val store = context[KcodePluginInstallations.Key]?.store
+        require(bundled.isEmpty() || store != null) { "Bundled packages require a composition store" }
+        if (store == null) return
+        val loaded = store.load().also { it.validateForRestore() }
         val enabled = loaded.builtinsEnabled.toMutableMap()
-        builtinAliases.forEach { (previous, replacements) ->
-            enabled.remove(previous)?.let { oldState ->
-                require(replacements.all { it in records }) { "Builtin alias targets unknown plugins" }
-                replacements.forEach { enabled.putIfAbsent(it, oldState) }
+        val installed = loaded.external.map { it.toSpec() }.associateBy { it.id }.toMutableMap()
+        val retired = mutableSetOf<String>()
+        val inherited = mutableMapOf<String, Boolean>()
+        val retiringCandidates = builtinAliases.keys.filterTo(mutableSetOf()) { id ->
+            val offered = loaded.bundledPackages[id]
+            offered != null && installed[id]?.packageInstallation?.archiveSha256 == offered
+        }
+        // Preserve the verified dependency closure of every surviving release. Package and
+        // class-loader identities cannot be rewritten to an aggregate without re-resolution.
+        val required = mutableSetOf<String>()
+        fun retainDependencies(id: String) {
+            val spec = installed[id] ?: return
+            (spec.dependencies + spec.packageInstallation?.dependencies.orEmpty().keys).forEach { dependency ->
+                if (required.add(dependency)) retainDependencies(dependency)
             }
         }
-        val snapshot = loaded.copy(builtinsEnabled = enabled)
+        installed.keys.filterNot { it in retiringCandidates }.forEach(::retainDependencies)
+        // Earlier feature releases relied on service injection between independently
+        // offered packages, without archive dependency locks. Preserve the whole former
+        // feature when a surviving release needs any member (or replaces one of them).
+        // Otherwise retaining an old backend can strand it without its policy/provider.
+        val survivingIds = installed.keys.filterNot { it in retiringCandidates }.toSet()
+        do {
+            val targets = builtinAliases.filterKeys { it in required || it in survivingIds }
+                .values.flatten().toSet()
+            val peers = retiringCandidates.filter { id ->
+                id !in required && builtinAliases[id].orEmpty().any(targets::contains)
+            }
+            peers.forEach { id -> required += id; retainDependencies(id) }
+        } while (peers.isNotEmpty())
+        builtinAliases.forEach { (previous, replacements) ->
+            val priorBuiltin = enabled.remove(previous)
+            val lastOffered = loaded.bundledPackages[previous]
+            val priorPackage = installed[previous]
+            val trackedRelease = lastOffered != null &&
+                (priorPackage == null || priorPackage.packageInstallation?.archiveSha256 == lastOffered)
+            // A user replacement remains installed; do not activate a conflicting aggregate by default.
+            val retained = previous in required
+            val oldState = if (retained) false else priorBuiltin ?: if (trackedRelease) priorPackage?.enabled ?: false
+                else if (priorPackage != null && replacements.isNotEmpty()) false else null
+            if (trackedRelease && !retained) {
+                retired += previous
+                installed.remove(previous)
+            }
+            if (oldState != null) {
+                require(replacements.all { target -> target in records || bundled.any { it.id == target } }) { "Builtin alias targets unknown plugins" }
+                replacements.forEach { target -> inherited[target] = (inherited[target] ?: true) && oldState }
+            }
+        }
+        inherited.forEach { (target, oldState) -> enabled.putIfAbsent(target, oldState) }
+        bundledReleaseHistory.putAll(loaded.bundledPackages.filterKeys { it !in retired })
+        val offers = bundled.filter { offer ->
+            val previous = installed[offer.id]
+            val lastOffered = loaded.bundledPackages[offer.id]
+            // A missing tracked release is an explicit uninstall. A different release is a user override.
+            lastOffered == null && previous == null ||
+                lastOffered != null && previous?.packageInstallation?.archiveSha256 == lastOffered
+        }
+        val replacing = offers.map { it.id }.toSet()
+        val requests = offers.map { offer ->
+            val previous = installed[offer.id]
+            offer.release.copy(
+                configuration = previous?.let { StoredPluginConfiguration.encode(it.config) } ?: offer.release.configuration,
+                enabled = previous?.enabled ?: enabled[offer.id] ?: offer.release.enabled ?: (offer.id !in disabled),
+            )
+        }
+        val candidates = if (requests.isEmpty()) emptyList() else context.require(KcodePluginPackages.Key).resolver.resolve(
+            requests, installed.values.filterNot { it.id in replacing },
+        )
+        require(candidates.map { it.id }.toSet() == replacing) { "Bundled archive identities do not match the distribution profile" }
+        require(candidates.all { candidate ->
+            candidate.packageInstallation?.archiveSha256 == offers.single { it.id == candidate.id }.release.sha256
+        }) { "Bundled archive hashes do not match their declared identities" }
+        candidates.forEach { candidate ->
+            installed[candidate.id]?.let { previous ->
+                require(previous.version != candidate.version || previous.packageInstallation?.archiveSha256 == candidate.packageInstallation?.archiveSha256) {
+                    "A bundled release cannot be republished with different bytes"
+                }
+            }
+        }
+        bundled.forEach { offer ->
+            bundledReleaseHistory[offer.id] = offer.release.sha256
+            enabled.remove(offer.id)
+        }
+        val snapshot = loaded.copy(
+            builtinsEnabled = enabled,
+            external = (installed.values.filterNot { it.id in replacing } + candidates).map(StoredDynamicPlugin::from),
+            bundledPackages = bundledReleaseHistory.toMap(),
+        ).also { it.validate() }
         require(snapshot.builtinsEnabled.keys.all { it in records }) { "Plugin manifest references unknown builtins" }
         restoring = true
         try {
@@ -488,6 +659,8 @@ class KcodePluginRuntime private constructor(
                 val spec = stored.toSpec()
                 if (spec.id in records) pluginManager.replace(spec) else pluginManager.install(spec)
             }
+            // Publish only after every package mounted successfully. Failed startup leaves the old commit intact.
+            if (snapshot != loaded) store.save(compositionSnapshot())
         } finally {
             restoring = false
         }
@@ -506,7 +679,7 @@ class KcodePluginRuntime private constructor(
                 record.fiber = record.mount.mount(context)
                 record.fiber?.await()
             } catch (rollback: Throwable) {
-                error.addSuppressed(rollback)
+                if (rollback !== error) error.addSuppressed(rollback)
             }
         }
         publish(id, record)
@@ -524,11 +697,15 @@ class KcodePluginRuntime private constructor(
     }
 
     private suspend fun settle(publishView: Boolean = true) {
-        repeat(records.size + 1) {
-            val before = records.values.map { it.fiber?.state }
+        fun fibers() = context.registry.values().flatMap { it.fibers.snapshot() }
+        // Providers may create optional consumer children during apply. They belong
+        // to the committed tree too, even though they have no top-level inventory ID.
+        repeat(records.size + fibers().size + 1) {
             external?.settle()
-            records.values.forEach { it.fiber?.await() }
-            if (before == records.values.map { it.fiber?.state }) {
+            val before = fibers().associateWith { it.state }
+            before.keys.forEach { it.await() }
+            val after = fibers().associateWith { it.state }
+            if (before == after && after.keys.none { it.inertia != null }) {
                 val externalIds = external?.installed().orEmpty().map { it.id }.toSet()
                 records.forEach { (id, record) -> if (id !in externalIds) publish(id, record) }
                 if (publishView) publishApplicationView()
@@ -598,7 +775,7 @@ class KcodePluginRuntime private constructor(
                     try {
                         action()
                     } catch (error: Throwable) {
-                        if (failure == null) failure = error else failure.addSuppressed(error)
+                        if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
                     }
                 }
                 // Admission is closed; no mutation can race these snapshots. Keep the runtime lock
@@ -623,7 +800,7 @@ class KcodePluginRuntime private constructor(
                 return createOwned(config)
             } catch (error: Throwable) {
                 withContext(NonCancellable) {
-                    runCatching { config.hostInputs?.close() }.exceptionOrNull()?.let(error::addSuppressed)
+                    runCatching { config.hostInputs?.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
                 }
                 throw error
             }
@@ -657,17 +834,32 @@ class KcodePluginRuntime private constructor(
                 webContainerController = config.webContainerController,
                 pluginCompositionStore = config.pluginCompositionStore,
                 conversationOverlayHostState = overlayHostState,
+                packagedProviderIds = config.bundledPackages.map { it.id }.toSet(),
             ))).forEach(::add)
             config.featurePlugins.forEach(::add)
+            // Persistence is composition infrastructure, independent of the selected product.
+            // An explicitly supplied provider remains replaceable through the normal manager.
+            if (config.pluginCompositionStore != null && "provider.plugin-installations.platform" !in mounts) {
+                add(kcodePlugin(
+                    builtinDescriptor("provider.plugin-installations.platform", "pluginInstallations"),
+                    PluginInstallationsProviderPlugin,
+                    config.pluginCompositionStore,
+                ))
+            }
             val overrideIds = mutableSetOf<String>()
             config.profile.overrides.forEach { mount ->
                 val id = mount.descriptor.id
                 require(overrideIds.add(id)) { "duplicate override '$id'" }
-                require(id in mounts) { "override refers to unknown plugin '$id'" }
+                require(id in mounts || config.bundledPackages.any { it.id == id }) { "override refers to unknown plugin '$id'" }
                 mounts[id] = mount
             }
-            require(config.profile.disabled.all { it in mounts }) { "profile disables unknown plugin ids" }
-            val context = Context().let { config.hostInputs?.bind(it) ?: it }
+            require(config.bundledPackages.map { it.id }.distinct().size == config.bundledPackages.size) { "Duplicate bundled plugin identity" }
+            require(config.bundledPackages.all { it.id.isNotBlank() && it.id !in BootstrapIds }) { "Invalid bundled plugin identity" }
+            val bundled = config.bundledPackages.filterNot { it.id in overrideIds }
+            val bundledIds = bundled.map { it.id }.toSet()
+            bundledIds.forEach(mounts::remove)
+            require(config.profile.disabled.all { it in mounts || it in bundledIds }) { "profile disables unknown plugin ids" }
+            val context = overlayHostState.bind(Context()).let { config.hostInputs?.bind(it) ?: it }
             val bootstrap = mutableListOf<Fiber<*>>()
             val records = linkedMapOf<String, ManagedPlugin>()
             var external: DynamicPluginController? = null
@@ -689,13 +881,13 @@ class KcodePluginRuntime private constructor(
                 val aliases = config.builtinAliases
                     ?: if (config.bundle == null && config.profile.includeDefaults) NativeBuiltinAliases else emptyMap()
                 return KcodePluginRuntime(context, config.hostInputs, bootstrap, records, inventory, external, aliases, overlayHostState, overlayUiSlots).also {
-                    it.restoreInstalledComposition()
+                    it.restoreInstalledComposition(bundled, config.profile.disabled)
                     it.settle()
                 }
             } catch (error: Throwable) {
                 withContext(NonCancellable) {
-                    runCatching { external?.close() }.exceptionOrNull()?.let(error::addSuppressed)
-                    runCatching { context.fiber.dispose() }.exceptionOrNull()?.let(error::addSuppressed)
+                    runCatching { external?.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                    runCatching { context.fiber.dispose() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
                 }
                 throw error
             }

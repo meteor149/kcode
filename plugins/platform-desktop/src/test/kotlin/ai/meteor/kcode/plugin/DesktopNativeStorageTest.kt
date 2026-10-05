@@ -14,6 +14,9 @@ import ai.meteor.kcode.plugin.history.DesktopNativeHistoryPlugin
 import ai.meteor.kcode.plugin.settingsstorage.DesktopNativeSettingsPlugin
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
 import java.nio.file.Files
@@ -38,12 +41,9 @@ class DesktopNativeStorageTest {
         JarOutputStream(artifact.outputStream()).use { output ->
             listOf(
                 DesktopNativeSettingsPlugin::class.java,
-                DesktopNativeHistoryPlugin::class.java,
                 DesktopNativeArtifactsPlugin::class.java,
-                Class.forName("androidx.room3.Room"),
-                Class.forName("androidx.room3.RoomMasterTable"),
-                Class.forName("androidx.collection.LruCache"),
             ).map { File(it.protectionDomain.codeSource.location.toURI()) }
+                .plus(File(requireNotNull(System.getProperty("kcode.history.packaged.jar"))))
                 .distinct().forEach { source ->
                     ZipFile(source).use { zip ->
                         zip.entries().asSequence().filter { !it.isDirectory && entries.add(it.name) }.forEach { entry ->
@@ -84,18 +84,31 @@ class DesktopNativeStorageTest {
         ) }
         try {
             specs.forEach { runtime.pluginManager.install(it) }
-            assertNotSame(classes[0].classLoader, settings.javaClass.classLoader)
+            // The coordinator is shared SDK; its borrowed storage implementation stays private.
+            assertEquals(AppSettingsStore::class.java.classLoader, settings.javaClass.classLoader)
+            val settingsLoader = settings.javaClass.getDeclaredField("delegate").apply { isAccessible = true }
+                .get(settings).javaClass.classLoader
+            assertNotSame(classes[0].classLoader, settingsLoader)
             assertNotSame(classes[1].classLoader, history.javaClass.classLoader)
             assertNotSame(classes[2].classLoader, artifacts.javaClass.classLoader)
-            assertEquals(settings.javaClass.classLoader, Class.forName(
-                "ai.meteor.kcode.plugin.settingsstorage.DefaultSettingsKt", false, settings.javaClass.classLoader,
+            assertEquals(history.javaClass.classLoader, Class.forName(
+                "androidx.room3.Room", false, history.javaClass.classLoader,
             ).classLoader)
-            assertEquals(StoredAppSettings(
-                provider = "OpenAI", modelId = "gpt-4o-mini", dashscopeRegion = "china_mainland",
-                webSearchProvider = "google", temperature = 0.7, language = "zh",
-                shellExecutionMode = "app", toolPermissionMode = "ask",
-            ), settings.load())
-            val saved = StoredAppSettings(language = "en")
+            assertEquals(history.javaClass.classLoader, Class.forName(
+                "androidx.collection.LruCache", false, history.javaClass.classLoader,
+            ).classLoader)
+            assertEquals(Class.forName("androidx.sqlite.driver.bundled.BundledSQLiteDriver"), Class.forName(
+                "androidx.sqlite.driver.bundled.BundledSQLiteDriver", false, history.javaClass.classLoader,
+            ))
+            assertEquals(settingsLoader, Class.forName(
+                "ai.meteor.kcode.plugin.settingsstorage.DefaultSettingsKt", false, settingsLoader,
+            ).classLoader)
+            assertEquals(StoredAppSettings(), settings.load())
+            val saved = LegacySettings(language = "en", namespaces = mapOf(
+                "private.feature/v2" to (Json.parseToJsonElement(
+                    """{"credential":"private-fixture","unknown":[null,{"key.with.dots":""}]}""",
+                ) as JsonObject),
+            ))
             settings.save(saved)
             history.appendMessage(1, "native", 1, "User", "durable")
             File(workspace, "source").mkdirs()

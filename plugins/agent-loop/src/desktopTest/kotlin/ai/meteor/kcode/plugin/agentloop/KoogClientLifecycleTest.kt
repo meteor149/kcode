@@ -29,6 +29,35 @@ import kotlin.test.assertSame
 
 class KoogClientLifecycleTest {
     @Test
+    fun subagentCapabilityIsResolvedPerTurnAndAbsentTurnsKeepTheirOwnLifecycle() = runTest {
+        var available = false
+        var created = 0
+        var closed = 0
+        val failure = IllegalArgumentException("stop before model request")
+        val client = RecordingClient()
+        val factory = SubagentCoordinatorFactory { _, _, _, _ -> created++; IdleCoordinator { closed++ } }
+        val service = KoogChatService(
+            additionalToolsProvider = { context ->
+                assertEquals(available, context.coordinator != null)
+                throw failure
+            },
+            modelRuntimeProvider = { _, _ -> AgentModelRuntime(client, LLModel(LLMProvider.OpenAI, "fixture", emptyList())) },
+            systemPromptProvider = { _, _ -> "fixture" },
+            continuationProvider = { null },
+            subagentCoordinatorFactoryProvider = { if (available) factory else null },
+            toolPermissionModeProvider = { ToolPermissionMode.Bypass },
+            toolCallApprover = ToolCallApprover { true },
+        )
+        for (enabled in listOf(false, true, false, true)) {
+            available = enabled
+            assertFailsWith<IllegalArgumentException> { service.reply(configuration, emptyList(), "fixture") }
+        }
+        assertEquals(2, created)
+        assertEquals(2, closed)
+        assertEquals(4, client.closed)
+    }
+
+    @Test
     fun toolInitializationFailureClosesClientAndPreservesPrimaryFailure(): Unit = runTest {
         val cleanupFailure = IllegalStateException("close failed")
         val client = RecordingClient(cleanupFailure)

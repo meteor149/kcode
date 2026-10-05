@@ -49,11 +49,10 @@ class ProviderCallOwnershipTest {
             )
             lateinit var current: InteractionPolicy
             val runtime = KcodePluginRuntime.create(configuration(listOf(
-                kcodePlugin(descriptor("test.interaction"), InteractionServicePlugin, InteractionPluginConfig(policy)),
                 kcodePlugin(descriptor("test.capture"), plugin<Unit>(
                     name = "capture-interaction", inject = dependencies(KcodeInteraction.Key),
                 ) { ctx, _ -> current = ctx.require(KcodeInteraction.Key).policy }, Unit),
-            )))
+            )).copy(interactionPolicy = policy, profile = KcodePluginProfile()))
             val old = current
             val request = ToolApprovalRequest("test", "input", "purpose")
             try {
@@ -61,7 +60,7 @@ class ProviderCallOwnershipTest {
                     if (readMode) old.permissionModeProvider() else old.approver.approve(request)
                 }
                 entered.await()
-                val disabling = async { runtime.pluginManager.setEnabled("test.interaction", false) }
+                val disabling = async { runtime.pluginManager.setEnabled("provider.interaction.platform", false) }
                 cleaning.await()
                 assertFalse(disabling.isCompleted)
                 assertFailsWith<IllegalStateException> { old.permissionModeProvider() }
@@ -70,7 +69,7 @@ class ProviderCallOwnershipTest {
                 disabling.await()
                 assertTrue(operation.isCompleted)
                 slow = false
-                runtime.pluginManager.setEnabled("test.interaction", true)
+                runtime.pluginManager.setEnabled("provider.interaction.platform", true)
                 assertFalse(old === current)
                 assertEquals(ToolPermissionMode.Bypass, current.permissionModeProvider())
                 assertTrue(current.approver.approve(request))
@@ -148,7 +147,12 @@ class ProviderCallOwnershipTest {
         ))
         val model = ai.meteor.kcode.model.ModelConfiguration(ai.meteor.kcode.model.ModelProvider.Ollama, "fixture", "", temperature = 0.6)
         try {
-            for (id in listOf("provider.agent-loop.koog", "provider.interaction.platform", "provider.skills.platform")) {
+            val withoutSkills = current
+            runtime.pluginManager.setEnabled("provider.skills.platform", false)
+            assertTrue(withoutSkills === current)
+            runtime.pluginManager.setEnabled("provider.skills.platform", true)
+            assertTrue(withoutSkills === current)
+            for (id in listOf("provider.agent-loop.koog", "provider.interaction.platform")) {
                 val old = current
                 runtime.pluginManager.setEnabled(id, false)
                 val replyError = assertFailsWith<IllegalStateException> { old.reply(model, emptyList(), "late") }

@@ -1,9 +1,8 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.plugin.ui.api.MarkdownContent
-import ai.meteor.kcode.plugin.markdown.MarkdownProviderPlugin
+import ai.meteor.kcode.plugin.markdown.MarkdownFeaturePlugin
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
-import ai.meteor.kcode.plugin.markdown.MarkdownUiContributionPlugin
 import ai.meteor.kcode.plugin.ui.api.KcodeMarkdown
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.PluginDescriptor
@@ -28,10 +27,11 @@ class MarkdownPrivateLoadingTest {
     fun actualPackageOwnsFormattingAndWithdrawsUiExportAndNotifications(): Unit = runBlocking {
         val directory = Files.createTempDirectory("codec-private").toFile()
         val artifact = File(directory, "codec.jar")
-        File(MarkdownProviderPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
+        File(MarkdownFeaturePlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
         check(artifact.setReadOnly())
         lateinit var codec: MarkdownContent
         lateinit var slots: KcodeUiSlots
+        lateinit var services: org.cordis.Context
         val capture = kcodePlugin(
             PluginDescriptor("test.codec", "test", "test", emptySet()),
             plugin<Unit>(name = "capture-message-codec", inject = dependencies(KcodeMarkdown.Key, KcodeUiSlots.Key)) { ctx, _ ->
@@ -45,28 +45,23 @@ class MarkdownPrivateLoadingTest {
             featurePlugins = listOf(capture),
             pluginCompositionStore = FilePluginCompositionStore(directory),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
+                services = ctx
                 DesktopDynamicPluginController(ctx, loader, inventory, directory)
             },
         )
         var runtime = KcodePluginRuntime.create(configuration())
         try {
             runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "provider.markdown.default",
+                id = "feature.markdown",
                 version = "private-codec",
                 artifactPath = artifact.path,
                 sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
-                entryClass = MarkdownProviderPlugin::class.java.name,
+                entryClass = MarkdownFeaturePlugin::class.java.name,
 
-            ))
-            runtime.pluginManager.replace(DynamicPluginSpec(
-                id = "consumer.markdown.ui", version = "private-ui",
-                artifactPath = artifact.path,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) },
-                entryClass = MarkdownUiContributionPlugin::class.java.name,
             ))
             val original = codec
             assertNotSame(MarkdownContent::class.java.classLoader, original.javaClass.classLoader)
-            assertNotSame(MarkdownProviderPlugin::class.java.classLoader, original.javaClass.classLoader)
+            assertNotSame(MarkdownFeaturePlugin::class.java.classLoader, original.javaClass.classLoader)
             assertFailsWith<ClassNotFoundException> {
                 Class.forName("ai.meteor.kcode.ui.component.MarkdownTextKt", false, original.javaClass.classLoader)
             }
@@ -74,28 +69,31 @@ class MarkdownPrivateLoadingTest {
             assertEquals("A bold result", original.plainText("A **bold** result"))
             assertTrue(original.inline("**bold**", original.palette.accent).spanStyles.isNotEmpty())
             assertEquals(1, original.blocks("# heading").size)
-            runtime.pluginManager.setEnabled("provider.markdown.default", false)
-            for (id in listOf("consumer.markdown.ui", "provider.export.image-rendering", "provider.export.conversation", "consumer.schedules.application")) {
-                assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == id }.state, id)
+            runtime.pluginManager.setEnabled("feature.markdown", false)
+            for (id in listOf("feature.conversation-export", "feature.schedule")) {
+                assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == id }.state, id)
             }
             assertNull(slots.snapshot().markdown)
+            assertNull(services[ai.meteor.kcode.plugin.api.KcodeConversationExport.Key])
             assertFailsWith<IllegalStateException> { original.plainText("stale") }
             assertFailsWith<IllegalStateException> { original.blocks("stale") }
             runtime.close()
             runtime = KcodePluginRuntime.create(configuration())
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.markdown.ui" }.state)
-            runtime.pluginManager.setEnabled("provider.markdown.default", true)
+            assertNull(slots.snapshot().markdown)
+            assertNull(services[ai.meteor.kcode.plugin.api.KcodeConversationExport.Key])
+            runtime.pluginManager.setEnabled("feature.markdown", true)
             assertNotSame(original, codec)
             assertEquals("A bold result", codec.plainText("A **bold** result"))
-            for (id in listOf("consumer.markdown.ui", "provider.export.image-rendering", "provider.export.conversation", "consumer.schedules.application")) {
+            for (id in listOf("feature.conversation-export", "feature.schedule")) {
                 assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == id }.state, id)
             }
             val restored = codec
             assertNotSame(MarkdownContent::class.java.classLoader, restored.javaClass.classLoader)
-            runtime.pluginManager.uninstall("provider.markdown.default")
+            runtime.pluginManager.uninstall("feature.markdown")
             assertFailsWith<IllegalStateException> { restored.plainText("stale") }
-            assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "consumer.markdown.ui" }.state)
-            runtime.pluginManager.setEnabled("provider.markdown.default", true)
+            assertNull(slots.snapshot().markdown)
+            assertNull(services[ai.meteor.kcode.plugin.api.KcodeConversationExport.Key])
+            runtime.pluginManager.setEnabled("feature.markdown", true)
             assertEquals("A bold result", codec.plainText("A **bold** result"))
             assertNotSame(restored, codec)
         } finally {

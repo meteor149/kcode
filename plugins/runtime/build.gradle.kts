@@ -23,6 +23,7 @@ kotlin {
             api(project(":plugins:api"))
             implementation(project(":plugins:bundle-native"))
             implementation(project(":plugins:inventory"))
+            implementation(project(":plugins:installation-store"))
             api(libs.cordis.loader)
             implementation(libs.cordis.hmr)
         }

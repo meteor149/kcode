@@ -13,6 +13,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.cordis.ConfigValidator
 import org.cordis.Context
 import org.cordis.EffectScope
 import org.cordis.Plugin
@@ -23,6 +24,19 @@ object ConversationOverlaysServicePlugin : Plugin<ConversationOverlayHostState> 
     override suspend fun apply(ctx: Context, config: ConversationOverlayHostState, effect: EffectScope) {
         val registry = KcodeConversationOverlays(ctx, config)
         effect.collect { registry.close() }
+    }
+}
+
+/** Serializable entry borrows the kernel's committed UI/foreground projection. */
+object NativeConversationOverlaysServicePlugin : Plugin<Unit> {
+    override val name = "kcode-native-conversation-overlays"
+    override val config = ConfigValidator<Unit> { it }
+
+    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+        val state = requireNotNull(ConversationOverlayHostState.current(ctx)) {
+            "Conversation overlay registry requires runtime host state"
+        }
+        ConversationOverlaysServicePlugin.apply(ctx, state, effect)
     }
 }
 

@@ -19,6 +19,51 @@ import kotlin.test.assertSame
 
 class DefaultUiSlotsTest {
     @Test
+    fun textDefaultsWithdrawIndependentlyAndOldCleanupKeepsReplacement() = runTest {
+        val context = Context()
+        val slots = KcodeUiSlots(context)
+        try {
+            val source = UiTextDictionary("feature", mapOf("feature.label" to "Feature"))
+            val first = slots.registerTexts(source)
+            val held = slots.snapshot().textDictionaries.single()
+            assertFailsWith<IllegalArgumentException> {
+                slots.registerTexts(UiTextDictionary("conflict", mapOf("feature.label" to "Other")))
+            }
+            val independent = slots.registerTexts(UiTextDictionary("other", mapOf("other.label" to "Other")))
+            first.dispose()
+            assertEquals(false, held.available.value)
+            val replacement = slots.registerTexts(source)
+            first.dispose()
+            assertEquals(listOf("feature", "other"), slots.snapshot().textDictionaries.map { it.id })
+            assertEquals(true, slots.snapshot().textDictionaries.first().available.value)
+            replacement.dispose()
+            independent.dispose()
+            assertEquals(emptyList(), slots.snapshot().textDictionaries)
+        } finally { context.fiber.dispose() }
+    }
+
+    @Test
+    fun failedSettingsRegistrationReleasesItsNewTextDefaults() = runTest {
+        val context = Context()
+        val slots = KcodeUiSlots(context)
+        val section = SettingsSection("fixture", 0, KcodeIconAsset.Settings, { "" }, { "" }, UiRenderer { })
+        try {
+            val original = slots.registerSettings(section)
+            assertFailsWith<IllegalArgumentException> {
+                slots.registerSettings(section.copy(texts = mapOf("fixture.label" to "Fixture")))
+            }
+            assertEquals(emptyList(), slots.snapshot().textDictionaries)
+            assertEquals(1, slots.snapshot().settingsSections.size)
+            original.dispose()
+            val replacement = slots.registerSettings(section.copy(texts = mapOf("fixture.label" to "Fixture")))
+            val held = slots.snapshot().textDictionaries.single()
+            replacement.dispose()
+            assertEquals(false, held.available.value)
+            assertEquals(emptyList(), slots.snapshot().textDictionaries)
+        } finally { context.fiber.dispose() }
+    }
+
+    @Test
     fun pluginFiberDisposalWithdrawsItsSlotsAndFeatureContributions() = runTest {
         val context = Context()
         val registry = KcodeUiSlots(context)
@@ -101,7 +146,7 @@ class DefaultUiSlotsTest {
             verify({ registry.registerEffect(effect) }, { registry.snapshot().effects })
             val destination = NavigationDestination("shared", 0, KcodeIconAsset.Chat, { "title" }, UiRenderer { })
             verify({ registry.registerNavigation(destination) }, { registry.snapshot().navigation })
-            val decoration = ConversationDecoration("shared", 0, ConversationDecorationPresenter { null })
+            val decoration = ConversationDecoration("shared", 0, ConversationDecorationPresenter { emptyList() })
             verify({ registry.registerConversationDecoration(decoration) }, { registry.snapshot().conversationDecorations })
             val conversationEffect = ConversationPageEffect("shared", 0, UiRenderer { })
             verify({ registry.registerConversationEffect(conversationEffect) }, { registry.snapshot().conversationEffects })

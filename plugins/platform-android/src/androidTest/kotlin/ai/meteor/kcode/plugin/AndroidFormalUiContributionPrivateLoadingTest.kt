@@ -1,12 +1,13 @@
 package ai.meteor.kcode.plugin
 
+import org.cordis.packages.packageFileSha256
+
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.plugin.ui.api.ApplicationUiSlots
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
@@ -19,8 +20,13 @@ import org.junit.Test
 
 class AndroidFormalUiContributionPrivateLoadingTest {
     @Test(timeout = 60000)
-    fun privateApkPageContributions(): Unit = runBlocking {
-        verifyEntries({ it.id in setOf("provider.ui.layout", "provider.ui.sidebar", "provider.ui.chat", "provider.ui.artifacts", "provider.ui.conversation.standalone", "provider.ui.conversation.transcript", "provider.ui.settings", "provider.ui.theme") })
+    fun privateApkPageShellContributions(): Unit = runBlocking {
+        verifyEntries({ it.id in setOf("provider.ui.layout", "provider.ui.sidebar", "provider.ui.settings", "provider.ui.theme") })
+    }
+
+    @Test(timeout = 60000)
+    fun privateApkFeaturePageContributions(): Unit = runBlocking {
+        verifyEntries({ it.id in setOf("provider.ui.chat", "feature.artifacts", "provider.ui.conversation.standalone", "provider.ui.conversation.transcript") })
     }
 
     @Test(timeout = 60000)
@@ -29,13 +35,8 @@ class AndroidFormalUiContributionPrivateLoadingTest {
     }
 
     @Test(timeout = 60000)
-    fun privateApkSettingsAndScheduleContributions(): Unit = runBlocking {
-        verifyEntries({ it.id.startsWith("provider.ui.settings.") || it.id == "consumer.schedules.application" })
-    }
-
-    @Test(timeout = 60000)
     fun privateRegistryWithdrawalRebindsEveryContributionKind(): Unit = runBlocking {
-        verifyEntries({ it.id in setOf("provider.ui.chat", "provider.ui.navigation.chat", "provider.ui.message.user", "provider.ui.settings.language", "consumer.schedules.application") }, verifyCore = true)
+        verifyEntries({ it.id in setOf("provider.ui.chat", "provider.ui.navigation.chat", "provider.ui.message.user") }, verifyCore = true)
     }
 
     private suspend fun verifyEntries(selectEntries: (UiCase) -> Boolean, verifyCore: Boolean = false) {
@@ -45,7 +46,7 @@ class AndroidFormalUiContributionPrivateLoadingTest {
         val artifact = File(directory, "ui.apk")
         File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
         check(artifact.setReadOnly())
-        val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
+        val digest = packageFileSha256(artifact)
         lateinit var slots: KcodeUiSlots
         val capture = kcodePlugin(PluginDescriptor("test.formal-ui", "test", "test", emptySet()),
             plugin<Unit>(name = "capture-formal-ui", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
@@ -63,21 +64,16 @@ class AndroidFormalUiContributionPrivateLoadingTest {
             UiCase("provider.ui.layout", DefaultLayoutUiPlugin::class.java) { it.layout },
             UiCase("provider.ui.sidebar", DefaultSidebarUiPlugin::class.java) { it.sidebar },
             UiCase("provider.ui.chat", DefaultChatUiPlugin::class.java) { it.chat },
-            UiCase("provider.ui.artifacts", DefaultArtifactsUiPlugin::class.java) { it.artifacts },
+            UiCase("feature.artifacts", ArtifactFeaturePlugin::class.java) { it.artifacts },
             UiCase("provider.ui.conversation.standalone", DefaultStandaloneConversationUiPlugin::class.java) { it.standaloneConversation },
             UiCase("provider.ui.settings", DefaultSettingsUiPlugin::class.java) { it.settings },
             UiCase("provider.ui.theme", DefaultThemeUiPlugin::class.java) { it.theme },
             UiCase("provider.ui.navigation.chat", DefaultChatNavigationPlugin::class.java) { it.navigation.singleOrNull { item -> item.id == "chat" }?.renderer },
-            UiCase("provider.ui.navigation.artifacts", DefaultArtifactsNavigationPlugin::class.java) { it.navigation.singleOrNull { item -> item.id == "artifacts" }?.renderer },
+            UiCase("feature.artifacts", ArtifactFeaturePlugin::class.java) { it.navigation.singleOrNull { item -> item.id == "artifacts" }?.renderer },
             UiCase("provider.ui.message.user", DefaultUserMessagePresentationPlugin::class.java) { it.messagePresentations.singleOrNull { item -> item.id == "user" }?.renderer },
             UiCase("provider.ui.message.assistant", DefaultAssistantMessagePresentationPlugin::class.java) { it.messagePresentations.singleOrNull { item -> item.id == "assistant" }?.renderer },
             UiCase("provider.ui.message.error", DefaultErrorMessagePresentationPlugin::class.java) { it.messagePresentations.singleOrNull { item -> item.id == "error" }?.renderer },
             UiCase("provider.ui.tool.default", DefaultToolUsePresentationPlugin::class.java) { it.toolUsePresentations.singleOrNull { item -> item.id == "default" }?.renderer },
-            UiCase("provider.ui.settings.language", DefaultLanguageSettingsSectionPlugin::class.java) { it.settingsSections.singleOrNull { item -> item.id == "language" }?.renderer },
-            UiCase("provider.ui.settings.model", DefaultModelSettingsSectionPlugin::class.java) { it.settingsSections.singleOrNull { item -> item.id == "model" }?.renderer },
-            UiCase("provider.ui.settings.search", DefaultSearchSettingsSectionPlugin::class.java) { it.settingsSections.singleOrNull { item -> item.id == "search" }?.renderer },
-            UiCase("provider.ui.settings.shell", DefaultShellSettingsSectionPlugin::class.java) { it.settingsSections.singleOrNull { item -> item.id == "shell" }?.renderer },
-            UiCase("consumer.schedules.application", ScheduleDispatchPlugin::class.java) { it.effects.singleOrNull { item -> item.id == "schedule.dispatch" }?.renderer },
         ).filter(selectEntries)
         fun spec(id: String, entry: Class<*>) = DynamicPluginSpec(
             id = id, version = "private-ui", artifactPath = artifact.path,

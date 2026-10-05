@@ -16,9 +16,9 @@ internal fun KcodeApp(
     options: ApplicationHostOptions,
     settingsOwner: PluginOperationOwner,
 ) {
-    val sessions = services.conversationSessions ?: return
-    val modelSettings = services.modelSettingsPolicy ?: return
-    val generationRunner = options.generationRunner ?: services.generationRunner ?: return
+    val sessions = services.conversationSessions
+    val modelSettings = services.modelSettingsPolicy
+    val generationRunner = options.generationRunner ?: services.generationRunner
     CompositionLocalProvider(
         LocalApplicationUiSlots provides services.uiSlots,
         LocalModelCatalog provides services.modelCatalog,
@@ -32,8 +32,7 @@ internal fun KcodeApp(
                 artifactRepository = services.artifactRepository,
                 settingsStore = services.settingsStore,
                 historyRepository = services.historyRepository,
-                shellSettingsAvailable = options.shellSettingsAvailable,
-                toolPermissionControlsAvailable = options.toolPermissionControlsAvailable,
+                conversationSettingsControlsAvailable = options.conversationSettingsControlsAvailable,
                 onShellExecutionModeChanged = options.onShellExecutionModeChanged,
                 onToolPermissionModeChanged = options.onToolPermissionModeChanged,
                 uiSlots = services.uiSlots,
@@ -41,9 +40,10 @@ internal fun KcodeApp(
                 scheduledTaskCoordinator = services.schedules,
                 conversationSessionFactory = sessions,
                 conversationExecution = services.conversationExecution,
-                conversationExporter = services.conversationExporter,
                 settingsOwner = settingsOwner,
                 modelSettings = modelSettings,
+                shellModeSettings = services.shellModeSettingsPolicy,
+                toolPermissionSettings = services.toolPermissionSettingsPolicy,
             )
         }
     }

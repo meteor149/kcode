@@ -2,6 +2,8 @@ plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
     id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -18,6 +20,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":plugins:api"))
+            implementation(project(":plugins:default-ui-api"))
+            implementation(project(":libraries:ui"))
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

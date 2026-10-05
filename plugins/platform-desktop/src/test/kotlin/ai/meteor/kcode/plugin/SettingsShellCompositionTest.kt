@@ -1,6 +1,13 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.AgentShellExecutor
+import ai.meteor.kcode.plugin.api.KcodeShellMode
+import ai.meteor.kcode.plugin.api.ShellModePolicy
+import ai.meteor.kcode.plugin.api.PluginOperationOwner
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import org.cordis.Disposable
+import ai.meteor.kcode.plugin.executionsettings.SettingsShellModePlugin
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import ai.meteor.kcode.plugin.api.KcodeShell
@@ -16,6 +23,7 @@ import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsProtection
 import ai.meteor.kcode.settings.ShellExecutionMode
 import ai.meteor.kcode.settings.StoredAppSettings
+import ai.meteor.kcode.test.LegacySettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -50,11 +58,15 @@ class SettingsShellCompositionTest {
             val second = MemorySettings(ShellExecutionMode.Adb)
             val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
                 interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
-                settingsStore = first, featurePlugins = listOf(provider, capture(ubuntu) { backend = it }),
+                settingsStore = first, featurePlugins = listOf(modeProvider(), provider, capture(ubuntu) { backend = it }),
             ))
             try {
                 assertEquals("app:one:/workspace", backend.run(ShellRequest("one", "/workspace")).output)
-                first.save(StoredAppSettings(shellExecutionMode = ShellExecutionMode.Root.code))
+                first.save(LegacySettings(shellExecutionMode = "root", namespaces = mapOf(
+                    "feature.execution-settings" to (Json.parseToJsonElement("""{"mode":"adb"}""") as JsonObject),
+                )))
+                assertEquals("adb:namespace:null", backend.run(ShellRequest("namespace")).output)
+                first.save(LegacySettings(shellExecutionMode = ShellExecutionMode.Root.code))
                 assertEquals(ShellExecutionMode.Root, readMode())
                 val previous = backend
                 val previousReader = readMode
@@ -95,7 +107,7 @@ class SettingsShellCompositionTest {
             val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
                 interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
                 settingsStore = MemorySettings(ShellExecutionMode.App),
-                featurePlugins = listOf(provider, capture(ubuntu) { backend = it }),
+                featurePlugins = listOf(modeProvider(), provider, capture(ubuntu) { backend = it }),
             ))
             try {
                 val previous = backend
@@ -113,6 +125,53 @@ class SettingsShellCompositionTest {
         }
     }
 
+    @Test
+    fun shellFactoriesFollowReplaceableCallerPoliciesWithoutSettingsStorage() = runTest {
+        for (ubuntu in listOf(false, true)) {
+            lateinit var backend: ShellBackend
+            var mounts = 0
+            val factory: (suspend () -> ShellExecutionMode) -> AgentShellExecutor = { readMode ->
+                mounts++
+                object : AgentShellExecutor {
+                    override suspend fun execute(command: String, workingDirectory: String?) =
+                        AgentShellExecutor.ExecutionResult(readMode().code, 0)
+                }
+            }
+            val provider = if (ubuntu) settingsUbuntuShellProviderPlugin(factory) else settingsShellProviderPlugin(factory)
+            fun callerPolicy(mode: ShellExecutionMode) = kcodePlugin(
+                descriptor("test.caller-mode"), plugin<Unit>(name = "caller-mode") { ctx, _ ->
+                    val owner = PluginOperationOwner("caller mode")
+                    collect(Disposable { owner.close() })
+                    KcodeShellMode(ctx, ShellModePolicy { owner.run { mode } })
+                }, Unit,
+            )
+            val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
+                interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
+                profile = KcodePluginProfile(includeDefaults = false),
+                featurePlugins = listOf(callerPolicy(ShellExecutionMode.Root), provider, capture(ubuntu) { backend = it }),
+            ))
+            try {
+                assertTrue(runtime.diagnostics().plugins.none { it.id == "provider.settings.platform" })
+                assertEquals("root", backend.run(ShellRequest("mode")).output)
+                val original = backend
+                runtime.replacePlugin(callerPolicy(ShellExecutionMode.Adb))
+                assertFailsWith<IllegalStateException> { original.run(ShellRequest("stale")) }
+                assertEquals("adb", backend.run(ShellRequest("mode")).output)
+                val replaced = backend
+                runtime.pluginManager.setEnabled("test.caller-mode", false)
+                assertEquals(PluginState.Pending, runtime.diagnostics().plugins.single { it.id == provider.descriptor.id }.state)
+                assertFailsWith<IllegalStateException> { replaced.run(ShellRequest("stale")) }
+                runtime.pluginManager.setEnabled("test.caller-mode", true)
+                assertEquals("adb", backend.run(ShellRequest("mode")).output)
+                assertEquals(3, mounts)
+            } finally { runtime.close() }
+        }
+    }
+
+    private fun modeProvider() = kcodePlugin(
+        descriptor("test.settings-mode"), SettingsShellModePlugin, Unit,
+    )
+
     private fun capture(ubuntu: Boolean, accept: (ShellBackend) -> Unit) = kcodePlugin(
         descriptor("test.capture-shell"), plugin<Unit>(
             name = "capture-settings-shell",
@@ -122,7 +181,7 @@ class SettingsShellCompositionTest {
     private fun descriptor(id: String) = PluginDescriptor(id, "test", "test", emptySet())
     private class MemorySettings(mode: ShellExecutionMode) : AppSettingsStore {
         override val protection = SettingsProtection.Transient
-        private var value = StoredAppSettings(shellExecutionMode = mode.code)
+        private var value = LegacySettings(shellExecutionMode = mode.code)
         override suspend fun load() = value
         override suspend fun save(settings: StoredAppSettings) { value = settings }
     }
