@@ -39,11 +39,15 @@ profile operations. Bootstrap reads the last committed intent before a draft and
 legacy snapshots after interrupted initial migration. ProfileCompositionSession implements
 the existing composition store boundary and provides atomic definition/snapshot publication.
 
-These APIs are not yet connected to native hosts. The next phase must bind the resolved tree
-to actual module instances, adapt default product bundles and platform inputs, preserve group
-service scopes, and publish a first generation even when startup does not change its snapshot.
-Do not claim runtime Profile support from preparation tests alone. External entry-instance
-identity, data-scope binding, profile switching and UI management remain outstanding.
+The runtime now accepts ProfileActivation through its managed startup facade. Native controllers
+register modules without creating package-level instances; the Cordis tree retains instance
+IDs, groups, per-instance configuration and code origins. Configurations, inventories, settling
+and application frame preparation precede the atomic generation publisher. Legacy manager
+mutations currently reject declarative mode pending Profile transaction routing.
+
+The shipped hosts do not yet select this mode. Default product bundle adaptation, host inputs,
+data-scope binding, Profile updating/switching, management UI and recovery remain outstanding.
+Do not claim complete native Profile support from the runtime startup tests alone.
 
 Phase-one validation passed: Cordis `:include:jvmTest` (14 tests), Kcode
 `:plugins:profiles:desktopTest` (4 tests), using the Cordis composite source build.
@@ -74,3 +78,18 @@ withdrawal. Credentials and host paths do not belong in exported profile definit
 
 Completion requires all phases, migration tests, real package loading evidence, desktop
 and Android build validation and documentation. Phase-one tests alone are not completion.
+
+## Runtime startup phase evidence
+
+Declarative startup validation passed against the Cordis worktree: 16 Profile compiler,
+repository and preparation tests; 6 ProfileRuntimeTest scenarios; 14 existing runtime tests;
+and 15 existing package integration tests. The new real-JAR scenario verifies private code
+identity, SDK identity, per-instance configuration, code origin and independent cleanup.
+The isolation scenario runs two configured providers and consumers in separate group realms.
+Failure scenarios cover pre-allocation validation and resource cleanup after publication refusal.
+Pending consumers and rejection of late startup were verified as discovered test cases in XML.
+
+Android platform debug Kotlin compilation and the final runtime Android compilation passed.
+No Android device Profile loading, shipped host selection, full Profile package update or
+Profile switching evidence is claimed. Public lazy mount export changes Plugin API to 64;
+the exact existing shared exports cover the new member and external packages must be rebuilt.

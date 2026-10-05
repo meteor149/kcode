@@ -54,14 +54,17 @@ class ConfiguredPluginModuleLoader(
     private fun export(url: String, value: Any?, cache: MutableMap<String, Export>): Any? {
         cache[url]?.takeIf { it.original === value }?.let { return it.wrapped }
         val plugin = value.asDynamicPlugin() ?: return value
-        if (url !in configs) return value
+        val origin = codeOrigin(url)
+        if (url !in configs && origin == null) return value
         // HMR imports the candidate graph before retiring any active fibers. Reject invalid
         // deployment data here, including disabled entries, rather than during replacement apply.
+        val fixed = url in configs
         val configured = configs[url]
-        val validated = plugin.config?.validate(configured) ?: configured
-        val origin = codeOrigin(url)
+        val validated = if (fixed) plugin.config?.validate(configured) ?: configured else null
         val wrapped = object : Plugin<Any?> by plugin {
-            override val config = ConfigValidator<Any?> { validated }
+            override val config = ConfigValidator<Any?> { candidate ->
+                if (fixed) validated else plugin.config?.validate(candidate) ?: candidate
+            }
             override suspend fun apply(ctx: Context, config: Any?, effect: EffectScope) {
                 plugin.apply(origin?.bind(ctx) ?: ctx, config, effect)
             }

@@ -49,6 +49,10 @@ data class ProfileEntry(
     val enabled: Boolean = true,
     val children: List<ProfileEntry>? = null,
     val configurationKind: String = "json",
+    val inject: Map<String, JsonElement> = emptyMap(),
+    val intercept: Map<String, JsonElement> = emptyMap(),
+    /** Null is a local realm; a nonempty label shares that named realm. */
+    val isolate: Map<String, String?> = emptyMap(),
 )
 
 @Serializable

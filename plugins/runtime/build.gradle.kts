@@ -21,6 +21,7 @@ kotlin {
         commonMain.dependencies {
             implementation(compose.runtime)
             api(project(":plugins:api"))
+            api(project(":plugins:profiles"))
             implementation(project(":plugins:bundle-native"))
             implementation(project(":plugins:inventory"))
             implementation(project(":plugins:installation-store"))

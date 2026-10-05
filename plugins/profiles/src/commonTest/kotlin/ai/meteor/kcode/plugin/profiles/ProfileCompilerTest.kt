@@ -11,6 +11,22 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ProfileCompilerTest {
+    @Test
+    fun serviceMetadataUsesNativeContextValuesAndPreservesRealmRules() {
+        val entry = ProfileEntry("consumer", "example.consumer",
+            inject = mapOf("answer" to JsonPrimitive(true)),
+            intercept = mapOf("answer" to JsonPrimitive("configured")),
+            isolate = mapOf("answer" to null, "shared" to "workspace"),
+        )
+        val result = compiler.compile(ProfileDefinition(id = "test", patches = listOf(
+            ProfileOperation.Insert(listOf(entry)),
+        )), emptyList()).requireValid().entries.single()
+        assertEquals(true, result.inject?.get("answer"))
+        assertEquals("configured", result.intercept?.get("answer"))
+        assertEquals(org.cordis.loader.IsolationRule.Local, result.isolate?.get("answer"))
+        assertEquals(org.cordis.loader.IsolationRule.Shared("workspace"), result.isolate?.get("shared"))
+    }
+
     private val compiler = ProfileCompiler()
     private val bundle = ProfileBundle(1, "base", "1", listOf(
         ProfileOperation.Insert(listOf(ProfileEntry("agent", "agent.koog", JsonPrimitive("default")))),

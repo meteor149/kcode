@@ -22,8 +22,14 @@ and FileProvider components. Core's legacy `android.support` binder/parcelizer c
 already use the Android host namespace; their corresponding Core/Parcelable types must
 retain the same host identity.
 
-This shared boundary is Plugin API 63; older
+This shared boundary is Plugin API 64; older
 external packages must be rebuilt against its generated SDK ABI.
+
+API 64 adds lazy `KcodePluginMount.export` for declarative Profile instances.
+Exports preserve typed defaults and ConfigValidator checks while deferring resource
+allocation to apply. Existing opaque host mounts support default configuration only.
+The existing exact KcodePluginMount/KcodePluginCompositionKt exports retain shared identity;
+rebuild external packages against the generated API 64 ABI fingerprint.
 Product tool implementations remain private to their plugin packages.
 
 API 43 introduced `ShellModePolicy` and `KcodeShellMode`. Native Shell consumers declare this

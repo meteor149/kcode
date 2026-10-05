@@ -33,5 +33,16 @@ an interrupted first migration keeps legacy installations available for retry.
 `ProfileCompositionSession` adapts managed runtime snapshot publication to Profile generation
 commits. Hosts must make `commitDefinition` their last fallible transaction step.
 
-This module is under development; native runtime activation, default bundles, profile
-switching and management UI follow the phases in `docs/profiles-implementation.md`.
+`ProfileActivation` passes a resolved tree and its composition session to the managed runtime.
+`KcodePluginRuntimeConfig.profileActivation` selects declarative startup, with lazy builtin
+modules supplied through `profileBuiltinModules`. Groups use the structural `core.group`
+identity and require no package archive. Service injection and interception values are decoded
+to Cordis context values; local and named isolation rules are retained.
+
+Native controllers register release modules separately from tree instances. Per-instance
+configuration and code origins remain independent, and package inventory rows use `package:`
+identities while instance rows use their entry IDs. Runtime startup validates all configurations,
+settles the tree and prepares application snapshots before atomically committing a generation.
+
+This module is under development; default host bundle selection, Profile update/switching,
+data-scope allocation and management UI follow the phases in `docs/profiles-implementation.md`.

@@ -36,11 +36,11 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         fun visit(entries: List<EntryOptions>) {
             entries.forEach { entry ->
                 profileConfiguration(entry)
-                if (entry.name !in builtinModules) referenced += entry.name
                 if (entry.group == true) {
+                    require(entry.name == "core.group" || entry.name == "cordis:group") { "Profile groups use core.group" }
                     val children = entry.config as List<*>
                     visit(children.map { it as EntryOptions })
-                }
+                } else if (entry.name !in builtinModules) referenced += entry.name
             }
         }
         visit(composition.entries)

@@ -73,7 +73,9 @@ class ProfileActivationPreparationTest {
             override suspend fun verify(spec: DynamicPluginSpec) { verified += spec.id }
         }
         val definition = ProfileDefinition(id = "coding", patches = listOf(ProfileOperation.Insert(listOf(
-            ProfileEntry(id = "primary-agent", packageId = "agent", config = JsonPrimitive("custom"), configurationKind = "string"),
+            ProfileEntry(id = "scope", packageId = "core.group", children = listOf(
+                ProfileEntry(id = "primary-agent", packageId = "agent", config = JsonPrimitive("custom"), configurationKind = "string"),
+            )),
         ))))
         val result = ProfileResolver(resolver).resolve(definition, emptyList(), mapOf(
             "agent" to ProfilePackageOffer(PluginPackageImport("agent.kplugin", "1".repeat(64)), setOf("core")),
@@ -83,8 +85,11 @@ class ProfileActivationPreparationTest {
         assertEquals(listOf("agent.kplugin", "core.kplugin"), requests.map { it.archivePath })
         assertEquals(listOf("core", "agent"), result.packages.map { it.id })
         assertEquals(listOf("core", "agent"), verified)
-        assertEquals("primary-agent", result.composition.entries.single().id)
-        assertEquals("custom", profileConfiguration(result.composition.entries.single())?.decode())
+        val group = result.composition.entries.single()
+        assertEquals("scope", group.id)
+        val entry = (group.config as List<*>).single() as org.cordis.loader.EntryOptions
+        assertEquals("primary-agent", entry.id)
+        assertEquals("custom", profileConfiguration(entry)?.decode())
     }
 
     @Test

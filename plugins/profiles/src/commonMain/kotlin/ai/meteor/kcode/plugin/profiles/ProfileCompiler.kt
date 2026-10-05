@@ -6,6 +6,15 @@ import org.cordis.include.PatchOptions
 import org.cordis.include.composeEntries
 import org.cordis.loader.EntryOptions
 import org.cordis.loader.changeTo
+import org.cordis.loader.IsolationRule
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.doubleOrNull
 
 /** Compiles user intent only. Package verification and resource allocation happen during activation. */
 class ProfileCompiler {
@@ -32,6 +41,12 @@ class ProfileCompiler {
 
     private fun entry(value: ProfileEntry): EntryOptions {
         require(value.id.isNotBlank() && value.packageId.isNotBlank()) { "Incomplete profile entry" }
+        require(value.children == null || (value.config == null && value.packageId in setOf("core.group", "cordis:group"))) {
+            "Profile groups use core.group and children rather than a plugin configuration"
+        }
+        require((value.inject.keys + value.intercept.keys + value.isolate.keys).all { it.isNotBlank() }) {
+            "Profile context service identities must not be blank"
+        }
         return EntryOptions(
             id = value.id,
             name = value.packageId,
@@ -39,7 +54,20 @@ class ProfileCompiler {
             group = value.children?.let { true },
             disabled = !value.enabled,
             extra = mapOf("kcode.configurationKind" to value.configurationKind),
+            inject = value.inject.takeIf { it.isNotEmpty() }?.mapValues { (_, value) -> contextValue(value) },
+            intercept = value.intercept.takeIf { it.isNotEmpty() }?.mapValues { (_, value) -> contextValue(value) },
+            isolate = value.isolate.takeIf { it.isNotEmpty() }?.mapValues { (_, realm) ->
+                if (realm == null) IsolationRule.Local else IsolationRule.Shared(realm.also { require(it.isNotBlank()) { "Empty shared realm" } })
+            },
         )
+    }
+
+    private fun contextValue(value: JsonElement): Any? = when (value) {
+        JsonNull -> null
+        is JsonObject -> value.mapValues { (_, child) -> contextValue(child) }
+        is JsonArray -> value.map(::contextValue)
+        is JsonPrimitive -> if (value.isString) value.content else
+            value.booleanOrNull ?: value.longOrNull ?: value.doubleOrNull ?: error("Invalid context value")
     }
 
     private fun patch(operation: ProfileOperation): PatchOptions = when (operation) {
