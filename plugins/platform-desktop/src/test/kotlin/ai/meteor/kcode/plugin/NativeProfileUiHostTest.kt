@@ -4,6 +4,8 @@ import ai.meteor.kcode.createDesktopProfileHost
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.profileui.ProfileUiSession
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
@@ -43,6 +45,23 @@ class NativeProfileUiHostTest {
                 assertFalse(session.state.value.dirty)
                 assertTrue(session.state.value.preview!!.packagesVerified)
                 assertEquals("native", client.catalogue().activeProfileId)
+                val active = host.pluginManager.currentProfile()!!
+                suspend fun edit(operation: ProfileOperation) {
+                    val state = session.state.value
+                    session.appendOperation(state.target!!, state.documentRevision!!, operation)
+                    assertTrue(session.state.value.preview!!.diagnostics.isEmpty())
+                    assertTrue(session.state.value.preview!!.packagesVerified)
+                }
+                edit(ProfileOperation.Insert(listOf(ProfileEntry("ui-tools", "core.group", children = emptyList()))))
+                edit(ProfileOperation.Move("provider.fs.platform", "ui-tools", 0))
+                assertEquals("provider.fs.platform", session.state.value.preview!!.entries.single { it.id == "ui-tools" }.children!!.single().id)
+                edit(ProfileOperation.Disable("provider.fs.platform"))
+                assertFalse(session.state.value.preview!!.entries.single { it.id == "ui-tools" }.children!!.single().enabled)
+                edit(ProfileOperation.Enable("provider.fs.platform"))
+                assertEquals(active, host.pluginManager.currentProfile())
+                assertEquals("native", client.catalogue().activeProfileId)
+                assertEquals(4, FileProfileRepository(home.resolve("profiles").toFile()).loadDraft("ui-copy")!!.patches.size -
+                    committed.definition.patches.size)
             } finally { session.close() }
             host.pluginManager.setEnabled("provider.ui.settings.profiles", false)
             assertTrue(slots.snapshot().settingsSections.none { it.id == "profiles" })

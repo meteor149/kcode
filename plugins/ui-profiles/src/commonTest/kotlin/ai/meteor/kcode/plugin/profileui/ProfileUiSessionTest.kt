@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin.profileui
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
@@ -14,6 +15,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementState
 import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSummary
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileSummary
@@ -122,6 +124,71 @@ class ProfileUiSessionTest {
     }
 
     @Test
+    fun structuredEditsSaveDraftsAndRejectStaleOrDirtyForms(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val target = session.state.value.target!!
+            val revision = session.state.value.documentRevision!!
+            val operation = ProfileOperation.Disable("entry")
+            session.appendOperation(target, revision, operation)
+            assertEquals(listOf(operation), client.definition.patches)
+            assertEquals(ProfileSource.Draft, session.state.value.target!!.source)
+            assertFalse(session.state.value.dirty)
+            assertTrue(session.state.value.preview!!.packagesVerified)
+            assertNull(client.submitted)
+            session.appendOperation(target, revision, ProfileOperation.Enable("entry"))
+            assertEquals(1, client.writes)
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            val current = session.state.value
+            session.edit("unfinished")
+            session.appendOperation(current.target!!, current.documentRevision!!, operation)
+            assertEquals(1, client.writes)
+            assertEquals("unfinished", session.state.value.document)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun savedStructuredIntentRemainsVisibleWhenItsPreviewQueryFails(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            client.failPreview = true
+            session.rename(session.state.value.target!!, session.state.value.documentRevision!!, "Renamed")
+            assertEquals("Renamed", client.definition.displayName)
+            assertEquals(2L, session.state.value.documentRevision)
+            assertEquals(ProfileSource.Draft, session.state.value.target!!.source)
+            assertTrue(session.state.value.document.contains("Renamed"))
+            assertFalse(session.state.value.dirty)
+            assertNull(session.state.value.preview)
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            client.failPreview = false
+            session.preview()
+            assertEquals("Renamed", session.state.value.preview!!.definition.displayName)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun bundleOrderIsExplicitAndHistoricalFormsRequireCloning(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val bundles = listOf(ProfileBundleReference("second", "2"), ProfileBundleReference("first", "1"))
+            session.reorderBundles(session.state.value.target!!, session.state.value.documentRevision!!, bundles)
+            assertEquals(bundles, client.definition.bundles)
+            session.reorderBundles(session.state.value.target!!, session.state.value.documentRevision!!, bundles + bundles.first())
+            assertEquals(1, client.writes)
+            session.select(ProfileTarget("original", ProfileSource.History, 5))
+            session.rename(session.state.value.target!!, session.state.value.documentRevision!!, "Historical overwrite")
+            assertEquals(1, client.writes)
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+        } finally { session.close() }
+    }
+
+    @Test
     fun deletionConfirmationCannotFollowAChangedSelection(): Unit = runTest {
         val client = Client()
         val session = ProfileUiSession(client)
@@ -159,7 +226,8 @@ class ProfileUiSessionTest {
         assertEquals(ProfileCommandPhase.Succeeded, handle.await().phase)
         assertFailsWith<IllegalStateException> { session.activate() }
         assertFailsWith<IllegalStateException> { session.edit("{}") }
-        assertFailsWith<IllegalStateException> { session.refresh() }
+        session.refresh()
+        assertEquals(ProfileCommandPhase.Running, session.state.value.command!!.phase)
     }
 
     @Test
@@ -200,6 +268,7 @@ class ProfileUiSessionTest {
         var revision = 1L
         var writes = 0
         var verified = true
+        var failPreview = false
         var queryGate: CompletableDeferred<Unit>? = null
         var queryStarted: CompletableDeferred<Unit>? = null
         var queryFinished = false
@@ -236,8 +305,10 @@ class ProfileUiSessionTest {
             revision++
             return ProfileCatalogue(revision, null, emptyList())
         }
-        override suspend fun preview(target: ProfileTarget) = ProfilePreview(revision, definition, emptyList(),
-            emptyList(), emptyMap(), verified)
+        override suspend fun preview(target: ProfileTarget): ProfilePreview {
+            check(!failPreview) { "Preview query failed" }
+            return ProfilePreview(revision, definition, emptyList(), emptyList(), emptyMap(), verified)
+        }
         override suspend fun history(id: String) = listOf(ProfileCompositionState(definition, 5))
         override suspend fun modules() = emptyList<ProfileModuleSummary>()
         override fun submit(command: ProfileCommand): ProfileCommandHandle {

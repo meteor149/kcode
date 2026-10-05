@@ -541,3 +541,36 @@ establish session behavior, registration and build compatibility, not visual acc
 actual APK UI resource rendering. Visual tree forms, navigation-away confirmation, rendered
 acceptance, independent recovery UI, initial startup failure recovery, verified Bundle import,
 credential-safe export and the final requirement/platform audit remain outstanding.
+
+## Structured tree and Bundle draft editing
+
+The ui-profiles settings section now includes forms for plugin/group insertion, parent/position
+movement, module replacement, configuration codecs, enable/disable, removal and service scope
+editing. Bundle references can be added, removed or reordered, and the name field can rename
+the selected Profile. Form values become ordinary SDK operations; the shared compiler remains
+the authority for actual composition. Form validation checks identities, available code,
+positions, scalar codecs and parent cycles without provider allocation.
+
+Each structured action binds the selected source and authority revision, saves a draft and
+reloads the host preview. It cannot overwrite an unsaved raw document or a newer editor state.
+Historical intent must be cloned before structured editing. Successful draft publication is
+recorded before preview queries, so a query failure does not hide the saved document. Service
+scope fields initialize from the effective entry, and field-source inspection uses its preview
+origins. Late asynchronous callbacks quietly withdraw through PluginOperationOwner.runIfOpen;
+retained synchronous edit/activation references still reject stale calls.
+
+The concentrated validation passed 17 tests: 10 UI session, 6 tree form/compiler and 1 actual
+native private-JAR contribution case, with zero failures, errors or skipped cases. New cases
+cover nested insertion/reparenting/root return, default versus explicit Unit configuration,
+configuration/identity/module/position refusal, replacement identity guards, local/shared
+service realms, enable/disable/removal, stale/dirty structured forms, successful save followed
+by failed preview, ordered Bundle references and historical editing refusal. The native case
+now saves a grouped filesystem move and disable/enable operations in a cloned draft, verifies
+updated package-verified previews and durable draft operations, and proves the active Profile
+and generation stay unchanged. Desktop compilation and Android app assembly passed against
+Cordis 9f1ceac. No public SDK ABI change is required.
+
+This phase did not run desktop/device rendering or Android instrumentation. Visual acceptance,
+navigation-away confirmation, independent recovery UI, initial startup failure recovery,
+verified Bundle import, credential-safe export and the final requirement/platform audit remain
+outstanding. Structured forms are implemented; the overall goal remains active.

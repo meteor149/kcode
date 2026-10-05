@@ -2,6 +2,7 @@ package ai.meteor.kcode.plugin.profileui
 
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
@@ -14,6 +15,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
 import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSummary
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
@@ -119,6 +121,41 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
         mutableState.value = current.copy(preview = result)
     }
 
+    /** Structured forms save portable intent to the draft; the active tree is never mutated here. */
+    suspend fun appendOperation(target: ProfileTarget, revision: Long, operation: ProfileOperation) {
+        val detached = json.decodeFromString(ProfileOperation.serializer(),
+            json.encodeToString(ProfileOperation.serializer(), operation))
+        changeDraft(target, revision) { it.copy(patches = it.patches + detached) }
+    }
+
+    suspend fun reorderBundles(target: ProfileTarget, revision: Long, bundles: List<ProfileBundleReference>) {
+        val detached = bundles.toList()
+        changeDraft(target, revision) { it.copy(bundles = detached) }
+    }
+
+    suspend fun rename(target: ProfileTarget, revision: Long, name: String) {
+        changeDraft(target, revision) { it.copy(displayName = name) }
+    }
+
+    private suspend fun changeDraft(
+        target: ProfileTarget,
+        revision: Long,
+        change: (ProfileDefinition) -> ProfileDefinition,
+    ) = operation {
+        val current = state.value
+        check(!current.dirty && current.target == target && current.documentRevision == revision) {
+            "Profile editor changed; reload the form"
+        }
+        check(target.source != ProfileSource.History) { "Clone historical intent before editing it" }
+        val definition = change(json.decodeFromString(ProfileDefinition.serializer(), current.document))
+        definition.validate()
+        val next = client.writeDraft(ProfileDraftWrite(definition, revision))
+        // Publish the saved document before preview: a later query failure cannot hide a durable save.
+        mutableState.value = current.copy(catalogue = next, target = ProfileTarget(definition.id, ProfileSource.Draft),
+            document = encode(definition), documentRevision = next.revision, dirty = false, preview = null)
+        load(next, ProfileTarget(definition.id, ProfileSource.Draft))
+    }
+
     suspend fun delete(
         target: ProfileTarget,
         expectedRevision: Long,
@@ -175,7 +212,7 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
 
     private fun encode(definition: ProfileDefinition) = json.encodeToString(ProfileDefinition.serializer(), definition)
 
-    private suspend fun operation(block: suspend () -> Unit) = owner.run {
+    private suspend fun operation(block: suspend () -> Unit) = owner.runIfOpen {
         mutex.withLock {
             mutableState.value = state.value.copy(busy = true, failure = null)
             try { block() }

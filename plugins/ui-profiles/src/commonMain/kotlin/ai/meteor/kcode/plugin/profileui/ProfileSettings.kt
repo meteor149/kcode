@@ -38,6 +38,7 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_preview
 import ai.meteor.kcode.plugin.profileui.resources.profile_queued
 import ai.meteor.kcode.plugin.profileui.resources.profile_recovery
 import ai.meteor.kcode.plugin.profileui.resources.profile_refresh
+import ai.meteor.kcode.plugin.profileui.resources.profile_rename
 import ai.meteor.kcode.plugin.profileui.resources.profile_running
 import ai.meteor.kcode.plugin.profileui.resources.profile_save
 import ai.meteor.kcode.plugin.profileui.resources.profile_saved
@@ -136,6 +137,12 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
                 onClick = { scope.launch { session.create(id, name) } }) { Text(profileText(Res.string.profile_new)) }
             TextButton(enabled = enabled && !state.dirty && state.target != null && id.isNotBlank() && name.isNotBlank(),
                 onClick = { scope.launch { session.clone(id, name) } }) { Text(profileText(Res.string.profile_clone)) }
+            TextButton(enabled = enabled && !state.dirty && state.target != null && state.target!!.source != ProfileSource.History && name.isNotBlank(),
+                onClick = {
+                    val target = state.target!!
+                    val revision = state.documentRevision!!
+                    scope.launch { session.rename(target, revision, name) }
+                }) { Text(profileText(Res.string.profile_rename)) }
         }
         if (state.target != null) item {
             Text(state.target!!.profileId, style = MaterialTheme.typography.titleLarge)
@@ -145,7 +152,12 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
                     scope.launch { session.select(state.target!!, discardEdits = true) }
                 }) { Text(profileText(Res.string.profile_discard)) }
             }
-            OutlinedTextField(state.document, session::edit, Modifier.fillMaxWidth(), enabled = enabled,
+            ProfileTreeEditor(state, enabled,
+                onOperation = { target, revision, operation -> scope.launch { session.appendOperation(target, revision, operation) } },
+                onBundles = { target, revision, bundles -> scope.launch { session.reorderBundles(target, revision, bundles) } })
+            OutlinedTextField(state.document, { document ->
+                try { session.edit(document) } catch (error: IllegalStateException) { /* Withdrawn or busy callbacks cannot edit. */ }
+            }, Modifier.fillMaxWidth(), enabled = enabled,
                 minLines = 10, maxLines = 20, textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 label = { Text(profileText(Res.string.profile_editor)) })
             TextButton(enabled = enabled && state.dirty, onClick = { scope.launch { session.save() } }) {

@@ -14,6 +14,16 @@ their original revision across refreshes; stale publication cannot overwrite ano
 Names, Bundle order, operations and scopes can be edited in the definition document.
 Creation and cloning use isolated business-data scopes and do not copy business data.
 
+Tree forms support plugin/group insertion, explicit position/parent selection, configuration
+codecs, reparenting/order, module replacement, enable/disable, removal and service scope editing.
+They append SDK operations and save a revision-checked draft, then reload the host preview;
+they do not compose an independent tree or change the running Profile. Bundle controls add,
+remove and reorder explicit references, and the name field can rename the selected draft.
+Forms reject duplicates, unavailable modules, invalid codec values and ancestry cycles before
+saving. Historical sources require cloning before structured edits. Unsaved raw documents
+must be saved or discarded before using forms. A saved definition remains visible if its
+subsequent preview query fails. Late asynchronous UI callbacks quietly withdraw after closure.
+
 Accepted activation belongs to the native host. Removing this UI cancels its observer,
 not the accepted command. Explicit cancellation uses the retained command handle. Recent
 command status comes from the host stream, so a reconstructed screen can see the result.
@@ -25,7 +35,6 @@ Existing committed generations retain their frozen version 1 Bundle definitions;
 do not silently acquire new UI. Explicit Profile editing can insert
 `provider.ui.settings.profiles` when that module is available.
 
-This is the first management surface. Visual tree-operation forms, unsaved-edit confirmation
-on navigation away, import/export, independent recovery UI, and rendered desktop/device
+Unsaved-edit confirmation on navigation away, import/export, independent recovery UI, and rendered desktop/device
 acceptance remain outstanding. Unit tests establish session behavior; native tests establish
 actual private JAR contribution registration, withdrawal and recovery, not visual acceptance.

@@ -81,7 +81,7 @@ structural/package preparation diagnostics, entries and field origins. `packages
 does not establish ConfigValidator success, service readiness or provider allocation; those
 remain activation checks. Effective preview entries may contain machine paths, while its
 portable definition does not. The initial default management surface is described below;
-visual tree editing and independent recovery UI remain outstanding.
+rendered management acceptance and independent recovery UI remain outstanding.
 
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
@@ -104,10 +104,20 @@ authority revision; it cannot authorize overwriting another writer. Deletion con
 bound to the selected target and revision. Activation requires a saved, verified diagnostic-free
 preview. The package follows the configured app language and owns resource fallbacks.
 
+Structured tree forms append SDK operations for insertion/grouping, position/parent movement,
+configuration codecs, module replacement, enable/disable, removal and service scope editing.
+Bundle controls add/remove/reorder references, and rename updates the draft name. These save
+revision-checked draft intent and reload the host preview without changing the active runtime.
+Forms cannot overwrite unsaved raw documents or edit historical intent without cloning.
+Duplicate identities, unavailable modules, invalid scalar values and ancestry cycles reject
+form submission. Final structure/package diagnostics remain owned by the shared compiler and
+host preview. Field-source inspection uses the preview's origins. Saved intent remains visible
+when a later preview query fails; late asynchronous callbacks are ignored after withdrawal.
+
 Queries and observers are cancelled/joined on withdrawal. Accepted activation remains owned
 by the host, and recent command state survives UI reconstruction. This screen does not supply
-the independent recovery entry point when the product root fails. Visual tree-operation forms,
-navigation-away confirmation, import/export and rendered desktop/device acceptance remain
+the independent recovery entry point when the product root fails. Navigation-away confirmation,
+import/export and rendered desktop/device acceptance remain
 outstanding. Session and actual JAR contribution tests do not establish visual acceptance.
 
 ## Documents and restart
@@ -261,7 +271,7 @@ requests until host binding; plugin apply must not wait for readiness. Native ho
 The initial default catalogue UI consumes this service through the optional ui-profiles package.
 
 External bundle import, credential-safe export and
-visual tree editing and independent recovery UI remain incomplete.
+rendered management acceptance and independent recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Android tests on
 an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu
