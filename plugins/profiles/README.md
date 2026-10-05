@@ -27,6 +27,12 @@ Replacement supports an expected module
 identity guard. Package verification, credential resolution and platform adaptation belong
 to activation, not compilation.
 
+API 68 adds positioned `Insert` and `Move` operations through the same compiler. Null parent
+selects the root, null position appends, negative indexes count from the remaining list's end,
+and bounds clamp. Move positions apply after removing the target. Invalid parents and cycles
+produce layer/operation diagnostics. Runtime tree transactions recreate changed-parent branches
+in their destination context while retaining same-parent reordered resources.
+
 `FileProfileRepository` shares its JVM implementation between desktop and Android. Drafts
 are independent of committed generations and use immutable documents with authority pointers.
 Legacy `profile.json` and format 1 authority records remain migration inputs; successful mutation

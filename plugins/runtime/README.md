@@ -50,6 +50,12 @@ separate available-code catalogue for each runtime, rejecting collisions and fac
 Native hosts expose selectProfileModule(packageId, moduleId, expected), with active identity/
 generation checks through the existing transaction. Verified external release replacement is separate.
 
+Plugin API 68 active edits include positioned insertion and Move. Compiler output supplies the
+complete candidate hierarchy through the same module/tree/generation publisher. Changed-parent
+branches recreate with destination contexts; same-parent order changes retain resources. Source
+and destination update order cannot dispose newly moved instances. Group shutdown first aborts
+descendant allocations so provider withdrawal cannot wait indefinitely on a paused child.
+
 `ProfileCommandGateway` owns a bounded command queue in the native host scope. Each product
 tree mounts a fresh infrastructure bridge exporting Plugin API 67 `KcodeProfiles`; metadata
 operations belong to that bridge, but accepted activation/edit/module-selection commands belong

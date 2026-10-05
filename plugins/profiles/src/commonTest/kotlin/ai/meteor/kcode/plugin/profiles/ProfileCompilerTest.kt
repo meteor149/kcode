@@ -18,6 +18,46 @@ import kotlin.test.assertTrue
 
 class ProfileCompilerTest {
     @Test
+    fun positionedInsertAndMoveHonorAllLayerPrecedenceAndPersistedIntent() {
+        val definition = ProfileDefinition(id = "ordering", patches = listOf(
+            ProfileOperation.Insert(listOf(
+                ProfileEntry("a", "module"), ProfileEntry("b", "module"),
+                ProfileEntry("group", "core.group", children = emptyList()),
+            )),
+            ProfileOperation.Insert(listOf(ProfileEntry("c", "module")), position = 1),
+            ProfileOperation.Move("b", "group", 0),
+        ))
+        val restored = Json.decodeFromString<ProfileDefinition>(Json.encodeToString(definition))
+        assertEquals(definition, restored)
+        val result = compiler.compile(restored, emptyList(),
+            machineOverrides = listOf(ProfileOperation.Move("b", position = 0)),
+            launchOverrides = listOf(ProfileOperation.Move("b", position = -1)),
+        ).requireValid()
+        assertEquals(listOf("a", "c", "b", "group"), result.entries.map { it.id })
+        assertEquals(emptyList<org.cordis.loader.EntryOptions>(), result.entries.last().config)
+        assertEquals("launch", result.origins["b"]!!.getValue("parent").layer)
+        val user = compiler.compile(restored, emptyList()).requireValid()
+        assertEquals(listOf("a", "c", "group"), user.entries.map { it.id })
+        assertEquals("b", ((user.entries.last().config as List<*>).single() as org.cordis.loader.EntryOptions).id)
+        assertEquals(definition, restored)
+    }
+
+    @Test
+    fun invalidMoveProducesSourceDiagnosticWithoutChangingTheTree() {
+        val definition = ProfileDefinition(id = "ordering", patches = listOf(
+            ProfileOperation.Insert(listOf(ProfileEntry("parent", "core.group", children = listOf(
+                ProfileEntry("child", "core.group", children = emptyList()),
+            )))),
+            ProfileOperation.Move("parent", "child"),
+        ))
+        val result = compiler.compile(definition, emptyList())
+        assertEquals("profile:ordering", result.diagnostics.single().layer)
+        assertEquals(1, result.diagnostics.single().operation)
+        assertEquals("parent", result.entries.single().id)
+        assertFailsWith<IllegalArgumentException> { result.requireValid() }
+    }
+
+    @Test
     fun contextEditsReplaceOnlyPresentFieldsAndReportTheirLayer() {
         val profile = ProfileDefinition(id = "context", patches = listOf(
             ProfileOperation.Insert(listOf(ProfileEntry("entry", "example", inject = mapOf("answer" to JsonPrimitive(true)),

@@ -76,7 +76,7 @@ class ProfileCompiler {
     }
 
     private fun patch(operation: ProfileOperation): PatchOptions = when (operation) {
-        is ProfileOperation.Insert -> PatchOptions(id = operation.parent, insert = operation.entries.map(::entry))
+        is ProfileOperation.Insert -> PatchOptions(id = operation.parent, insert = operation.entries.map(::entry), position = operation.position)
         is ProfileOperation.Configure -> PatchOptions(
             id = operation.target,
             config = changeTo(operation.config),
@@ -90,6 +90,7 @@ class ProfileCompiler {
             replacement = operation.packageId,
         )
         is ProfileOperation.Remove -> PatchOptions(id = operation.target, remove = true)
+        is ProfileOperation.Move -> PatchOptions(id = operation.target, parent = changeTo(operation.parent), position = operation.position)
         is ProfileOperation.Context -> {
             require((operation.inject.orEmpty().keys + operation.intercept.orEmpty().keys + operation.isolate.orEmpty().keys).all { it.isNotBlank() }) {
                 "Profile context service identities must not be blank"

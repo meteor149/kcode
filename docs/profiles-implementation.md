@@ -443,3 +443,41 @@ after failed restoration, full instrumentation-suite coverage or sudden power-lo
 Management/recovery UI, initial startup failure recovery, verified Bundle import,
 credential-safe export, ordering/move operations and the final requirement/platform audit
 remain outstanding. The implementation goal remains active.
+
+## Positioned insertion and tree movement (Plugin API 68)
+
+ProfileOperation.Insert now accepts an optional position, and ProfileOperation.Move records
+a stable instance ID, destination group (null selects the root) and optional position.
+Positions are evaluated after removal; null appends, negative values count from the end and
+out-of-range values are clamped. Legacy insert documents continue to append. The existing
+Profile/machine/launch compiler delegates both operations to the shared Cordis composer,
+including source diagnostics and field provenance. Unknown parents, non-group destinations
+and ancestry cycles reject preparation without modifying committed intent.
+
+Cordis commit 9f1ceac supplies the generic composition and lifecycle changes. Cross-parent
+movement withdraws the old branch before destination allocation and recreates its context;
+same-parent ordering retains Fibers and resources. Cancellation cleans up loading descendants
+before provider withdrawal, including nested moving groups. Failed publication restores the
+previous hierarchy and bindings. Its complete core/loader/include/hmr JVM validation passed
+132 tests (60/40/21/11), with zero failures, errors or skipped cases.
+
+The concentrated kcode build passed 170 tests: 43 SDK, 39 Profile and 88 focused Desktop
+runtime/Profile/package tests, with zero failures, errors or skipped cases. Desktop app
+compilation, Android app assembly and instrumentation APK assembly passed against 9f1ceac.
+New runtime tests cover context rebinding, committed-intent restart, invalid ancestry,
+failed publication rollback and withdrawal/recovery through disabled groups. The actual JAR
+fixture verifies moved instances remain active and share the new Move SDK identity.
+
+The SDK 68 instrumentation APK was installed on the physical ARM64 API 36 device. The extended
+injectedManagementCommandsSurviveWithdrawalAndShareSdkIdentityWithApkProviders case passed:
+OK (1 test), 40.997 seconds, INSTRUMENTATION_CODE -1. It moves the actual APK filesystem provider
+into a newly inserted group through the injected host-owned command queue, verifies generation
+publication, stale filesystem rejection, stable instance identity, shared Move SDK identity,
+and workspace access through the replacement filesystem and App shell. Only this extended
+case ran in this phase; previous device evidence remains separate. This does not establish
+privileged Root/Shizuku authorization, device recovery after failed restoration, full
+instrumentation coverage or sudden power-loss durability.
+
+Management/recovery UI, initial startup failure recovery, verified Bundle import,
+credential-safe export, explicit native Bundle catalogues and the final requirement/platform
+audit remain outstanding. Ordering and movement are now implemented; the overall goal remains active.

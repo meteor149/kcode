@@ -377,6 +377,13 @@ class ProfileRuntimeTest {
                 assertEquals("example.jar:active", second.readText())
                 assertEquals(listOf(spec.id), runtime.pluginManager.installed().map { it.id })
                 assertNotNull(repository.loadCommitted("test"))
+                val current = assertNotNull(runtime.pluginManager.currentProfile())
+                runtime.pluginManager.editProfile(ProfileCompositionEdit("test", current.generation, listOf(
+                    ProfileOperation.Insert(listOf(ProfileEntry("jar-group", "core.group", children = emptyList())), position = 0),
+                    ProfileOperation.Move("another-instance", "jar-group"),
+                )))
+                assertEquals("example.jar:active", second.readText())
+                assertEquals("example.jar:active", first.readText())
             } finally { runtime.close() }
             assertEquals("closed", first.readText())
             assertEquals("closed", second.readText())
@@ -415,6 +422,7 @@ class ProfileJarFixture : Plugin<String> {
     override suspend fun apply(ctx: Context, config: String, effect: EffectScope) {
         check(javaClass.classLoader !== PluginDescriptor::class.java.classLoader)
         check(javaClass.classLoader.loadClass(ProfileDefinition::class.java.name) === ProfileDefinition::class.java)
+        check(javaClass.classLoader.loadClass(ProfileOperation.Move::class.java.name) === ProfileOperation.Move::class.java)
         check(javaClass.classLoader.loadClass(ai.meteor.kcode.plugin.api.profiles.ProfileTarget::class.java.name) === ai.meteor.kcode.plugin.api.profiles.ProfileTarget::class.java)
         check(javaClass.classLoader.loadClass(ai.meteor.kcode.plugin.api.profiles.KcodeProfiles::class.java.name) === ai.meteor.kcode.plugin.api.profiles.KcodeProfiles::class.java)
         check(javaClass.classLoader.loadClass(ai.meteor.kcode.plugin.api.profiles.ProfileCommandHandle::class.java.name) === ai.meteor.kcode.plugin.api.profiles.ProfileCommandHandle::class.java)

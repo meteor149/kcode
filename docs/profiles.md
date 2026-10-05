@@ -43,10 +43,20 @@ Portable definitions, entries, bundles and operations are shared SDK contracts u
 ID and generation before any withdrawal, compiles operations through the ordinary layer stack,
 retains required package dependencies and publishes through the existing module/tree transaction.
 It supports insertion of independently configured instances and groups, configuration replacement,
-enable/disable, replacement, removal and context configuration. Context fields omitted from an
+enable/disable, replacement, removal, movement/ordering and context configuration. Context fields omitted from an
 operation remain unchanged; an empty map clears explicit inject/intercept/isolate configuration.
 Incoming operations and returned intent are detached from caller collections. An empty edit
 returns the current generation without publishing.
+
+Plugin API 68 adds `Move(target, parent, position)` and positioned insertion. Null parent moves
+to the root; null position appends. An index is evaluated after removal, with zero-based positive
+positions, negative positions counting from the end and out-of-range positions clamped. A group
+move keeps its subtree. The composer rejects missing/non-group parents and self/descendant cycles
+without applying the offending operation. Previews and activation share this interpretation and
+retain layer origins for parent/order edits. The tree transaction retires changed-parent branches
+before updating groups and recreates them in the new context, independently of group order.
+Same-parent ordering retains effects/resources. Failed publication or cancelled allocation
+restores the previous hierarchy and realms; successful movement becomes restartable intent.
 
 Plugin API 66 adds catalogue/draft reads, revision-checked draft creation/update, cloning,
 deletion, preview, history and activation. `ProfileTarget` explicitly chooses `Committed`,

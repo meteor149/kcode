@@ -23,6 +23,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommandPhase
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSource
 import ai.meteor.kcode.history.ConversationHistoryRepository
@@ -80,6 +82,18 @@ class AndroidProfileHostTest {
             assertEquals(id, fixture.profiles.catalogue().activeProfileId)
             assertEquals(ProfileModuleSource.Package, fixture.profiles.modules().single { it.id == "provider.fs.platform" }.source)
             assertSame(KcodeProfiles::class.java, checkNotNull(fixture.fs.javaClass.classLoader).loadClass(KcodeProfiles::class.java.name))
+            val current = result.result!!
+            val previousFilesystem = fixture.fs
+            val moved = fixture.profiles.submit(ProfileCommand.Edit(ProfileCompositionEdit(id, current.generation, listOf(
+                ProfileOperation.Insert(listOf(ProfileEntry("workspace-tools", "core.group", children = emptyList())), position = 0),
+                ProfileOperation.Move("provider.fs.platform", "workspace-tools"),
+            )))).await()
+            assertEquals(ProfileCommandPhase.Succeeded, moved.phase)
+            assertEquals(current.generation + 1, moved.result!!.generation)
+            assertEquals(1, fixture.live)
+            assertFailsWith<IllegalStateException> { previousFilesystem.readBytes("/workspace/commands.txt") }
+            assertEquals("provider.fs.platform", fixture.profiles.modules().single { it.id == "provider.fs.platform" }.instances.single())
+            assertSame(ProfileOperation.Move::class.java, checkNotNull(fixture.fs.javaClass.classLoader).loadClass(ProfileOperation.Move::class.java.name))
             fixture.fs.writeBytes("/workspace/commands.txt", "host owned command".encodeToByteArray())
             assertEquals(0, fixture.shell.run(ShellRequest("cat commands.txt")).exitCode)
             withTimeout(10_000) { fixture.profiles.commands.first { values -> values.any { it.id == ticket.id && it.phase == ProfileCommandPhase.Succeeded } } }

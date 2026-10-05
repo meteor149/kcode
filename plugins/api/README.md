@@ -22,7 +22,7 @@ and FileProvider components. Core's legacy `android.support` binder/parcelizer c
 already use the Android host namespace; their corresponding Core/Parcelable types must
 retain the same host identity.
 
-This shared boundary is Plugin API 67; older
+This shared boundary is Plugin API 68; older
 external packages must be rebuilt against its generated SDK ABI.
 
 API 65 exports portable Profile definitions, entries, bundle declarations and operations under
@@ -51,11 +51,19 @@ Ready clients can read/edit drafts, clone, preview, inspect history/modules and 
 active edits or module selection. RecoveryRequired retains host metadata and explicit activation;
 active composition and module queries still require a live product runtime. No UI is implicit.
 
+API 68 adds `ProfileOperation.Move` and the optional `Insert.position`. Null move parent selects
+the root; null position appends. Positions are evaluated after removing a moved entry: positive
+indexes start at zero, negative indexes count from the remaining list's end, and bounds clamp.
+Cross-parent movement recreates the branch in the new context; same-parent ordering retains
+resources. Groups keep their children. Missing/non-group parents and cycles fail composition.
+The existing SDK namespace shares the new operation and serializer identities. Existing insert
+documents decode with append positioning; rebuild packages for the changed SDK/framework ABI.
+
 API 64 adds lazy `KcodePluginMount.export` for declarative Profile instances.
 Exports preserve typed defaults and ConfigValidator checks while deferring resource
 allocation to apply. Existing opaque host mounts support default configuration only.
 The existing exact KcodePluginMount/KcodePluginCompositionKt exports retain shared identity;
-rebuild external packages against the generated API 67 ABI fingerprint.
+rebuild external packages against the generated API 68 ABI fingerprint.
 Product tool implementations remain private to their plugin packages.
 
 API 43 introduced `ShellModePolicy` and `KcodeShellMode`. Native Shell consumers declare this

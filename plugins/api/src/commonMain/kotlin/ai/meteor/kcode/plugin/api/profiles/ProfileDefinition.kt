@@ -59,7 +59,7 @@ data class ProfileEntry(
 sealed interface ProfileOperation {
     @Serializable
     @SerialName("insert")
-    data class Insert(val entries: List<ProfileEntry>, val parent: String? = null) : ProfileOperation
+    data class Insert(val entries: List<ProfileEntry>, val parent: String? = null, val position: Int? = null) : ProfileOperation
 
     @Serializable
     @SerialName("configure")
@@ -80,6 +80,11 @@ sealed interface ProfileOperation {
     @Serializable
     @SerialName("remove")
     data class Remove(val target: String) : ProfileOperation
+
+    /** Null parent selects the root. Position is measured after removal; null appends. */
+    @Serializable
+    @SerialName("move")
+    data class Move(val target: String, val parent: String? = null, val position: Int? = null) : ProfileOperation
 
     /** Null leaves a field unchanged; an empty map removes its explicit context configuration. */
     @Serializable

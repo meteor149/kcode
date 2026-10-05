@@ -13,6 +13,21 @@ import kotlin.test.assertFailsWith
 
 class ProfileContractTest {
     @Test
+    fun moveAndPositionedInsertHaveStableWireTypesAndLegacyInsertDefaults() {
+        val definition = ProfileDefinition(id = "ordering", patches = listOf(
+            ProfileOperation.Insert(listOf(ProfileEntry("leaf", "module")), "group", -1),
+            ProfileOperation.Move("leaf", position = 0),
+        ))
+        val encoded = Json.encodeToString(ProfileDefinition.serializer(), definition)
+        assertTrue(encoded.contains("\"type\":\"move\""))
+        assertEquals(definition, Json.decodeFromString(ProfileDefinition.serializer(), encoded))
+        val legacy = Json.decodeFromString(ProfileOperation.serializer(), """{"type":"insert","entries":[],"parent":"group"}""")
+        assertEquals(ProfileOperation.Insert(emptyList(), "group"), legacy)
+        val root = Json.decodeFromString(ProfileOperation.serializer(), """{"type":"move","target":"leaf","parent":null}""")
+        assertEquals(ProfileOperation.Move("leaf"), root)
+    }
+
+    @Test
     fun activationTargetsDistinguishSavedDraftAndHistoricalIntent() {
         ProfileTarget("coding").validate()
         ProfileTarget("coding", ProfileSource.Draft).validate()
