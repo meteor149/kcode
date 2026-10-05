@@ -644,3 +644,29 @@ navigation, all structured forms, activation from UI, touch/keyboard accessibili
 dismissal path or desktop rendering. Independent recovery UI, initial startup failure recovery,
 verified Bundle import, credential-safe export, closure/restoration failure audit and final
 requirement/platform acceptance remain outstanding. The overall goal remains active.
+
+## Provider retirement failure evidence
+
+Cordis a95f74f propagates collected cleanup failures rather than merely logging them.
+It attempts every release, preserves the original allocation cause with cleanup failures
+suppressed, and prevents update/restart/dependency recovery from allocating another instance
+after unsafe retirement. Repeated disposal retains its result without repeating releases.
+The final core/loader/include/HMR suites passed 135 tests with zero failures, errors or skips.
+An earlier combined run repeated the known IsolationParityTest relocated-provider ACTIVE/PENDING
+mismatch; subsequent full-suite execution passed, but this does not establish that the
+intermittent isolation settling issue has been fixed. That audit remains outstanding.
+
+The desktop host fixture now injects failure inside the actual provider's collected disposer,
+rather than only throwing in a host adapter after successful runtime close. It proves that
+switching leaves durable selection/history unchanged, enters RecoveryRequired, rejects agent
+calls, attempts independent cleanup, and cannot allocate the target through explicit recovery.
+Clearing the injected error does not rerun the failed disposer or certify resource retirement.
+Host closure likewise preserves the terminal failure. Adapter failures after successful close
+remain separately retryable. Final focused host/runtime validation passed 36 tests (7 native
+host, 17 host, 12 runtime), with zero failures, errors or skips, against the rebuilt packages.
+Desktop application compilation and Android application assembly passed in the same phase.
+
+This establishes provider cleanup propagation at the host switch boundary. It does not prove
+intra-Profile failed-restoration escalation, independent recovery UI, failure handling before
+initial host construction, device cleanup-failure behavior, or final platform acceptance.
+The overall goal remains active.

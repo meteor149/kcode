@@ -40,9 +40,13 @@ the host also offers `recoverTo(id)` for normal committed/draft startup selectio
 fresh resources and appends a generation only after successful allocation and publication.
 Failed or cancelled attempts retain `RecoveryRequired` and the previous authority.
 
-Owners whose closure failed are retained for explicit cleanup retry. No candidate allocation or
-automatic old-runtime restoration overlaps such an owner. If closure continues to fail, recovery
-continues to reject allocation; a process restart may be needed. This host command path does not
+Owners whose closure failed are retained and recovery calls their closure boundary again. No
+candidate allocation or automatic old-runtime restoration overlaps such an owner. Cordis Fiber
+cleanup failures are terminal for that Fiber: every disposer is attempted, its failure is retained,
+and subsequent disposal reports the failure without rerunning releases. Runtime closure likewise
+retains its completion result. Recovery therefore cannot certify a failed provider's retirement
+simply by calling close again; a process restart or explicit resource recovery mechanism is needed.
+This differs from a retryable host adapter failure after a successful runtime close. This host command path does not
 yet provide an independent recovery UI or recover failures before initial host construction.
 
 Portable definitions, entries, bundles and operations are shared SDK contracts under

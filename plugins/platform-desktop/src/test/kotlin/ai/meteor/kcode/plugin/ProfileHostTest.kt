@@ -349,6 +349,39 @@ class ProfileHostTest {
         } finally { fixture.close() }
     }
 
+    @Test
+    fun providerCleanupFailureClosesAdmissionAndCannotAllocateThroughRecovery(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.failProviderCleanup += "old"
+            val failure = assertFailsWith<IllegalStateException> { host.switchTo("target") }
+            assertEquals("provider cleanup refused for old", failure.message)
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(before, fixture.repository.state())
+            assertEquals(listOf("old"), fixture.allocations)
+            assertEquals(listOf("old"), fixture.cleanupAttempts)
+            assertTrue(fixture.live.isEmpty())
+            assertFailsWith<IllegalStateException> {
+                host.chatService.reply(configuration, emptyList(), "after cleanup failure")
+            }
+            // The failed disposer has already run. Removing the injected failure cannot
+            // certify retirement or allow another owner to overlap its resources.
+            fixture.failProviderCleanup.clear()
+            assertFailsWith<IllegalStateException> { host.recoverTo("target") }
+            assertEquals(listOf("old"), fixture.allocations)
+            assertEquals(listOf("old"), fixture.cleanupAttempts)
+            assertEquals(before, fixture.repository.state())
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertFailsWith<IllegalStateException> { host.close() }
+        } finally {
+            try { fixture.host?.close() } catch (_: IllegalStateException) {
+                // The host preserves the already-observed terminal cleanup failure.
+            } finally { fixture.root.deleteRecursively() }
+        }
+    }
+
     private class Fixture {
         val root = Files.createTempDirectory("kcode-profile-host").toFile()
         val storage = FileProfileRepository(root)
@@ -365,6 +398,8 @@ class ProfileHostTest {
         val allocations = mutableListOf<String>()
         val failAllocation = mutableSetOf<String>()
         val failClosure = mutableSetOf<String>()
+        val failProviderCleanup = mutableSetOf<String>()
+        val cleanupAttempts = mutableListOf<String>()
         var suspendAllocation: CompletableDeferred<Unit>? = null
         var reply: suspend (String) -> String = { it }
         var host: KcodeProfileHost? = null
@@ -404,6 +439,10 @@ class ProfileHostTest {
                 live += id
                 allocations += id
                 collect { live.remove(id) }
+                collect {
+                    cleanupAttempts += id
+                    if (id in failProviderCleanup) error("provider cleanup refused for $id")
+                }
                 if (id in failAllocation) error("allocation refused for $id")
                 if (id == "target" && suspendAllocation != null) {
                     suspendAllocation!!.complete(Unit)
