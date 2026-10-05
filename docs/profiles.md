@@ -22,7 +22,19 @@ and join them. Target preflight precedes old-runtime withdrawal; failed allocati
 reconstructs the old locked generation without rewriting history. Failed old closure or failed
 restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's admitted current
 runtime rather than a retained old owner. Each allocation receives fresh host inputs. Recovery UI
-remains pending. These controls are currently native runtime APIs, not an exported Profile management SDK.
+remains pending. Whole-host switching is currently a native runtime API.
+
+Portable definitions, entries, bundles and operations are shared SDK contracts under
+`ai.meteor.kcode.plugin.api.profiles` (Plugin API 65). The stable `AgentPluginManager` exposes
+`currentProfile()` and `editProfile(ProfileCompositionEdit)`. An edit compares the active Profile
+ID and generation before any withdrawal, compiles operations through the ordinary layer stack,
+retains required package dependencies and publishes through the existing module/tree transaction.
+It supports insertion of independently configured instances and groups, configuration replacement,
+enable/disable, replacement, removal and context configuration. Context fields omitted from an
+operation remain unchanged; an empty map clears explicit inject/intercept/isolate configuration.
+Incoming operations and returned intent are detached from caller collections. An empty edit
+returns the current generation without publishing. Draft/catalogue management,
+preview, historical activation and switching SDK commands remain separate outstanding work.
 
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
@@ -136,7 +148,7 @@ Code availability and locked releases do not change during an enable-only transa
 Publication failure preserves the previous committed intent. Repository generation CAS
 remains the authority for concurrent writers.
 
-Public Profile editing/activation commands,
+Complete public Profile management/activation commands,
 external bundle import, credential-safe export and management/recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Three Android tests on

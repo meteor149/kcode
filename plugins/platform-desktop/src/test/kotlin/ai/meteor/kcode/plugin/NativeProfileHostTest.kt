@@ -3,8 +3,8 @@ package ai.meteor.kcode.plugin
 import ai.meteor.kcode.createDesktopKoogChatRuntime
 import ai.meteor.kcode.createDesktopProfileHost
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
-import ai.meteor.kcode.plugin.profiles.ProfileDataScope
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -40,6 +40,8 @@ class NativeProfileHostTest {
         val host = createDesktopProfileHost(homeDirectory = home, profile = hostProfile)
         try {
             val facade = host.runtime
+            val manager = assertNotNull(facade.pluginManager)
+            val initialState = assertNotNull(manager.currentProfile())
             val baseline = assertNotNull(repository.loadCommitted("native"))
             val headless = baseline.definition.copy(id = "headless", dataScope = ProfileDataScope(),
                 patches = baseline.definition.patches + ProfileOperation.Disable("provider.ui.compose"))
@@ -47,6 +49,14 @@ class NativeProfileHostTest {
             host.switchTo("headless")
             assertSame(facade, host.runtime)
             assertEquals("headless", repository.selected())
+            assertEquals("headless", manager.currentProfile()!!.definition.id)
+            assertFailsWith<IllegalArgumentException> {
+                manager.editProfile(ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit(
+                    initialState.definition.id, initialState.generation, emptyList()))
+            }
+            val switchedState = assertNotNull(manager.currentProfile())
+            assertEquals(switchedState, manager.editProfile(ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit(
+                switchedState.definition.id, switchedState.generation, emptyList())))
             val saved = facade.applicationContent!!.updateSettings(SettingsUpdate(mapOf("search-provider" to "exa"))).settings
             history.appendMessage(1, "Live scope", 1, "User", "headless data")
             val oldSettings = settings

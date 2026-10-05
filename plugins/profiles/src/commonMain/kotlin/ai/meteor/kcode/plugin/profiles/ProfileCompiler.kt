@@ -1,5 +1,9 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import org.cordis.include.CompositionLayer
 import org.cordis.include.CompositionResult
 import org.cordis.include.PatchOptions
@@ -7,6 +11,7 @@ import org.cordis.include.composeEntries
 import org.cordis.loader.EntryOptions
 import org.cordis.loader.changeTo
 import org.cordis.loader.IsolationRule
+import org.cordis.loader.FieldPatch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -85,5 +90,18 @@ class ProfileCompiler {
             replacement = operation.packageId,
         )
         is ProfileOperation.Remove -> PatchOptions(id = operation.target, remove = true)
+        is ProfileOperation.Context -> {
+            require((operation.inject.orEmpty().keys + operation.intercept.orEmpty().keys + operation.isolate.orEmpty().keys).all { it.isNotBlank() }) {
+                "Profile context service identities must not be blank"
+            }
+            PatchOptions(
+                id = operation.target,
+                inject = operation.inject?.let { changeTo(it.mapValues { (_, value) -> contextValue(value) }) } ?: FieldPatch.Keep,
+                intercept = operation.intercept?.let { changeTo(it.mapValues { (_, value) -> contextValue(value) }) } ?: FieldPatch.Keep,
+                isolate = operation.isolate?.let { rules -> changeTo(rules.mapValues { (_, realm) ->
+                    if (realm == null) IsolationRule.Local else IsolationRule.Shared(realm.also { require(it.isNotBlank()) { "Empty shared realm" } })
+                }) } ?: FieldPatch.Keep,
+            )
+        }
     }
 }

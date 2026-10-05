@@ -1,4 +1,4 @@
-package ai.meteor.kcode.plugin.profiles
+package ai.meteor.kcode.plugin.api.profiles
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -20,7 +20,7 @@ internal object ProfileEntrySerializer : KSerializer<ProfileEntry> {
         val json = encoder as? JsonEncoder ?: error("Profile entries require JSON")
         val metadata = ProfileEntryMetadata(value.id, value.packageId, value.enabled, value.children,
             value.configurationKind, value.inject, value.intercept, value.isolate)
-        val fields = (json.json.encodeToJsonElement(metadata) as JsonObject).toMutableMap()
+        val fields = (json.json.encodeToJsonElement(metadata) as JsonObject).toMutableMap().apply { remove("config") }
         value.config?.let { fields["config"] = it }
         json.encodeJsonElement(JsonObject(fields))
     }
@@ -35,6 +35,7 @@ internal object ProfileEntrySerializer : KSerializer<ProfileEntry> {
 }
 
 @Serializable
+@kotlinx.serialization.SerialName("ai.meteor.kcode.plugin.api.profiles.ProfileEntry")
 private data class ProfileEntryMetadata(
     val id: String,
     val packageId: String,
@@ -44,4 +45,5 @@ private data class ProfileEntryMetadata(
     val inject: Map<String, JsonElement> = emptyMap(),
     val intercept: Map<String, JsonElement> = emptyMap(),
     val isolate: Map<String, String?> = emptyMap(),
+    val config: JsonElement? = null,
 )

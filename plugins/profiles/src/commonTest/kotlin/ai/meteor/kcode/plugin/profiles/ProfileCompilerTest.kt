@@ -1,5 +1,11 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -11,6 +17,23 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ProfileCompilerTest {
+    @Test
+    fun contextEditsReplaceOnlyPresentFieldsAndReportTheirLayer() {
+        val profile = ProfileDefinition(id = "context", patches = listOf(
+            ProfileOperation.Insert(listOf(ProfileEntry("entry", "example", inject = mapOf("answer" to JsonPrimitive(true)),
+                isolate = mapOf("answer" to null)))),
+            ProfileOperation.Context("entry", inject = emptyMap(), isolate = mapOf("answer" to "shared")),
+        ))
+        val result = compiler.compile(profile, emptyList()).requireValid()
+        val entry = result.entries.single()
+        assertEquals(emptyMap(), entry.inject)
+        assertEquals(org.cordis.loader.IsolationRule.Shared("shared"), entry.isolate?.get("answer"))
+        assertEquals("profile:context", result.origins["entry"]?.get("isolate")?.layer)
+        assertFailsWith<IllegalArgumentException> {
+            compiler.compile(profile.copy(patches = profile.patches + ProfileOperation.Context("entry", isolate = mapOf("answer" to ""))), emptyList())
+        }
+    }
+
     @Test
     fun persistedExplicitNullRemainsDifferentFromOmittedConfiguration() {
         val definition = ProfileDefinition(id = "nullable", patches = listOf(ProfileOperation.Insert(listOf(

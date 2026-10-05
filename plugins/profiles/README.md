@@ -5,6 +5,14 @@ references, user operations and logical data scopes. `ProfileCompiler` delegates
 interpretation to Cordis's detached composition engine, so preview and activation can share
 the same semantics. It does not import modules or allocate providers.
 
+Portable definitions, entries, bundles and operations are SDK types in
+`plugins/api`, under `ai.meteor.kcode.plugin.api.profiles`. This module retains the private
+compiler, native activation, repository and migration implementations. API 65 exposes active
+declaration reads/edits through `AgentPluginManager`; generation-checked edits use the runtime's
+managed module/tree publisher. Returned intent and incoming operations are detached from caller
+collections. Context operations replace present fields and clear explicit configuration when
+given empty maps.
+
 Layer precedence is bundle order, profile, machine and launch. Configure replaces the whole
 configuration; an absent entry config uses the module default, while explicit JSON null is
 preserved. Configuration kinds retain SDK scalar and Unit identities during migration.
@@ -24,7 +32,7 @@ authority fails closed without rewrite. Legacy commits/selection import once wit
 history and atomic `commitAndSelect` with generation and revision checks. Unpublished files
 cannot become recovery candidates. Removing a Profile withdraws its authority record while
 retaining unreachable metadata for separate reclamation; recreation starts a new history.
-Runtime switching still needs to coordinate staged activation with this atomic publisher.
+Native runtime switching coordinates staged activation with this atomic publisher.
 
 Native preparation can opt into `stageSwitch` for an explicit target. The session stages
 startup intent/snapshots without saving drafts, advancing history or changing selection.
@@ -68,9 +76,11 @@ Restarting retains previously verified release identities instead of silently up
 them from distribution offers. Machine overlays configure every matching package instance
 without putting local paths into portable intent.
 
-The shipped factories now bind settings/history scopes on both native platforms and workspace
-directories on desktop. Caller-supplied stores remain borrowed. Profile update/switching,
-Android workspace scope enforcement and management UI remain under development. See
+The shipped factories bind settings/history/workspace scopes on both native platforms.
+Android App shell and Ubuntu share the scoped workspace with file tools; app-private scopes
+reject ADB execution before authorization. Root execution remains unverified. Caller-supplied
+stores remain borrowed. Native switching and active declaration edits are implemented; complete
+catalogue/draft/history activation commands and management/recovery UI remain under development. See
 `docs/profiles.md` and `docs/profiles-implementation.md`.
 
 Resolved profiles retain machine and launch operations separately from portable definitions.

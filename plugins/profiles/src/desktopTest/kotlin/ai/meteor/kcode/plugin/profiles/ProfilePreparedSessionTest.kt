@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.DynamicPluginSpec
 import ai.meteor.kcode.plugin.PluginPackageImport
 import ai.meteor.kcode.plugin.PluginPackageResolver

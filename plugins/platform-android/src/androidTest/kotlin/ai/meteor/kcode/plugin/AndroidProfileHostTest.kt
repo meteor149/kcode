@@ -13,8 +13,8 @@ import ai.meteor.kcode.plugin.api.ShellBackend
 import ai.meteor.kcode.plugin.api.ShellRequest
 import ai.meteor.kcode.plugin.nativefilesystem.AndroidNativeFileSystemPlugin
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
-import ai.meteor.kcode.plugin.profiles.ProfileDataScope
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsUpdate

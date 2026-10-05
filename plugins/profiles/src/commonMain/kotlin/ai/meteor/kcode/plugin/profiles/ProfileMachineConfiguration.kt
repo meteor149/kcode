@@ -1,5 +1,9 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
 import org.cordis.loader.EntryOptions
 

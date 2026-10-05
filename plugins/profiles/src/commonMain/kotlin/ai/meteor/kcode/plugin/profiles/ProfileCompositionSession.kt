@@ -1,11 +1,15 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
 import ai.meteor.kcode.plugin.api.PluginCompositionStore
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 
 /** Adapts managed runtime publication to an atomic Profile generation. No Loader bypass. */
 class ProfileCompositionSession private constructor(
@@ -26,6 +30,11 @@ class ProfileCompositionSession private constructor(
     private val original = initial
 
     override suspend fun load(): PluginCompositionSnapshot = mutex.withLock { snapshot }
+
+    suspend fun currentCompositionState(): ProfileCompositionState = mutex.withLock {
+        val detached = Json.decodeFromString(ProfileDefinition.serializer(), Json.encodeToString(ProfileDefinition.serializer(), definition))
+        ProfileCompositionState(detached, checkNotNull(generation) { "Profile has not been published" })
+    }
 
     override suspend fun save(snapshot: PluginCompositionSnapshot) = mutex.withLock {
         publish(definition, snapshot)

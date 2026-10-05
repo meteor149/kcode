@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.channels.FileChannel

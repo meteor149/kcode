@@ -4,7 +4,6 @@ import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
 import ai.meteor.kcode.plugin.BundledPluginPackage
 import ai.meteor.kcode.plugin.packages.desktopPackageHost
-
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.kcodePlugin
 import java.awt.Frame
@@ -33,7 +32,7 @@ import ai.meteor.kcode.plugin.packages.NativePluginPackageResolver
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileStartupFactory
 import ai.meteor.kcode.plugin.profiles.ProfilePackageOffer
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.profiles.prepareNativeProfileActivation
 import ai.meteor.kcode.plugin.profiles.profileMachineConfiguration
 import ai.meteor.kcode.plugin.profiles.profileDataScopeKey

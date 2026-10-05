@@ -242,3 +242,39 @@ typed replacement, public Profile management SDK, declaration editing, external 
 credential-safe export and management/recovery UI remain outstanding. This evidence does not
 establish successful Shizuku/Root execution, full device-suite coverage or sudden power-loss
 durability. See [verification](verification.md) for evidence boundaries.
+
+## Public active-declaration editing evidence
+
+Plugin API 65 moves portable definitions, entries, bundle references/declarations and operations
+into `plugins/api`, under the existing shared `ai.meteor.kcode.plugin.api` export. Implementation
+repositories, activations and native coordinators remain private. Entry serialization retains
+omitted-versus-explicit-null meaning and now describes the optional configuration field in its
+SDK descriptor. Older external packages require rebuilding against the generated API 65 ABI.
+
+`AgentPluginManager.currentProfile` returns detached committed intent/generation. `editProfile`
+compares active identity and generation, freezes incoming operations and compiles against the same
+bundle/machine/launch stack as startup. Required package closure, validation, instance bindings,
+tree/module rollback and publication use the existing manager transaction. Context operations
+support partial inject/intercept/isolate replacement and empty-map clearing. Stable host facades
+delegate these commands to the admitted current runtime; stale identity after switching rejects.
+
+The final phase build passed 141 tests: 41 SDK, 33 Profile compiler/repository/preparation and
+67 related desktop runtime/native/package tests. Desktop app compilation, Android app assembly
+and platform instrumentation APK assembly passed against Cordis `f08918d`. New scenarios cover
+wire null/default distinctions and descriptor fields, context layer provenance, grouped multi-instance
+editing, configuration/context changes, group removal, unaffected providers, detached collections,
+stale/no-op edits, invalid configuration, refused publication and successful retry. The real JAR
+fixture verifies Profile DTO identity is shared with the host SDK while its implementation is private.
+
+The final API 65 instrumentation APK was installed and all three `AndroidProfileHostTest` cases
+passed on the ARM64 API 36 physical device (`OK (3 tests)`, 191.826 seconds). This revalidates
+actual APK-provider switching, scoped data/App/Ubuntu workspace IO, stale references, restart,
+failed allocation recovery and pre-authorization ADB rejection against the new SDK. The new
+active-edit commands are behavior-tested on Desktop/common runtime and compiled on Android;
+these device cases do not independently exercise the SDK editing command or prove privileged
+authorization. All 141 desktop tests reported zero failures/errors and zero skipped cases.
+
+This phase exposes active declaration editing, not complete Profile catalogue/draft/history
+management. Public preview and historical activation, external Bundle import, credential-safe
+export, typed host-module replacement and management/recovery UI still require implementation
+and their own validation. Final whole-suite and platform evidence remain necessary for completion.

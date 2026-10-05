@@ -1,5 +1,9 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
 
 /** Pure legacy migration. Publication happens only after package/runtime activation succeeds. */

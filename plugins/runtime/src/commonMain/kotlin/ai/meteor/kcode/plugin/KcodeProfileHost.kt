@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
 import ai.meteor.kcode.AgentConversationOverlayController
 import ai.meteor.kcode.AgentConversationOverlayTurn
 import ai.meteor.kcode.AgentRuntimeOwner
@@ -119,6 +120,9 @@ class KcodeProfileHost(
     }
 
     val pluginManager: AgentPluginManager = object : AgentPluginManager {
+        override suspend fun currentProfile() = call { checkNotNull(it.pluginManager).currentProfile() }
+        override suspend fun editProfile(edit: ProfileCompositionEdit) =
+            call { checkNotNull(it.pluginManager).editProfile(edit) }
         override suspend fun importPackages(packages: List<PluginPackageImport>) = call { checkNotNull(it.pluginManager).importPackages(packages) }
         override suspend fun applyChanges(changes: PluginCompositionChange) = call { checkNotNull(it.pluginManager).applyChanges(changes) }
         override suspend fun install(spec: DynamicPluginSpec) = call { checkNotNull(it.pluginManager).install(spec) }

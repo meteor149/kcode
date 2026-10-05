@@ -1,8 +1,18 @@
 package ai.meteor.kcode.plugin
 
-const val CurrentPluginApiVersion = 64
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
+
+const val CurrentPluginApiVersion = 65
 
 interface AgentPluginManager {
+    /** Null when this runtime does not use declarative Profiles. */
+    suspend fun currentProfile(): ProfileCompositionState? = null
+
+    /** Edit instances of the active Profile through the same managed publication boundary. */
+    suspend fun editProfile(edit: ProfileCompositionEdit): ProfileCompositionState =
+        error("This manager does not support Profile editing")
+
     /** Resolve platform packages and commit the complete dependency set as one composition. */
     suspend fun importPackages(packages: List<PluginPackageImport>): Unit =
         error("This manager does not support plugin package archives")

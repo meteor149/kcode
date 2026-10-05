@@ -17,11 +17,11 @@ import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.profiles.ProfileCompiler
 import ai.meteor.kcode.plugin.profiles.ProfileCompositionSession
-import ai.meteor.kcode.plugin.profiles.ProfileDefinition
-import ai.meteor.kcode.plugin.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.profiles.ProfileGenerationRepository
 import ai.meteor.kcode.plugin.profiles.ProfileLock
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.profiles.ResolvedProfile
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.nio.file.Files

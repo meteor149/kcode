@@ -1,4 +1,4 @@
-package ai.meteor.kcode.plugin.profiles
+package ai.meteor.kcode.plugin.api.profiles
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -80,6 +80,16 @@ sealed interface ProfileOperation {
     @Serializable
     @SerialName("remove")
     data class Remove(val target: String) : ProfileOperation
+
+    /** Null leaves a field unchanged; an empty map removes its explicit context configuration. */
+    @Serializable
+    @SerialName("context")
+    data class Context(
+        val target: String,
+        val inject: Map<String, JsonElement>? = null,
+        val intercept: Map<String, JsonElement>? = null,
+        val isolate: Map<String, String?>? = null,
+    ) : ProfileOperation
 }
 
 @Serializable

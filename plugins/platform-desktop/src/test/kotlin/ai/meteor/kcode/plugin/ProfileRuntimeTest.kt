@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
@@ -8,10 +9,10 @@ import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.profiles.ProfileCompiler
 import ai.meteor.kcode.plugin.profiles.ProfileCompositionSession
-import ai.meteor.kcode.plugin.profiles.ProfileDefinition
-import ai.meteor.kcode.plugin.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.profiles.ProfileLock
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.profiles.ProfileRepository
 import ai.meteor.kcode.plugin.profiles.ResolvedProfile
 import ai.meteor.kcode.tools.permission.ToolCallApprover
@@ -36,6 +37,95 @@ import org.cordis.dependencies
 import org.cordis.plugin
 
 class ProfileRuntimeTest {
+    @Test
+    fun publicEditingChangesConfigurationAndGroupedInstancesInOneGeneration() = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-edit").toFile()
+        val repository = FileProfileRepository(root)
+        val observed = mutableListOf<String>()
+        val released = mutableListOf<String>()
+        val answer = ServiceKey<String>("profileEditAnswer")
+        val provider = kcodePlugin(descriptor("example.provider"), plugin<String>(validator = ConfigValidator { it }) { context, value ->
+            context.provide(answer, value)
+            collect { released += value }
+        }, "default")
+        val consumer = kcodePlugin(descriptor("example.consumer"), plugin<Unit>(inject = dependencies(answer)) { context, _ ->
+            observed += context.require(answer)
+        }, Unit)
+        fun group(id: String, value: String) = ProfileEntry(id, "core.group", children = listOf(
+            ProfileEntry("$id-provider", "example.provider", JsonPrimitive(value), configurationKind = "string"),
+            ProfileEntry("$id-consumer", "example.consumer"),
+        ), isolate = mapOf(answer.name to null))
+        val runtime = start(repository, definition(group("first", "one"), group("second", "two")), listOf(provider, consumer))
+        try {
+            val before = assertNotNull(runtime.pluginManager.currentProfile())
+            val realm = mutableMapOf<String, String?>(answer.name to "edited-realm")
+            val operations = listOf(
+                ProfileOperation.Configure("first-provider", JsonPrimitive("changed"), "string"),
+                ProfileOperation.Context("first", isolate = realm),
+                ProfileOperation.Insert(listOf(group("third", "three"))),
+            )
+            val after = runtime.pluginManager.editProfile(ProfileCompositionEdit("test", before.generation, operations))
+            assertEquals(2L, after.generation)
+            assertEquals(operations, after.definition.patches.takeLast(operations.size))
+            assertEquals(after.definition, repository.loadCommitted("test")!!.definition)
+            assertEquals(after, runtime.pluginManager.currentProfile())
+            realm[answer.name] = "mutated-after-command"
+            assertEquals("edited-realm", (runtime.pluginManager.currentProfile()!!.definition.patches.takeLast(3)[1] as ProfileOperation.Context).isolate!![answer.name])
+            (after.definition.patches as MutableList<ProfileOperation>).clear()
+            assertEquals(4, runtime.pluginManager.currentProfile()!!.definition.patches.size)
+            assertEquals("two", observed[1])
+            kotlin.test.assertTrue("changed" in observed && "three" in observed)
+            kotlin.test.assertTrue("two" !in released)
+            assertEquals(PluginState.Active, runtime.inventory.snapshot().single { it.id == "third-consumer" }.state)
+            runtime.pluginManager.editProfile(ProfileCompositionEdit("test", after.generation,
+                listOf(ProfileOperation.Remove("first"))))
+            assertEquals(3L, repository.loadCommitted("test")!!.generation)
+            kotlin.test.assertTrue(runtime.inventory.snapshot().none { it.id == "first-provider" })
+            assertEquals(PluginState.Active, runtime.inventory.snapshot().single { it.id == "second-consumer" }.state)
+        } finally { runtime.close(); root.deleteRecursively() }
+    }
+
+    @Test
+    fun publicEditingRejectsStaleIntentAndRestoresFailedPublication() = runBlocking {
+        val root = Files.createTempDirectory("kcode-profile-edit-failure").toFile()
+        val storage = FileProfileRepository(root)
+        var refuse = false
+        val repository = object : ProfileRepository by storage {
+            override suspend fun commit(value: CommittedProfileGeneration, expectedGeneration: Long?) {
+                check(!refuse) { "publication refused" }
+                storage.commit(value, expectedGeneration)
+            }
+        }
+        var allocations = 0
+        var releases = 0
+        val provider = kcodePlugin(descriptor("example.provider"), plugin<String>(validator = ConfigValidator { require(it != "bad"); it }) { _, _ ->
+            allocations++
+            collect { releases++ }
+        }, "default")
+        val runtime = start(repository, definition(ProfileEntry("provider", "example.provider")), listOf(provider))
+        try {
+            val before = assertNotNull(runtime.pluginManager.currentProfile())
+            val edit = ProfileCompositionEdit("test", before.generation,
+                listOf(ProfileOperation.Configure("provider", JsonPrimitive("changed"), "string")))
+            assertFailsWith<IllegalArgumentException> { runtime.pluginManager.editProfile(edit.copy(expectedGeneration = 0)) }
+            assertFailsWith<IllegalArgumentException> { runtime.pluginManager.editProfile(edit.copy(profileId = "other")) }
+            assertFailsWith<IllegalArgumentException> { runtime.pluginManager.editProfile(edit.copy(operations = listOf(
+                ProfileOperation.Configure("provider", JsonPrimitive("bad"), "string")))) }
+            assertEquals(0, releases)
+            refuse = true
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.editProfile(edit) }
+            assertEquals(before, runtime.pluginManager.currentProfile())
+            assertEquals(before.definition, storage.loadCommitted("test")!!.definition)
+            assertEquals(1, allocations - releases)
+            refuse = false
+            val after = runtime.pluginManager.editProfile(edit)
+            assertEquals(2L, after.generation)
+            assertFailsWith<IllegalArgumentException> { runtime.pluginManager.editProfile(edit) }
+            assertEquals(after, runtime.pluginManager.editProfile(edit.copy(expectedGeneration = after.generation, operations = emptyList())))
+            assertEquals(listOf(1L, 2L), storage.generations("test"))
+        } finally { runtime.close(); root.deleteRecursively() }
+    }
+
     @Test
     fun enableTransactionsWithdrawAndRecoverOnlyTheSelectedInstance() = runBlocking {
         val root = Files.createTempDirectory("kcode-profile-enabled").toFile()
@@ -324,6 +414,8 @@ class ProfileJarFixture : Plugin<String> {
 
     override suspend fun apply(ctx: Context, config: String, effect: EffectScope) {
         check(javaClass.classLoader !== PluginDescriptor::class.java.classLoader)
+        check(javaClass.classLoader.loadClass(ProfileDefinition::class.java.name) === ProfileDefinition::class.java)
+        check(ProfileDefinition::class.java.classLoader === PluginDescriptor::class.java.classLoader)
         val origin = requireNotNull(ai.meteor.kcode.plugin.api.PluginCodeOrigin.current(ctx))
         val file = File(config)
         file.writeText("${origin.artifact.id}:active")

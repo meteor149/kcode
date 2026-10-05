@@ -28,5 +28,7 @@ retains the new runtime. Native factories must provide fresh resources through `
 and keep candidate facades private. Public Profile management and recovery UI remain separate.
 
 Named startup, manager mutations and native switching on Desktop and Android are implemented.
-Declaration editing, external bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
+The SDK manager also edits active Profile declarations with identity/generation checks through
+the same module/tree publisher. Public catalogue/draft/history activation commands, external
+bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
 `docs/profiles-implementation.md` for behavior and evidence limits.

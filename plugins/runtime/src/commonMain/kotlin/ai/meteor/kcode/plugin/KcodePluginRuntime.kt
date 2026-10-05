@@ -1,10 +1,11 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
 import ai.meteor.kcode.plugin.api.PluginHostInputs
 import ai.meteor.kcode.plugin.api.SettingsStoreFactory
-
 import ai.meteor.kcode.plugin.api.HistoryRepositoryFactory
-
 import ai.meteor.kcode.model.ModelCatalogSnapshot
 import ai.meteor.kcode.AgentConversationOverlayController
 import ai.meteor.kcode.AgentConversationOverlayTurn
@@ -82,6 +83,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import org.cordis.Context
 import org.cordis.Fiber
 import org.cordis.FiberState
@@ -98,8 +101,8 @@ import ai.meteor.kcode.plugin.profiles.profileConfiguration
 import ai.meteor.kcode.plugin.profiles.profileLock
 import ai.meteor.kcode.plugin.profiles.ProfileStartupFactory
 import ai.meteor.kcode.plugin.profiles.ProfileCompiler
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
-import ai.meteor.kcode.plugin.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.profiles.ResolvedProfile
 import ai.meteor.kcode.plugin.api.StoredPluginConfiguration
 
@@ -353,6 +356,34 @@ class KcodePluginRuntime private constructor(
 
     /** Manages built-ins as well as external artifacts. */
     val pluginManager: DynamicPluginController = object : DynamicPluginController {
+        override suspend fun currentProfile(): ProfileCompositionState? {
+            PluginOperationOwner.requireOutsideCall()
+            return lock.withLock {
+                check(!closed) { "plugin runtime is closed" }
+                activeProfile?.session?.currentCompositionState()
+            }
+        }
+
+        override suspend fun editProfile(edit: ProfileCompositionEdit): ProfileCompositionState {
+            PluginOperationOwner.requireOutsideCall()
+            ChatGenerationRunner.requireOutsideCall()
+            val serializer = ListSerializer(ProfileOperation.serializer())
+            val operations = Json.decodeFromString(serializer, Json.encodeToString(serializer, edit.operations))
+            return lock.withLock {
+                check(!closed) { "plugin runtime is closed" }
+                check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
+                val activation = checkNotNull(activeProfile) { "This runtime does not use Profiles" }
+                val current = activation.session.currentCompositionState()
+                require(edit.profileId == current.definition.id && edit.expectedGeneration == current.generation) { "Profile edit is stale" }
+                if (operations.isNotEmpty()) {
+                    val definition = current.definition.copy(patches = current.definition.patches + operations)
+                    val candidate = resolveProfileCandidate(activation, definition, activation.resolved.packages.associateBy { it.id })
+                    applyProfileChange(activation, candidate)
+                }
+                activation.session.currentCompositionState()
+            }
+        }
+
         override suspend fun activateProfile(activation: ProfileActivation, builtinModules: List<KcodePluginMount>) {
             PluginOperationOwner.requireOutsideCall()
             ChatGenerationRunner.requireOutsideCall()
@@ -534,30 +565,39 @@ class KcodePluginRuntime private constructor(
             }
             changes.enabled.forEach { (id, enabled) -> operations += if (enabled) ProfileOperation.Enable(id) else ProfileOperation.Disable(id) }
             val definition = previous.definition.copy(patches = previous.definition.patches + operations)
-            val machine = activation.machineConfiguration?.invoke(definition, previous.bundles) ?: previous.machineOverrides
-            val composition = ProfileCompiler().compile(definition, previous.bundles, machine, previous.launchOverrides).requireValid()
-            val required = linkedSetOf<String>()
-            fun retain(id: String) {
-                if (!required.add(id)) return
-                val spec = requireNotNull(available[id]) { "Missing Profile package '$id'" }
-                (spec.dependencies + spec.packageInstallation?.dependencies.orEmpty().keys).forEach(::retain)
-            }
-            fun visit(items: List<EntryOptions>) {
-                items.forEach { entry ->
-                    if (entry.group == true) visit((entry.config as List<*>).map { it as EntryOptions })
-                    else if (entry.name in available) retain(entry.name)
-                    else require(entry.name in profileModules) { "Unknown Profile module '${entry.name}'" }
-                }
-            }
-            visit(composition.entries)
-            val snapshot = PluginCompositionSnapshot(external = required.map { StoredDynamicPlugin.from(available.getValue(it)) }).also { it.validate() }
-            val packages = snapshot.orderedExternal().map { available.getValue(it.id) }
-            packages.forEach { validateInstallation(it) }
-            val candidate = previous.copy(definition = definition, composition = composition, packages = packages,
-                lock = profileLock(snapshot), machineOverrides = machine)
+            val candidate = resolveProfileCandidate(activation, definition, available)
             applyProfileChange(activation, candidate)
             true
         }
+    }
+
+    private suspend fun resolveProfileCandidate(
+        activation: ProfileActivation,
+        definition: ProfileDefinition,
+        available: Map<String, DynamicPluginSpec>,
+    ): ResolvedProfile {
+        val previous = activation.resolved
+        val machine = activation.machineConfiguration?.invoke(definition, previous.bundles) ?: previous.machineOverrides
+        val composition = ProfileCompiler().compile(definition, previous.bundles, machine, previous.launchOverrides).requireValid()
+        val required = linkedSetOf<String>()
+        fun retain(id: String) {
+            if (!required.add(id)) return
+            val spec = requireNotNull(available[id]) { "Missing Profile package '$id'" }
+            (spec.dependencies + spec.packageInstallation?.dependencies.orEmpty().keys).forEach(::retain)
+        }
+        fun visit(items: List<EntryOptions>) {
+            items.forEach { entry ->
+                if (entry.group == true) visit((entry.config as List<*>).map { it as EntryOptions })
+                else if (entry.name in available) retain(entry.name)
+                else require(entry.name in profileModules) { "Unknown Profile module '${entry.name}'" }
+            }
+        }
+        visit(composition.entries)
+        val snapshot = PluginCompositionSnapshot(external = required.map { StoredDynamicPlugin.from(available.getValue(it)) }).also { it.validate() }
+        val packages = snapshot.orderedExternal().map { available.getValue(it.id) }
+        packages.forEach { validateInstallation(it) }
+        return previous.copy(definition = definition, composition = composition, packages = packages,
+            lock = profileLock(snapshot), machineOverrides = machine)
     }
 
     private suspend fun applyProfileChange(activation: ProfileActivation, candidate: ResolvedProfile) {

@@ -1,11 +1,11 @@
 package ai.meteor.kcode.plugin
 
-import ai.meteor.kcode.plugin.profiles.ProfileBundle
-import ai.meteor.kcode.plugin.profiles.ProfileBundleReference
-import ai.meteor.kcode.plugin.profiles.ProfileDataScope
-import ai.meteor.kcode.plugin.profiles.ProfileDefinition
-import ai.meteor.kcode.plugin.profiles.ProfileEntry
-import ai.meteor.kcode.plugin.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 
 /** Shipped product layers are data; the module catalogue remains independent of selection. */
 fun nativeProfileBundles(moduleIds: List<String>): List<ProfileBundle> {
