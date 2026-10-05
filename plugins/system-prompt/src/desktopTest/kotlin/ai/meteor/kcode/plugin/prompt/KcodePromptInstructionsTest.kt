@@ -10,8 +10,6 @@ class KcodePromptInstructionsTest {
         assertContains(KcodeBaseInstructions, "You are kcode")
         assertContains(KcodeBaseInstructions, "When using tools")
         assertFalse(KcodeBaseInstructions.contains("Web app"))
-        assertFalse(KcodeBaseInstructions.contains("preview_web_app"))
-        assertFalse(KcodeBaseInstructions.contains("inspect_web_container"))
         assertFalse(KcodeBaseInstructions.contains("HTTP service"))
         assertFalse(CjkCharacter.containsMatchIn(KcodeBaseInstructions))
     }

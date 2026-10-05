@@ -8,7 +8,6 @@ import ai.meteor.kcode.plugin.api.harness.HarnessSessionStore
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.ConversationExporter
 import ai.meteor.kcode.export.ConversationImageRenderer
-import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.chat.ScheduledTaskCoordinator
 import ai.meteor.kcode.chat.UnavailableScheduledTasks
 import ai.meteor.kcode.chat.GoalSessionFactory
@@ -24,7 +23,6 @@ import ai.meteor.kcode.settings.withTransactions
 import ai.meteor.kcode.settings.withMutationValidation
 import ai.meteor.kcode.settings.RegisteredSettingsMutations
 import ai.meteor.kcode.settings.SettingsMutationRegistry
-import ai.meteor.kcode.webcontainer.WebContainerController
 import androidx.compose.runtime.Composable
 import org.cordis.Context
 import org.cordis.Service
@@ -62,14 +60,6 @@ class KcodeHistory(ctx: Context, val repository: ConversationHistoryRepository) 
     companion object { val Key = ServiceKey<KcodeHistory>("history") }
 }
 
-class KcodeArtifacts(ctx: Context, val repository: ArtifactRepository) : Service<Unit>(ctx, Key) {
-    companion object { val Key = ServiceKey<KcodeArtifacts>("artifacts") }
-}
-
-class KcodeWebContainers(ctx: Context, val controller: WebContainerController?) : Service<Unit>(ctx, Key) {
-    companion object { val Key = ServiceKey<KcodeWebContainers>("webContainers") }
-}
-
 class KcodeConversationExecution(ctx: Context, val executor: ConversationExecution) : Service<Unit>(ctx, Key) {
     companion object { val Key = ServiceKey<KcodeConversationExecution>("conversationExecution") }
 }
@@ -103,6 +93,10 @@ fun interface ApplicationFrame {
 
 /** The UI plugin resolves its own dependencies and prepares its committed render frame. */
 interface ApplicationServices {
+    val uiContributions: UiContributionsSnapshot? get() = null
+    val modelCatalog: ModelCatalogSnapshot? get() = null
+    val conversationCommands: ConversationCommandSnapshot? get() = null
+
     /** Only valid during snapshot preparation; retain the resolved capabilities, not this lookup. */
     operator fun <T> get(key: ServiceKey<T>): T?
 }

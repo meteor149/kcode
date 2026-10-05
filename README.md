@@ -61,13 +61,9 @@ Ask for a one-shot or recurring task. Each run uses a separate conversation and 
 
 Tasks run while the application process is available. On restart, overdue tasks are recovered; recurring schedules skip missed intervals rather than launching a batch of catch-up runs.
 
-### Skills and Web Artifacts
+### Skills
 
 Add `SKILL.md` packages under `/workspace/.agents/skills` or `/workspace/.kcode/skills` to provide reusable instructions and workflows.
-
-The built-in `kcode-web-app-builder` Skill lets the agent build a Web app, test it in the embedded container, inspect the DOM, collect console output and screenshots, and fix issues. With your confirmation, it saves the app to the Artifacts library for later use. Android also bridges supported Web APIs to native capabilities such as location, sensors, camera, and file picking, subject to system permissions.
-
-See [Artifacts](docs/artifacts.md) and the [Web container guide](plugins/web-container/WEB_CONTAINER_GUIDE.md).
 
 ### Your choice of model
 
@@ -77,7 +73,7 @@ Configure credentials, endpoints, and provider options in Settings; choose the m
 
 ## Platform support
 
-Android and desktop share chat, history, Goals, scheduling, multi-agent orchestration, Skills, file tools, Web search, Artifacts, and conversation image export. Platform differences are:
+Android and desktop share chat, history, Goals, scheduling, multi-agent orchestration, Skills, file tools, Web search, and conversation image export. Platform differences are:
 
 | Capability | Android | Desktop |
 | --- | --- | --- |
@@ -140,30 +136,29 @@ Native hosts provide platform primitives, `plugins/runtime` manages the Cordis t
 | `plugins/installation-store` | Installed packages and enable-state persistence |
 | `apps/*`, `plugins/platform-*` | Application hosts, loaders, and platform adapters |
 
-Product implementations live in feature modules: `ui-contributions` owns the neutral UI registry, `default-ui-bridge` supplies its optional default projection, and `application` and `ui-pages` provide the default interface; feature packages own and withdraw their settings forms; repository, execution, model, search, and native capability providers own their services. Android and desktop share Room schemas and bundled SQLite. Module declarations are maintained in [settings.gradle.kts](settings.gradle.kts).
+Product implementations live in feature modules: `ui-contributions` owns the neutral UI registry, `default-ui-bridge` owns its optional default registry and projection, and `application` coordinates the default root; `ui-pages`, `ui-messages`, `ui-shell`, and `ui-theme` provide conversation pages, message presentation, layout/settings, and theme respectively; feature packages own and withdraw their settings forms; repository, execution, model, search, and native capability providers own their services. Android and desktop share Room schemas and bundled SQLite. Module declarations are maintained in [settings.gradle.kts](settings.gradle.kts).
 
-Web Search, Goal, Subagent, Localization, Markdown, Conversation Export and WebContainer each include their related providers and contributions within one feature release. Their internal children remain independently reactive to available services.
+Settings schemas, validation and forms live with their features: permission settings in `interaction`, execution settings in `native-execution`, and model settings in `llm-core`. The `settings` module owns generic storage and command dispatch.
 
-WebContainer owns its default overlay implementation; default pages consume its optional UI slot.
+Web Search, Goal, Subagent, Localization, Markdown, and Conversation Export each include their related providers and contributions within one feature release. Their internal children remain independently reactive to available services.
 
 Use the plugin manager to load, enable, disable, replace, or unload external packages. Finish or cancel active agent turns before changing composition. Installed state persists across restarts, and failed replacement or manifest publication restores the committed composition. Withdrawal cancels and waits for owned operations before releasing resources. Replacing storage does not automatically migrate data.
 
-External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 60**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
+External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 63**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
 
 Read the [architecture guide](docs/plugin-architecture.md) and [plugin development guide](docs/plugin-development.md) for implementation rules. The [feature audit](docs/plugin-feature-audit.md) records current coverage; the [Harness specification](docs/deepseek-harness-plugin-spec.md) and [reserved API guide](docs/harness-reserved-api.md) distinguish implemented features from contracts that have no providers yet. All guides are indexed in [docs](docs/README.md).
 
-The [cross-platform plugin package format](docs/plugin-package-format.md) uses platform and architecture variants. Native builds load default implementations from independently replaceable `.kplugin` archives, preserving configuration, disabled state, user replacements and uninstalls. Artifact, Web Search, Goal, Schedule, Subagent, Localization, Markdown, Conversation Export and WebContainer each own one feature release, including their related tools, commands, settings and optional presentation. Model adapters and reusable infrastructure keep independent releases. Cordis's Gradle packager builds independent JAR/APK artifacts directly from KMP source modules. `:stageBundledPlugins` consumes their package artifacts and exports the trusted catalog and archives; `settings.gradle.kts` and that catalog define current modules and platform variants. Hosts retain SDK contracts, composition/installation infrastructure and SDK-only input adapters. iOS is metadata only; runtime imports currently support desktop JAR and Android APK variants with SDK validation, dependency-set transactions and restart recovery.
+The [cross-platform plugin package format](docs/plugin-package-format.md) uses platform and architecture variants. Native builds load default implementations from independently replaceable `.kplugin` archives, preserving configuration, disabled state, user replacements and uninstalls. Web Search, Goal, Schedule, Subagent, Localization, Markdown, and Conversation Export each own one feature release, including their related tools, commands, settings and optional presentation. Model adapters and reusable infrastructure keep independent releases. Cordis's Gradle packager builds independent JAR/APK artifacts directly from KMP source modules. `:stageBundledPlugins` consumes their package artifacts and exports the trusted catalog and archives; `settings.gradle.kts` and that catalog define current modules and platform variants. Hosts retain SDK contracts, composition/installation infrastructure and SDK-only input adapters. iOS is metadata only; runtime imports currently support desktop JAR and Android APK variants with SDK validation, dependency-set transactions and restart recovery.
 
 Explicit interaction callbacks use SDK-only host input adapters. Production hosts exclude
 the legacy interaction implementation module; the default settings policy runs from its package.
 
 ## Permissions and data
 
-- **Tool policy:** `Deny`, `Ask`, and `Bypass` control tool approval. `Bypass` skips kcode's prompt, while operating-system and Web permissions still apply. Scheduled runs use the model configured at execution time and the same permission policy as interactive work.
-- **Files:** desktop paths stay inside the managed `/workspace`, with traversal and symlink escapes rejected. Android can also accept real absolute paths, subject to filesystem permissions. Skill and Artifact resources are constrained to their managed package boundaries.
+- **Tool policy:** `Deny`, `Ask`, and `Bypass` control tool approval. `Bypass` skips kcode's prompt, while operating-system permissions still apply. Scheduled runs use the model configured at execution time and the same permission policy as interactive work.
+- **Files:** desktop paths stay inside the managed `/workspace`, with traversal and symlink escapes rejected. Android can also accept real absolute paths, subject to filesystem permissions. Skill resources are constrained to their managed package boundaries.
 - **Credentials:** Android uses encrypted MMKV with a Keystore-protected key. Desktop settings are stored in the application data directory. The ADB receiver requires system `DUMP` permission and validates updates through settings commands; command arguments are visible to the trusted host during execution.
 - **Android execution:** unavailable Shizuku/root access fails rather than silently switching identity. The background overlay requires “display over other apps” permission.
-- **Web apps:** local apps request sensitive capabilities at runtime; remote sites do not receive the local native bridge. Saving an Artifact requires confirmation and uses validated, bounded storage with rollback on failure.
 
 Report security-sensitive issues privately to the maintainers. Never commit credentials, `local.properties`, device captures, or generated databases.
 
@@ -215,3 +210,17 @@ Permission configuration and composer controls belong to the interaction feature
 Settings persistence stores opaque feature namespaces and raw historical migration values.
 Feature plugins own configuration schemas and defaults; v2 snapshots preserve unknown data
 and no longer write feature-specific legacy scalars.
+
+UI SDK modules contain shared service identities and presentation contracts. Their private registries
+live in `ui-contributions` and `default-ui-bridge`; withdrawing a registry rejects retained service
+calls and revokes its contributions. Default navigation presenters resolve page dependencies during
+frame preparation, using the kernel's prepared UI/model/command snapshots. The smaller default UI
+implementation modules retain the existing package IDs and independent enable states.
+
+The `skills` module includes skill discovery/runtime and skill tools; `filesystem` includes
+native filesystem/workspace implementations and file tools. Provider and consumer plugin
+IDs and independent lifecycles are preserved within each source module.
+
+Model vendors are independent Gradle modules below `plugins/llm` with their own clients,
+catalogs, connection metadata and localization. `llm-core` owns common registry/configuration
+and optional standard UI; settings and conversation choices use one committed catalog.

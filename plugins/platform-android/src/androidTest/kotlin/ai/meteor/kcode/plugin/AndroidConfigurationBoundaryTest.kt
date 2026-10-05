@@ -109,11 +109,9 @@ class AndroidConfigurationBoundaryTest {
         val entries = listOf(
             "ai.meteor.kcode.plugin.settingsstorage.AndroidNativeSettingsPlugin",
             "ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin",
-            "ai.meteor.kcode.plugin.artifacts.AndroidNativeArtifactsPlugin",
             "ai.meteor.kcode.plugin.nativefilesystem.AndroidNativeFileSystemPlugin",
             "ai.meteor.kcode.plugin.nativeexecution.AndroidNativeSettingsShellPlugin",
             "ai.meteor.kcode.plugin.nativeexecution.AndroidNativeSettingsUbuntuShellPlugin",
-            "ai.meteor.kcode.plugin.webcontainer.native.AndroidNativeWebContainerPlugin",
             "ai.meteor.kcode.plugin.skills.WorkspaceSkillsPlugin",
             "ai.meteor.kcode.plugin.KoogAgentLoopPlugin",
             "ai.meteor.kcode.plugin.SystemPromptServicePlugin",

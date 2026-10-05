@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_anthropic_en">Anthropic</string>
+    <string name="provider_anthropic_note_en">Long context and agents</string>
+</resources>

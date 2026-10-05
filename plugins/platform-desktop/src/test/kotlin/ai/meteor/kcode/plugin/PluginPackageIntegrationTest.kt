@@ -66,7 +66,7 @@ class PluginPackageIntegrationTest {
         val extra = nativePluginBundle(NativePluginServices(
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
             skillRuntime = null, conversationOverlayFactory = ai.meteor.kcode.plugin.api.ConversationOverlayFactory { null },
-            settingsStore = null, historyRepository = null, artifactRepository = null, webContainerController = null,
+            settingsStore = null, historyRepository = null,
             packagedProviderIds = setOf("feature.goal"),
         )).filterNot { it.descriptor.id == "provider.plugin-installations.platform" }
         lateinit var goals: ai.meteor.kcode.chat.GoalSessionFactory
@@ -118,7 +118,7 @@ class PluginPackageIntegrationTest {
         val extra = nativePluginBundle(NativePluginServices(
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
             skillRuntime = null, conversationOverlayFactory = ai.meteor.kcode.plugin.api.ConversationOverlayFactory { null },
-            settingsStore = null, historyRepository = null, artifactRepository = null, webContainerController = null,
+            settingsStore = null, historyRepository = null,
             packagedProviderIds = setOf("feature.schedule"),
         )).filterNot { it.descriptor.id == "provider.plugin-installations.platform" }
         lateinit var schedules: ai.meteor.kcode.chat.ScheduledTaskCoordinator
@@ -157,60 +157,8 @@ class PluginPackageIntegrationTest {
     }
 
     @Test
-    fun externalDependencyKeepsTheEntireFormerArtifactFeatureFunctional(): Unit = runBlocking {
-        val root = Files.createTempDirectory("kcode-retained-artifacts-feature").toFile()
-        val store = FilePluginCompositionStore(root)
-        val aliases = NativeBuiltinAliases.filterValues { it == setOf("feature.artifacts") }
-        val entries = mapOf(
-            "consumer.tools.artifact" to ai.meteor.kcode.plugin.feature.ArtifactToolConsumerPlugin::class.java,
-            "provider.ui.artifacts" to DefaultArtifactsUiPlugin::class.java,
-            "provider.ui.navigation.artifacts" to DefaultArtifactsNavigationPlugin::class.java,
-        )
-        val extra = nativePluginBundle(NativePluginServices(
-            interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
-            skillRuntime = null, conversationOverlayFactory = ai.meteor.kcode.plugin.api.ConversationOverlayFactory { null },
-            settingsStore = null, historyRepository = null, artifactRepository = null, webContainerController = null,
-            packagedProviderIds = setOf("feature.artifacts"),
-        )).filterNot { it.descriptor.id == "provider.plugin-installations.platform" }
-        lateinit var slots: ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
-        val capture = kcodePlugin(PluginDescriptor("test.retained-artifacts", "test", "test", emptySet()),
-            org.cordis.plugin<Unit>(name = "capture-retained-artifacts", inject = org.cordis.dependencies(ai.meteor.kcode.plugin.ui.api.KcodeUiSlots.Key)) { ctx, _ ->
-                slots = ctx.require(ai.meteor.kcode.plugin.ui.api.KcodeUiSlots.Key)
-            }, Unit)
-        try {
-            val previous = entries.map { (id, entry) -> BundledPluginPackage(id,
-                pack(root, id, "1.0.0", entry = entry.name, implementation = File(entry.protectionDomain.codeSource.location.toURI()))) }
-            val consumer = pack(root, "example.consumer", "1.0.0", entry = PackageFixtureDependency::class.java.name,
-                dependencies = listOf(PackageDependency("consumer.tools.artifact", "1.0.0")))
-            val first = runtime(root, store, extra = extra + capture, bundled = previous)
-            try { first.pluginManager.importPackages(listOf(consumer)) } finally { first.close() }
-            val aggregate = BundledPluginPackage("feature.artifacts", pack(root, "feature.artifacts", "1.0.0",
-                entry = ArtifactFeaturePlugin::class.java.name,
-                implementation = File(ArtifactFeaturePlugin::class.java.protectionDomain.codeSource.location.toURI())))
-            val restored = runtime(root, store, extra = extra + capture, bundled = listOf(aggregate), aliases = aliases)
-            try {
-                assertEquals(entries.keys + setOf("example.consumer", "feature.artifacts"), restored.pluginManager.installed().map { it.id }.toSet())
-                assertFalse(restored.pluginManager.installed().single { it.id == "feature.artifacts" }.enabled)
-                assertTrue("consumer.tools.artifact" in restored.diagnostics().toolContributions)
-                assertTrue(slots.snapshot().artifacts != null)
-                assertTrue(slots.snapshot().navigation.any { it.id == "artifacts" })
-                restored.pluginManager.uninstall("example.consumer")
-            } finally { restored.close() }
-            val cleaned = runtime(root, store, extra = extra + capture, bundled = listOf(aggregate), aliases = aliases)
-            try {
-                assertEquals(listOf("feature.artifacts"), cleaned.pluginManager.installed().map { it.id })
-                assertFalse("consumer.tools.artifact" in cleaned.diagnostics().toolContributions)
-                assertTrue(slots.snapshot().artifacts == null)
-                cleaned.pluginManager.setEnabled("feature.artifacts", true)
-                assertTrue("consumer.tools.artifact" in cleaned.diagnostics().toolContributions)
-                assertTrue(slots.snapshot().artifacts != null)
-            } finally { cleaned.close() }
-        } finally { root.deleteRecursively() }
-    }
-
-    @Test
     fun featureAggregationPreservesDisabledChoiceAndFailedMigrationCommit(): Unit = runBlocking {
-        for (feature in listOf("feature.artifacts", "feature.goal", "feature.schedule", "feature.subagents", "feature.localization", "feature.markdown", "feature.conversation-export", "feature.web-container")) {
+        for (feature in listOf("feature.goal", "feature.schedule", "feature.subagents", "feature.localization", "feature.markdown", "feature.conversation-export")) {
             val root = Files.createTempDirectory("kcode-feature-package-migration").toFile()
             val store = PackageFailingStore()
             val aliases = NativeBuiltinAliases.filterValues { it == setOf(feature) }

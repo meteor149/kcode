@@ -175,6 +175,7 @@ internal fun ChatPane(
         }
     }
 
+    val moreMenu = remember(conversation?.id, messageSelection.active) { ChatMoreMenuState() }
     val contributionContext = ConversationPageContext(
         conversation, compact, configuration, service, generationRunner,
         scheduledTaskCoordinator, failureMessages, ::followConversationBottom, hazeState,
@@ -182,6 +183,7 @@ internal fun ChatPane(
         clearSelection = messageSelection::clear,
         beforeAction = { focusManager.clearFocus(force = true) },
         settingsEditor = settingsEditor,
+        moreMenu = moreMenu,
     )
     val pageSlots = LocalApplicationUiSlots.current
     val contributions = PresentConversationContributions(contributionContext, pageSlots)
@@ -192,6 +194,12 @@ internal fun ChatPane(
         headerActions.forEach { (owner, content) ->
             key(owner, content.position) { content.renderer.Render(Modifier) }
         }
+    }
+    val moreActions: @Composable () -> Unit = {
+        contributions.filter { it.second.position == ConversationDecorationPosition.MoreActions }
+            .forEach { (owner, content) ->
+                key(owner, content.position) { content.renderer.Render(Modifier) }
+            }
     }
     val composerActions: @Composable () -> Unit = {
         contributions.filter { it.second.position == ConversationDecorationPosition.ComposerActions }
@@ -425,6 +433,8 @@ internal fun ChatPane(
                     focusManager.clearFocus(force = true)
                     onNewConversation()
                 },
+                moreMenu = moreMenu,
+                moreActions = moreActions,
             )
             if (decorations.isNotEmpty()) {
                 Column(Modifier.align(Alignment.TopCenter).padding(top = 72.dp, start = 16.dp, end = 16.dp)) {
@@ -451,6 +461,8 @@ internal fun ChatPane(
                     onMenu()
                 },
                 onCancelSelection = messageSelection::clear,
+                moreMenu = moreMenu,
+                moreActions = moreActions,
                 actions = actions,
                 onMissingConfiguration = {
                     focusManager.clearFocus(force = true)

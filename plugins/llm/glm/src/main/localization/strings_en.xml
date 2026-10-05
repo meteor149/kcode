@@ -1,0 +1,8 @@
+<resources>
+    <string name="provider_glm_en">Zhipu GLM</string>
+    <string name="provider_glm_note_en">Chinese and agents</string>
+    <string name="model_glm_51_en">GLM-5.1</string>
+    <string name="model_glm_51_desc_en">General reasoning, code, and long-running tasks</string>
+    <string name="model_glm_flash_en">GLM-4.7 FlashX</string>
+    <string name="model_glm_flash_desc_en">Fast Chinese conversation and writing</string>
+</resources>

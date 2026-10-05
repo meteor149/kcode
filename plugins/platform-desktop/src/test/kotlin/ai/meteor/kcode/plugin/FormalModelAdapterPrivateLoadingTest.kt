@@ -66,7 +66,7 @@ class FormalModelAdapterPrivateLoadingTest {
         try {
             for ((provider, entry) in entries) {
                 val id = "provider.llm.koog.${provider.name}"
-                val source = File(System.getProperty("kcode.llm.packaged.dir"), "provider-llm-koog-${provider.name}/desktop/plugin.jar")
+                val source = File(System.getProperty("kcode.llm.packaged.${provider.name}"))
                 val artifact = File(directory, "${provider.name}.jar").also { source.copyTo(it); check(it.setReadOnly()) }
                 val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
                 val spec = DynamicPluginSpec(
@@ -91,7 +91,7 @@ class FormalModelAdapterPrivateLoadingTest {
                 assertSame(adapter, llm.resolve(configuration))
                 if (provider == ModelProvider.DeepSeek) {
                     val stopped = assertFailsWith<FixtureAllocation> { adapter.create(configuration, allocationProbe) }
-                    assertTrue(stopped.stackTrace.any { it.className == "ai.meteor.kcode.plugin.llm.AgentModelRuntimeKt" })
+                    assertTrue(stopped.stackTrace.any { it.className == "ai.meteor.kcode.plugin.llm.DeepSeekModelRuntimeKt" })
                 }
                 if (provider == ModelProvider.Bedrock) {
                     // Construct the independently loaded factory, including its AWS identity provider,
@@ -146,13 +146,18 @@ class FormalModelAdapterPrivateLoadingTest {
             "Ollama" to "ai/koog/prompt/executor/ollama/client/OllamaClient.class",
         )
         clients.forEach { (provider, client) ->
-            java.util.zip.ZipFile(File(System.getProperty("kcode.llm.packaged.dir"), "provider-llm-koog-$provider/desktop/plugin.jar")).use { archive ->
+            java.util.zip.ZipFile(File(System.getProperty("kcode.llm.packaged.$provider"))).use { archive ->
                 assertTrue(archive.getEntry(client) != null, "$provider must own $client")
                 // Bedrock uses Anthropic's model definitions and wire serializers upstream.
                 val required = setOf(client) + if (provider == "Bedrock") setOf(clients.getValue("Anthropic")) else emptySet()
                 required.forEach { dependency -> assertTrue(archive.getEntry(dependency) != null) }
                 (clients.values.toSet() - required).forEach { sibling ->
                     assertTrue(archive.getEntry(sibling) == null, "$provider must omit $sibling")
+                }
+                clients.keys.forEach { sibling ->
+                    val entry = "ai/meteor/kcode/plugin/llm/${sibling}ModelAdapterPlugin.class"
+                    assertEquals(sibling == provider, archive.getEntry(entry) != null,
+                        "$provider must contain only its own provider entry")
                 }
                 assertTrue(archive.getEntry("ai/koog/prompt/executor/clients/LLMClient.class") == null)
             }

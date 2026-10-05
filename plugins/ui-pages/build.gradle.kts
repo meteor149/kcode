@@ -19,6 +19,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":plugins:api"))
             implementation(project(":libraries:ui"))
+            implementation(project(":plugins:ui-messages"))
             api(project(":plugins:default-ui-api"))
             implementation(compose.runtime)
             implementation(compose.foundation)

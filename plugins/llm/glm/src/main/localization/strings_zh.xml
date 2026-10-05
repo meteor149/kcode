@@ -1,0 +1,8 @@
+<resources>
+    <string name="provider_glm_zh">智谱 GLM</string>
+    <string name="provider_glm_note_zh">中文与智能体</string>
+    <string name="model_glm_51_zh">GLM-5.1</string>
+    <string name="model_glm_51_desc_zh">通用推理、代码与长程任务</string>
+    <string name="model_glm_flash_zh">GLM-4.7 FlashX</string>
+    <string name="model_glm_flash_desc_zh">快速中文对话与写作</string>
+</resources>

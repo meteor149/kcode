@@ -1,6 +1,8 @@
 plugins {
     kotlin("multiplatform")
     id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -14,6 +16,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":plugins:api"))
             api(project(":plugins:default-ui-api"))
+            implementation(compose.runtime)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

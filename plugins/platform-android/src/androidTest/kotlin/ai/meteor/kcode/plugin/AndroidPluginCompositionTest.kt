@@ -23,7 +23,6 @@ import ai.meteor.kcode.plugin.ui.api.RenderApplicationSidebar
 import ai.meteor.kcode.ui.state.ConversationState
 import androidx.compose.ui.unit.dp
 import ai.meteor.kcode.plugin.ui.api.UiRenderer
-import ai.meteor.kcode.plugin.ui.api.WebContainersOverlayRequest
 import androidx.compose.ui.Modifier
 import ai.meteor.kcode.plugin.api.KcodeSessions
 import ai.meteor.kcode.plugin.api.KcodeShell
@@ -124,68 +123,6 @@ class AndroidPluginCompositionTest {
     }
 
     @Test
-    fun externalApkWebOverlayReceivesTheOpaqueHostUiState() = runBlocking {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
-        val directory = File(context.filesDir, "kcode-web-ui-${System.nanoTime()}").apply { mkdirs() }
-        val artifact = File(directory, "web-ui.apk")
-        File(instrumentation.context.applicationInfo.sourceDir).copyTo(artifact)
-        check(artifact.setReadOnly())
-        lateinit var slots: KcodeUiSlots
-        val capture = kcodePlugin(PluginDescriptor("test.web-ui", "test", "test", emptySet()),
-            plugin<Unit>(name = "web-ui-capture", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
-                slots = ctx.require(KcodeUiSlots.Key)
-            }, Unit)
-        val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
-            interactionPolicy = InteractionPolicy({ ToolPermissionMode.Bypass }, ToolCallApprover { true }),
-            featurePlugins = listOf(capture),
-            profile = KcodePluginProfile(disabled = setOf("feature.web-container")),
-            dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
-                AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
-            },
-        ))
-        try {
-            runtime.pluginManager.install(DynamicPluginSpec(
-                id = "fixture.web-ui", version = "external", entryClass = AndroidFixtureWebUi::class.java.name,
-                artifactPath = artifact.path,
-                sha256 = packageFileSha256(artifact),
-                packageName = instrumentation.context.packageName, config = "web-ui",
-            ))
-            val renderer = checkNotNull(slots.snapshot().webContainers)
-            assertFalse(renderer.javaClass.classLoader === AndroidFixtureWebUi::class.java.classLoader)
-            val recomposer = androidx.compose.runtime.Recomposer(coroutineContext)
-            val composition = androidx.compose.runtime.Composition(AndroidNavigationApplier(), recomposer)
-            var inspected = false
-            val modifier = object : Modifier.Element {
-                override fun toString(): String {
-                    inspected = true
-                    return "host-abi"
-                }
-            }
-            try {
-                composition.setContent {
-                    renderer.Render(WebContainersOverlayRequest(rememberKcodeHazeState(), modifier))
-                }
-                assertTrue(inspected)
-            } finally {
-                composition.dispose()
-                recomposer.close()
-            }
-            runtime.pluginManager.setEnabled("fixture.web-ui", false)
-            assertEquals(null, slots.snapshot().webContainers)
-            runtime.pluginManager.setEnabled("fixture.web-ui", true)
-            assertTrue(slots.snapshot().webContainers != null)
-            runtime.pluginManager.uninstall("fixture.web-ui")
-            assertEquals(null, slots.snapshot().webContainers)
-        } finally {
-            runtime.close()
-            artifact.setWritable(true)
-            artifact.delete()
-            directory.delete()
-        }
-    }
-
-    @Test
     fun externalApkConversationDecorationAndEffectRenderThroughSharedHostContract() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -216,7 +153,7 @@ class AndroidPluginCompositionTest {
             val snapshot = slots.snapshot()
             assertEquals(listOf("external", "subagents", "conversation-export"), snapshot.conversationDecorations.map { it.id })
             assertEquals(listOf("external"), snapshot.conversationEffects.map { it.id })
-            assertFalse(snapshot.conversationDecorations.single { it.id == "external" }.presenter.javaClass.classLoader === AndroidFixtureConversationUi::class.java.classLoader)
+            assertFalse(uiImplementation(snapshot.conversationDecorations.single { it.id == "external" }.presenter).javaClass.classLoader === AndroidFixtureConversationUi::class.java.classLoader)
             val target = HistoryConversationState(1, "initial")
             val page = ai.meteor.kcode.plugin.ui.api.ConversationPageContext(target, true, null, runtime.chatService,
                 ai.meteor.kcode.plugin.execution.OwnedChatGenerationRunner(scope = this), ai.meteor.kcode.chat.UnavailableScheduledTasks,
@@ -691,7 +628,7 @@ class AndroidPluginCompositionTest {
                 packageName = instrumentation.context.packageName,
                 config = "external",
             ))
-            assertEquals(listOf("external", "chat", "artifacts"), slots.snapshot().navigation.map { it.id })
+            assertEquals(listOf("external", "chat"), slots.snapshot().navigation.map { it.id })
             val contribution = slots.snapshot().navigation.first()
             assertEquals(ai.meteor.kcode.ui.component.KcodeIconAsset.Chat, contribution.icon)
             assertFalse(contribution.renderer.javaClass.classLoader === AndroidFixtureNavigation::class.java.classLoader)
@@ -706,11 +643,11 @@ class AndroidPluginCompositionTest {
                 recomposer.close()
             }
             runtime.pluginManager.setEnabled("fixture.navigation", false)
-            assertEquals(listOf("chat", "artifacts"), slots.snapshot().navigation.map { it.id })
+            assertEquals(listOf("chat"), slots.snapshot().navigation.map { it.id })
             runtime.pluginManager.setEnabled("fixture.navigation", true)
             assertEquals("external", slots.snapshot().navigation.first().id)
             runtime.pluginManager.uninstall("fixture.navigation")
-            assertEquals(listOf("chat", "artifacts"), slots.snapshot().navigation.map { it.id })
+            assertEquals(listOf("chat"), slots.snapshot().navigation.map { it.id })
         } finally {
             runtime.close()
             artifact.setWritable(true)
@@ -1080,19 +1017,6 @@ class AndroidFixtureConversationUi : Plugin<String> {
     }
 }
 
-class AndroidFixtureWebUi : Plugin<String> {
-    override val name = "android-fixture-web-ui"
-    override val inject = dependencies(KcodeUiSlots.Key)
-    override suspend fun apply(ctx: Context, config: String, effect: EffectScope) {
-        check(config == "web-ui")
-        effect.collect(ctx.require(KcodeUiSlots.Key).register(ApplicationSlots.WebContainers,
-            UiRenderer<WebContainersOverlayRequest> { request ->
-                check(request.hazeState.javaClass === KcodeHazeState::class.java)
-                check(request.hazeState.javaClass.classLoader === UiRenderer::class.java.classLoader)
-                check(request.modifier.toString() == "host-abi")
-            }))
-    }
-}
 
 class AndroidFixtureLayoutUi : Plugin<String> {
     override val name = "android-fixture-layout-ui"

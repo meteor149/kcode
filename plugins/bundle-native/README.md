@@ -11,8 +11,8 @@ boundaries and platform variants; static mounts are omitted when those packages 
 offered. Product dependencies are compile-only. Production hosts retain SDK contracts,
 composition/installation infrastructure and platform input adapters.
 
-`feature.artifacts`, `feature.web-search`, `feature.goal`, `feature.schedule`, `feature.subagents`, `feature.localization` and
-`feature.markdown`, `feature.conversation-export` and `feature.web-container` own their related domain
+`feature.web-search`, `feature.goal`, `feature.schedule`, `feature.subagents`, `feature.localization` and
+`feature.markdown`, `feature.conversation-export` own their related domain
 providers and contributions within one install/enable boundary. Internal children react
 to optional presentation and registry availability. Settings forms are owned by their
 features. The neutral UI registry and default projection remain separate infrastructure.
@@ -27,7 +27,7 @@ default product features. A supplied composition store still mounts the installa
 service, so explicit imports and persisted enable choices work in alternative products.
 Tests cover headless composition, package migration and production-classpath loading.
 
-The Android factory retains the privately loaded `interaction-settings` package for
+The Android factory retains the privately loaded `interaction` package for
 settings-backed caller approvers and publishes the borrowed callback as `KcodeToolApprovals`
 through an SDK-only host adapter. The feature continues to own its permission schema and UI;
 the host never loads the feature implementation directly. In-process alternative bundles

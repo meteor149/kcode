@@ -1,15 +1,10 @@
 package ai.meteor.kcode.plugin
 
-import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.artifact.MutableArtifactRepository
-import ai.meteor.kcode.artifact.SaveWebArtifactRequest
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.plugin.api.InteractionPolicy
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.PluginDescriptor
-import ai.meteor.kcode.plugin.artifacts.DesktopNativeArtifactsPlugin
 import ai.meteor.kcode.plugin.history.DesktopNativeHistoryPlugin
 import ai.meteor.kcode.plugin.settingsstorage.DesktopNativeSettingsPlugin
 import ai.meteor.kcode.settings.AppSettingsStore
@@ -41,7 +36,6 @@ class DesktopNativeStorageTest {
         JarOutputStream(artifact.outputStream()).use { output ->
             listOf(
                 DesktopNativeSettingsPlugin::class.java,
-                DesktopNativeArtifactsPlugin::class.java,
             ).map { File(it.protectionDomain.codeSource.location.toURI()) }
                 .plus(File(requireNotNull(System.getProperty("kcode.history.packaged.jar"))))
                 .distinct().forEach { source ->
@@ -59,24 +53,21 @@ class DesktopNativeStorageTest {
         val digest = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes()).joinToString("") { "%02x".format(it) }
         lateinit var settings: AppSettingsStore
         lateinit var history: ConversationHistoryRepository
-        lateinit var artifacts: ArtifactRepository
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             profile = KcodePluginProfile(includeDefaults = false),
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
             featurePlugins = listOf(kcodePlugin(
                 PluginDescriptor("test.capture", "test", "test", emptySet()),
-                plugin<Unit>(name = "capture-storage", inject = dependencies(KcodeSettings.Key, KcodeHistory.Key, KcodeArtifacts.Key)) { ctx, _ ->
+                plugin<Unit>(name = "capture-storage", inject = dependencies(KcodeSettings.Key, KcodeHistory.Key)) { ctx, _ ->
                     settings = ctx.require(KcodeSettings.Key).store
                     history = ctx.require(KcodeHistory.Key).repository
-                    artifacts = ctx.require(KcodeArtifacts.Key).repository
                 }, Unit,
             )),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 DesktopDynamicPluginController(ctx, loader, inventory, directory)
             },
         ))
-        val classes = listOf(DesktopNativeSettingsPlugin::class.java, DesktopNativeHistoryPlugin::class.java,
-            DesktopNativeArtifactsPlugin::class.java)
+        val classes = listOf(DesktopNativeSettingsPlugin::class.java, DesktopNativeHistoryPlugin::class.java)
         val paths = listOf(File(directory, "settings.preferences_pb"), File(directory, "history.db"), workspace)
         val specs = classes.mapIndexed { index, entry -> DynamicPluginSpec(
             id = "fixture.storage.$index", version = "native", entryClass = entry.name,
@@ -90,7 +81,6 @@ class DesktopNativeStorageTest {
                 .get(settings).javaClass.classLoader
             assertNotSame(classes[0].classLoader, settingsLoader)
             assertNotSame(classes[1].classLoader, history.javaClass.classLoader)
-            assertNotSame(classes[2].classLoader, artifacts.javaClass.classLoader)
             assertEquals(history.javaClass.classLoader, Class.forName(
                 "androidx.room3.Room", false, history.javaClass.classLoader,
             ).classLoader)
@@ -111,32 +101,21 @@ class DesktopNativeStorageTest {
             ))
             settings.save(saved)
             history.appendMessage(1, "native", 1, "User", "durable")
-            File(workspace, "source").mkdirs()
-            File(workspace, "source/index.html").writeText("<h1>native</h1>")
-            (artifacts as MutableArtifactRepository).saveWebApp(SaveWebArtifactRequest(
-                id = "native-app", name = "Native", sourceDirectory = "/workspace/source", entryPoint = "index.html",
-            ))
             val oldSettings = settings
             val oldHistory = history
-            val oldArtifacts = artifacts
             specs.forEach { runtime.pluginManager.setEnabled(it.id, false) }
             assertFailsWith<IllegalStateException> { oldSettings.load() }
             assertFailsWith<IllegalStateException> { oldHistory.loadAll() }
-            assertFailsWith<IllegalStateException> { oldArtifacts.list() }
             specs.forEach { runtime.pluginManager.setEnabled(it.id, true) }
             assertNotSame(oldSettings, settings)
             assertNotSame(oldHistory, history)
-            assertNotSame(oldArtifacts, artifacts)
             assertEquals(saved, settings.load())
             assertEquals("durable", history.loadAll().single().messages.single().content)
-            assertEquals("native-app", artifacts.list().single().id)
             val lastSettings = settings
             val lastHistory = history
-            val lastArtifacts = artifacts
             specs.forEach { runtime.pluginManager.uninstall(it.id) }
             assertFailsWith<IllegalStateException> { lastSettings.load() }
             assertFailsWith<IllegalStateException> { lastHistory.loadAll() }
-            assertFailsWith<IllegalStateException> { lastArtifacts.list() }
         } finally {
             try { runtime.close() } finally { artifact.setWritable(true); directory.deleteRecursively() }
         }

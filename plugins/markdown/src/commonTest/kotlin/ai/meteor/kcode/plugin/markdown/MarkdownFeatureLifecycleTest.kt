@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin.markdown
 
+import ai.meteor.kcode.test.defaultUiRegistryProvider
+import ai.meteor.kcode.test.mountUiContributions
 import ai.meteor.kcode.plugin.api.UiSlotKey
 import ai.meteor.kcode.plugin.ui.api.KcodeMarkdown
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
@@ -20,7 +22,8 @@ class MarkdownFeatureLifecycleTest {
             val feature = context.plugin(MarkdownFeaturePlugin, Unit).await()
             val content = context.require(KcodeMarkdown.Key).content
             assertEquals("A bold result", content.plainText("A **bold** result"))
-            val uiPlugin = plugin<Unit>(name = "test.markdown.ui") { ctx, _ -> KcodeUiSlots(ctx) }
+            mountUiContributions(context)
+            val uiPlugin = defaultUiRegistryProvider()
             suspend fun awaitProjection(slots: KcodeUiSlots) {
                 var observed = context.registry.values().flatMap { it.fibers.snapshot() }
                 while (true) {

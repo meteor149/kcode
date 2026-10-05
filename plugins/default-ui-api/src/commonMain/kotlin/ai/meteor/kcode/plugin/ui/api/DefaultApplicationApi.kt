@@ -8,7 +8,6 @@ import ai.meteor.kcode.ApplicationHostOptions
 import ai.meteor.kcode.plugin.api.harness.HarnessSessionStore
 import ai.meteor.kcode.export.ConversationImageSaver
 import ai.meteor.kcode.export.ConversationImageRenderer
-import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.chat.ScheduledTaskCoordinator
 import ai.meteor.kcode.chat.UnavailableScheduledTasks
 import ai.meteor.kcode.chat.GoalSessionFactory
@@ -22,7 +21,6 @@ import ai.meteor.kcode.settings.ModelSettingsPolicy
 import ai.meteor.kcode.plugin.api.ShellModeSettingsPolicy
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.plugin.ui.api.ApplicationUiSlots
-import ai.meteor.kcode.webcontainer.WebContainerController
 import androidx.compose.runtime.Composable
 import org.cordis.Context
 import org.cordis.Service
@@ -33,8 +31,6 @@ data class ApplicationViewServices(
     val chatService: ChatService,
     val settingsStore: AppSettingsStore,
     val historyRepository: ConversationHistoryRepository?,
-    val artifactRepository: ArtifactRepository?,
-    val webContainerController: WebContainerController?,
     val uiSlots: ApplicationUiSlots = ApplicationUiSlots(),
     val goalSessions: GoalSessionFactory = UnavailableGoalSessions,
     val schedules: ScheduledTaskCoordinator = UnavailableScheduledTasks,

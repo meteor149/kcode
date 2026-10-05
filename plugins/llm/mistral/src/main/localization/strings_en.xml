@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_mistral_en">Mistral AI</string>
+    <string name="provider_mistral_note_en">European models and coding</string>
+</resources>

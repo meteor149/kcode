@@ -24,6 +24,7 @@ kotlin {
             implementation("org.jetbrains.compose.ui:ui-backhandler:1.8.2")
         }
         commonTest.dependencies {
+            implementation(project(":plugins:test-support"))
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }

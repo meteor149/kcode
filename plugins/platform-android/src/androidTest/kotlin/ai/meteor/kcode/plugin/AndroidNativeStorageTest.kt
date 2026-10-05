@@ -2,17 +2,12 @@ package ai.meteor.kcode.plugin
 
 import org.cordis.packages.packageFileSha256
 
-import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.artifact.MutableArtifactRepository
-import ai.meteor.kcode.artifact.SaveWebArtifactRequest
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.InteractionPolicy
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.plugin.api.PluginDescriptor
-import ai.meteor.kcode.plugin.artifacts.AndroidNativeArtifactsPlugin
 import ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin
 import ai.meteor.kcode.plugin.settingsstorage.AndroidNativeSettingsPlugin
 import ai.meteor.kcode.settings.AppSettingsStore
@@ -59,25 +54,22 @@ class AndroidNativeStorageTest {
         val digest = packageFileSha256(artifact)
         lateinit var settings: AppSettingsStore
         lateinit var history: ConversationHistoryRepository
-        lateinit var artifacts: ArtifactRepository
         val runtime = KcodePluginRuntime.create(KcodePluginRuntimeConfig(
             profile = KcodePluginProfile(includeDefaults = false),
             hostInputs = AndroidPluginHostInputs(activity),
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
             featurePlugins = listOf(kcodePlugin(
                 PluginDescriptor("test.capture", "test", "test", emptySet()),
-                plugin<Unit>(name = "capture-storage", inject = dependencies(KcodeSettings.Key, KcodeHistory.Key, KcodeArtifacts.Key)) { ctx, _ ->
+                plugin<Unit>(name = "capture-storage", inject = dependencies(KcodeSettings.Key, KcodeHistory.Key)) { ctx, _ ->
                     settings = ctx.require(KcodeSettings.Key).store
                     history = ctx.require(KcodeHistory.Key).repository
-                    artifacts = ctx.require(KcodeArtifacts.Key).repository
                 }, Unit,
             )),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
         ))
-        val classes = listOf(AndroidNativeSettingsPlugin::class.java, AndroidNativeHistoryPlugin::class.java,
-            AndroidNativeArtifactsPlugin::class.java)
+        val classes = listOf(AndroidNativeSettingsPlugin::class.java, AndroidNativeHistoryPlugin::class.java)
 
         val specs = classes.mapIndexed { index, entry -> DynamicPluginSpec(
             id = "fixture.storage.$index", version = "native", entryClass = entry.name,
@@ -91,7 +83,6 @@ class AndroidNativeStorageTest {
                 .get(settings).javaClass.classLoader
             assertNotSame(classes[0].classLoader, settingsLoader)
             assertNotSame(classes[1].classLoader, history.javaClass.classLoader)
-            assertNotSame(classes[2].classLoader, artifacts.javaClass.classLoader)
             assertEquals(settingsLoader, Class.forName(
                 "ai.meteor.kcode.plugin.settingsstorage.DefaultSettingsKt", false, settingsLoader,
             ).classLoader)
@@ -107,32 +98,21 @@ class AndroidNativeStorageTest {
             ))
             settings.save(saved)
             history.appendMessage(1, "native", 1, "User", "durable")
-            File(workspace, "source").mkdirs()
-            File(workspace, "source/index.html").writeText("<h1>native</h1>")
-            (artifacts as MutableArtifactRepository).saveWebApp(SaveWebArtifactRequest(
-                id = "native-app", name = "Native", sourceDirectory = "/workspace/source", entryPoint = "index.html",
-            ))
             val oldSettings = settings
             val oldHistory = history
-            val oldArtifacts = artifacts
             specs.forEach { runtime.pluginManager.setEnabled(it.id, false) }
             assertFailsWith<IllegalStateException> { oldSettings.load() }
             assertFailsWith<IllegalStateException> { oldHistory.loadAll() }
-            assertFailsWith<IllegalStateException> { oldArtifacts.list() }
             specs.forEach { runtime.pluginManager.setEnabled(it.id, true) }
             assertNotSame(oldSettings, settings)
             assertNotSame(oldHistory, history)
-            assertNotSame(oldArtifacts, artifacts)
             assertEquals(saved, settings.load())
             assertEquals("durable", history.loadAll().single().messages.single().content)
-            assertEquals("native-app", artifacts.list().single().id)
             val lastSettings = settings
             val lastHistory = history
-            val lastArtifacts = artifacts
             specs.forEach { runtime.pluginManager.uninstall(it.id) }
             assertFailsWith<IllegalStateException> { lastSettings.load() }
             assertFailsWith<IllegalStateException> { lastHistory.loadAll() }
-            assertFailsWith<IllegalStateException> { lastArtifacts.list() }
         } finally {
             try { runtime.close() } finally { artifact.setWritable(true); directory.deleteRecursively() }
         }

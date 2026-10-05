@@ -1,0 +1,7 @@
+<resources>
+    <string name="provider_alibaba_en">Alibaba DashScope</string>
+    <string name="provider_alibaba_note_en">Qwen through DashScope</string>
+    <string name="region_china_en">China mainland</string>
+    <string name="region_singapore_en">Singapore</string>
+    <string name="region_us_en">United States</string>
+</resources>

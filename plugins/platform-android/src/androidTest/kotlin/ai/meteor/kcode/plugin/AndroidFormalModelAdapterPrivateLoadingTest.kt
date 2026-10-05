@@ -113,7 +113,7 @@ class AndroidFormalModelAdapterPrivateLoadingTest {
                 assertSame(adapter, llm.resolve(configuration))
                 if (provider == ModelProvider.DeepSeek) {
                     val stopped = assertFailsWith<FixtureAllocation> { adapter.create(configuration, allocationProbe) }
-                    assertTrue(stopped.stackTrace.any { it.className == "ai.meteor.kcode.plugin.llm.AgentModelRuntimeKt" })
+                    assertTrue(stopped.stackTrace.any { it.className == "ai.meteor.kcode.plugin.llm.DeepSeekModelRuntimeKt" })
                 }
                 runtime.pluginManager.setEnabled(id, false)
                 assertFalse(adapter.supports(configuration))

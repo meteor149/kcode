@@ -28,11 +28,9 @@ internal fun KcodeApp(
             KcodeMain(
                 chatService = services.chatService,
                 generationRunner = generationRunner,
-                webContainerController = services.webContainerController,
-                artifactRepository = services.artifactRepository,
                 settingsStore = services.settingsStore,
                 historyRepository = services.historyRepository,
-                conversationSettingsControlsAvailable = options.conversationSettingsControlsAvailable,
+                hostOptions = options,
                 onShellExecutionModeChanged = options.onShellExecutionModeChanged,
                 onToolPermissionModeChanged = options.onToolPermissionModeChanged,
                 uiSlots = services.uiSlots,

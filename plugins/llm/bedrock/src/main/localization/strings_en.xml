@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_bedrock_en">Amazon Bedrock</string>
+    <string name="provider_bedrock_note_en">AWS-managed foundation models</string>
+</resources>

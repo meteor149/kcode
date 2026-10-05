@@ -7,10 +7,6 @@ import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.koog.http.client.KoogHttpClient
 import ai.meteor.kcode.plugin.api.KcodeInteraction
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.artifact.MutableArtifactRepository
-import ai.meteor.kcode.artifact.SaveWebArtifactRequest
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.settings.AppSettingsStore
@@ -131,8 +127,6 @@ object BundledDesktopProcess {
             "ai.meteor.kcode.plugin.provider.SettingsShellProviderPlugin",
             "ai.meteor.kcode.plugin.provider.SettingsUbuntuShellProviderPlugin",
             "ai.meteor.kcode.plugin.provider.CapabilityProvidersKt",
-            "ai.meteor.kcode.plugin.artifacts.DesktopNativeArtifactsPlugin",
-            "ai.meteor.kcode.plugin.artifacts.FileArtifactRepository",
             "ai.meteor.kcode.plugin.history.DesktopNativeHistoryPlugin",
             "ai.meteor.kcode.plugin.history.HistoryDatabase_Impl",
             "androidx.room3.Room",
@@ -149,17 +143,14 @@ object BundledDesktopProcess {
             "ai.meteor.kcode.plugin.InProcessSubagentProviderPlugin", "ai.meteor.kcode.plugin.settingscommands.SettingsCommandsPlugin",
             "ai.meteor.kcode.plugin.UiSlotsServicePlugin",
             "ai.meteor.kcode.plugin.UiContributionsServicePlugin",
-            "ai.meteor.kcode.plugin.WebContainersUiPlugin",
             "ai.meteor.kcode.plugin.DefaultConversationTranscriptUiPlugin",
             "ai.meteor.kcode.plugin.DefaultLayoutUiPlugin",
             "ai.meteor.kcode.plugin.DefaultSidebarUiPlugin",
             "ai.meteor.kcode.plugin.DefaultChatUiPlugin",
-            "ai.meteor.kcode.plugin.DefaultArtifactsUiPlugin",
             "ai.meteor.kcode.plugin.DefaultStandaloneConversationUiPlugin",
             "ai.meteor.kcode.plugin.DefaultSettingsUiPlugin",
             "ai.meteor.kcode.plugin.DefaultThemeUiPlugin",
             "ai.meteor.kcode.plugin.DefaultChatNavigationPlugin",
-            "ai.meteor.kcode.plugin.DefaultArtifactsNavigationPlugin",
             "ai.meteor.kcode.plugin.DefaultUserMessagePresentationPlugin",
             "ai.meteor.kcode.plugin.DefaultAssistantMessagePresentationPlugin",
             "ai.meteor.kcode.plugin.DefaultErrorMessagePresentationPlugin",
@@ -188,25 +179,18 @@ object BundledDesktopProcess {
             "ai.meteor.kcode.plugin.ScheduleDispatchPlugin",
             "ai.meteor.kcode.plugin.ScheduleFeaturePlugin",
             "ai.meteor.kcode.plugin.subagentui.SubagentDecorationPlugin",
-            "ai.meteor.kcode.plugin.ArtifactFeaturePlugin",
             "ai.meteor.kcode.plugin.export.ConversationImageRenderingPlugin",
             "ai.meteor.kcode.plugin.export.ConversationExportPlugin",
             "ai.meteor.kcode.plugin.export.ConversationExportFeaturePlugin",
             "ai.meteor.kcode.plugin.export.DesktopNativeImageSavingPlugin",
             "ai.meteor.kcode.plugin.feature.FilesystemToolConsumerPlugin",
             "ai.meteor.kcode.plugin.feature.SkillToolConsumerPlugin",
-            "ai.meteor.kcode.plugin.feature.ArtifactToolConsumerPlugin",
             "ai.meteor.kcode.plugin.feature.WebSearchToolConsumerPlugin",
-            "ai.meteor.kcode.plugin.feature.WebContainerToolConsumerPlugin",
             "ai.meteor.kcode.plugin.overlay.ConversationOverlaysServicePlugin",
             "ai.meteor.kcode.plugin.overlay.NativeConversationOverlaysServicePlugin",
             "ai.meteor.kcode.plugin.overlay.ConversationOverlayProviderPlugin",
             "ai.meteor.kcode.plugin.nativeexecution.DesktopNativeShellPlugin",
             "ai.meteor.kcode.plugin.nativeexecution.DesktopShellCommandExecutor",
-            "ai.meteor.kcode.plugin.WebContainersProviderPlugin",
-            "ai.meteor.kcode.plugin.webcontainer.native.DesktopNativeWebContainerPlugin",
-            "ai.meteor.kcode.plugin.webcontainer.native.DesktopWebContainerFeaturePlugin",
-            "ai.meteor.kcode.plugin.WebContainerFeaturePlugin",
             "ai.meteor.kcode.plugin.provider.HttpWebSearchProviderPlugin",
             "ai.meteor.kcode.plugin.searchhttp.HttpWebSearchBackend",
             "ai.meteor.kcode.plugin.feature.DesktopShellToolConsumerPlugin",
@@ -218,7 +202,6 @@ object BundledDesktopProcess {
             check(runCatching { Class.forName(entry, false, classLoader) }.exceptionOrNull() is ClassNotFoundException)
         }
         lateinit var interaction: InteractionPolicy
-        lateinit var artifacts: ArtifactRepository
         lateinit var history: ConversationHistoryRepository
         lateinit var settings: AppSettingsStore
         lateinit var mutationSettings: AppSettingsStore
@@ -236,9 +219,8 @@ object BundledDesktopProcess {
         lateinit var approver: ToolCallApprover
         var confirmation: ConfirmationDialogRequest? = null
         val capture = kcodePlugin(PluginDescriptor("test.bundled-codec", "test", "test", emptySet()),
-            plugin<Unit>(name = "capture-bundled-codec", inject = dependencies(KcodeArtifacts.Key, KcodeHistory.Key, KcodeInteraction.Key, KcodeSettings.Key, KcodeSearchSettings.Key, KcodeWebSearch.Key, KcodeLlm.Key, KcodeMessageCodec.Key, KcodeSkillWorkspace.Key, KcodeSkills.Key, KcodeScheduledTaskNotifications.Key, KcodeUiSlots.Key, KcodeConversationImageRendering.Key, KcodeTools.Key, KcodeSubagents.Key, KcodeToolApprovals.Key)) { ctx, _ ->
+            plugin<Unit>(name = "capture-bundled-codec", inject = dependencies(KcodeHistory.Key, KcodeInteraction.Key, KcodeSettings.Key, KcodeSearchSettings.Key, KcodeWebSearch.Key, KcodeLlm.Key, KcodeMessageCodec.Key, KcodeSkillWorkspace.Key, KcodeSkills.Key, KcodeScheduledTaskNotifications.Key, KcodeUiSlots.Key, KcodeConversationImageRendering.Key, KcodeTools.Key, KcodeSubagents.Key, KcodeToolApprovals.Key)) { ctx, _ ->
                 interaction = ctx.require(KcodeInteraction.Key).policy
-                artifacts = ctx.require(KcodeArtifacts.Key).repository
                 history = ctx.require(KcodeHistory.Key).repository
                 settings = ctx.require(KcodeSettings.Key).store
                 mutationSettings = ctx.require(KcodeSettings.Key).mutationStore
@@ -266,7 +248,7 @@ object BundledDesktopProcess {
                 checkNotNull(classLoader.getResourceAsStream(name))
             }
                 .map {
-                    val release = if (it.id == "provider.settings.platform") it.release.copy(configuration = StoredPluginConfiguration.encode(File(directory, "settings.preferences_pb").absolutePath)) else if (it.id in setOf("provider.shell.platform", "provider.fs.platform", "provider.artifacts.platform", "feature.web-container")) it.release.copy(
+                    val release = if (it.id == "provider.settings.platform") it.release.copy(configuration = StoredPluginConfiguration.encode(File(directory, "settings.preferences_pb").absolutePath)) else if (it.id in setOf("provider.shell.platform", "provider.fs.platform")) it.release.copy(
                         configuration = StoredPluginConfiguration.encode(File(directory, "workspace").absolutePath),
                     ) else if (it.id == "provider.history.platform") it.release.copy(configuration = StoredPluginConfiguration.encode(File(directory, "history.db").absolutePath)) else it.release
                     BundledPluginPackage(it.id, release)
@@ -295,7 +277,7 @@ object BundledDesktopProcess {
                 }
             }
         }
-        check(desktopEntries == 61) { "Unexpected desktop variant count: $desktopEntries" }
+        check(desktopEntries == 58) { "Unexpected desktop variant count: $desktopEntries" }
         FilePluginCompositionStore(directory).save(ai.meteor.kcode.plugin.api.PluginCompositionSnapshot(
             builtinsEnabled = mapOf("provider.llm.koog" to true, "provider.llm.koog.DeepSeek" to false),
         ))
@@ -313,7 +295,7 @@ object BundledDesktopProcess {
         }
         try {
             val packages = runtime.pluginManager.installed()
-            check(packages.size == 61)
+            check(packages.size == 58)
             check(packages.none { it.id == "policy.notifications.permission.android" })
             check(packages.none { it.id == "provider.generation.foreground.android" })
             check(packages.none { it.id in setOf("consumer.tools.android-shell", "consumer.tools.ubuntu-shell") })
@@ -329,7 +311,6 @@ object BundledDesktopProcess {
             verifyBundledInteraction(runtime, { interaction }, { settings })
             verifyBundledSettingsStorage(runtime) { settings }
             verifyBundledHistoryStorage(runtime) { history }
-            verifyBundledArtifactStorage(runtime, File(directory, "workspace")) { artifacts }
             verifyBundledModels(runtime) { llm }
             val approvalRequest = ToolApprovalRequest("package-check", "{}", "request-body")
             check(!approver.approve(approvalRequest))
@@ -382,7 +363,7 @@ object BundledDesktopProcess {
             check(dispatchState() == ai.meteor.kcode.plugin.api.PluginState.Active)
             check("core/schedule" in runtime.diagnostics().toolContributions)
             val oldWorkspace = workspace
-            check(skills.catalog().entries.any { it.name == "kcode-web-app-builder" })
+            skills.catalog()
             check("consumer.tools.filesystem" in runtime.diagnostics().toolContributions)
             check("consumer.tools.skill" in runtime.diagnostics().toolContributions)
             val oldSkills = skills
@@ -398,7 +379,7 @@ object BundledDesktopProcess {
             check("consumer.tools.skill" in runtime.diagnostics().toolContributions)
             check(workspace !== oldWorkspace)
             check(skills !== oldSkills)
-            check(skills.catalog().entries.any { it.name == "kcode-web-app-builder" })
+            skills.catalog()
             check(workspace.readText("/workspace/package-proof.txt") == "private filesystem")
             check(readThroughTool().contains("private filesystem"))
             check("kcode/default" in runtime.diagnostics().promptSections)
@@ -421,17 +402,15 @@ object BundledDesktopProcess {
             check("core/goal" in runtime.diagnostics().toolContributions)
             check("core/subagent" in runtime.diagnostics().toolContributions)
             check("core/schedule" in runtime.diagnostics().toolContributions)
-            listOf("consumer.tools.filesystem", "consumer.tools.skill", "consumer.tools.artifact", "consumer.tools.web-search", "consumer.tools.shell").forEach { id ->
+            listOf("consumer.tools.filesystem", "consumer.tools.skill", "consumer.tools.web-search", "consumer.tools.shell").forEach { id ->
                 check(id in runtime.diagnostics().toolContributions)
                 runtime.pluginManager.setEnabled(when (id) {
                     "consumer.tools.web-search" -> "feature.web-search"
-                    "consumer.tools.artifact" -> "feature.artifacts"
                     else -> id
                 }, false)
                 check(id !in runtime.diagnostics().toolContributions)
                 runtime.pluginManager.setEnabled(when (id) {
                     "consumer.tools.web-search" -> "feature.web-search"
-                    "consumer.tools.artifact" -> "feature.artifacts"
                     else -> id
                 }, true)
                 check(runtime.diagnostics().toolContributions.count { it == id } == 1)
@@ -573,7 +552,8 @@ private suspend fun verifyBundledModels(runtime: KcodePluginRuntime, currentLlm:
     check(originalAdapter.supports(modelConfiguration))
     runtime.pluginManager.setEnabled("core.llm", false)
     check(!originalAdapter.supports(modelConfiguration))
-    check(originalLlm.adapterIds().isEmpty())
+    check(runCatching { originalLlm.adapterIds() }.exceptionOrNull() is IllegalStateException)
+    check(runCatching { originalLlm.catalog() }.exceptionOrNull() is IllegalStateException)
     check(runCatching { originalLlm.resolve(modelConfiguration) }.isFailure)
     check(runtime.diagnostics().plugins.filter { it.id.startsWith("provider.llm.koog.") }.all {
         it.state == ai.meteor.kcode.plugin.api.PluginState.Pending
@@ -709,40 +689,6 @@ private suspend fun verifyBundledHistoryStorage(
         check(Class.forName("androidx.sqlite.driver.bundled.BundledSQLiteDriver", false, currentRepository().javaClass.classLoader) == Class.forName("androidx.sqlite.driver.bundled.BundledSQLiteDriver"))
     } finally {
         currentRepository().deleteConversation(id)
-    }
-}
-private suspend fun verifyBundledArtifactStorage(
-    runtime: KcodePluginRuntime,
-    workspaceDirectory: File,
-    currentRepository: () -> ArtifactRepository,
-) {
-    val id = "package-artifact-${System.nanoTime()}"
-    val source = File(workspaceDirectory, id).also { check(it.mkdirs()) }
-    val manifest = File(workspaceDirectory, "artifacts/manifest.json")
-    val previousManifest = manifest.takeIf { it.exists() }?.readBytes()
-    File(source, "index.html").writeText("<h1>durable packaged artifact</h1>")
-    val request = SaveWebArtifactRequest(id, "Package artifact", "/workspace/$id")
-    try {
-        val saved = (currentRepository() as MutableArtifactRepository).saveWebApp(request)
-        check(currentRepository().list().single { it.id == id } == saved)
-        val resource = File(workspaceDirectory, "artifacts/resources/$id/index.html")
-        check(resource.readText() == "<h1>durable packaged artifact</h1>")
-        val oldRepository = currentRepository()
-        runtime.pluginManager.setEnabled("provider.artifacts.platform", false)
-        check(runCatching { oldRepository.list() }.isFailure)
-        check(runCatching { (oldRepository as MutableArtifactRepository).saveWebApp(request) }.isFailure)
-        check(runtime.diagnostics().plugins.single { it.id == "feature.artifacts" }.state == ai.meteor.kcode.plugin.api.PluginState.Active)
-        runtime.pluginManager.setEnabled("provider.artifacts.platform", true)
-        check(currentRepository() !== oldRepository)
-        check(currentRepository().list().single { it.id == id } == saved)
-        check(resource.readText() == "<h1>durable packaged artifact</h1>")
-        check(runtime.diagnostics().plugins.single { it.id == "feature.artifacts" }.state == ai.meteor.kcode.plugin.api.PluginState.Active)
-        check(Class.forName("ai.meteor.kcode.plugin.artifacts.FileArtifactRepository", false, currentRepository().javaClass.classLoader).classLoader == currentRepository().javaClass.classLoader)
-    } finally {
-        if (previousManifest == null) check(!manifest.exists() || manifest.delete())
-        else manifest.writeBytes(previousManifest)
-        check(File(workspaceDirectory, "artifacts/resources/$id").deleteRecursively())
-        check(source.deleteRecursively())
     }
 }
 private suspend fun verifyBundledHttpSearch(runtime: KcodePluginRuntime, currentBackend: () -> WebSearchBackend) {

@@ -28,7 +28,14 @@ data class ConversationPageContext(
     val clearSelection: () -> Unit = {},
     val beforeAction: () -> Unit = {},
     val settingsEditor: SettingsEditorProjection? = null,
+    val moreMenu: ConversationMoreMenu? = null,
 )
+
+/** The page owns the popup; features may navigate within it and dismiss it after actions. */
+interface ConversationMoreMenu {
+    fun showPage(renderer: UiRenderer<Modifier>)
+    fun dismiss()
+}
 
 fun interface ConversationDecorationPresenter {
     @Composable
@@ -41,6 +48,7 @@ enum class ConversationDecorationPosition {
     AboveComposer,
     HeaderActions,
     ComposerActions,
+    MoreActions,
 }
 
 data class ConversationDecorationContent(

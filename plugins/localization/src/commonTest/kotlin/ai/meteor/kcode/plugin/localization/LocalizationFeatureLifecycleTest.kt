@@ -1,5 +1,7 @@
 package ai.meteor.kcode.plugin.localization
 
+import ai.meteor.kcode.test.defaultUiRegistryProvider
+import ai.meteor.kcode.test.mountUiContributions
 import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.plugin.api.KcodeLocalization
@@ -11,7 +13,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.cordis.Context
-import org.cordis.plugin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -26,7 +27,8 @@ class LocalizationFeatureLifecycleTest {
             val feature = context.plugin(LocalizationFeaturePlugin, Unit).await()
             val catalog = context.require(KcodeLocalization.Key).catalog
             assertEquals("New chat", catalog.translate(AppLanguage.English, UiText.NewChat))
-            val uiPlugin = plugin<Unit>(name = "test.localization.ui") { ctx, _ -> KcodeUiSlots(ctx) }
+            mountUiContributions(context)
+            val uiPlugin = defaultUiRegistryProvider()
             suspend fun awaitContributions(slots: KcodeUiSlots) = withContext(Dispatchers.Default) {
                 withTimeout(5_000) {
                     while (slots.snapshot().localization == null ||

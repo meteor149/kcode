@@ -67,9 +67,9 @@ class SubagentUiPrivateLifecycleTest {
             runtime.pluginManager.replace(deployment)
             fun slots() = services.require(KcodeUiSlots.Key)
             var decoration by mutableStateOf(slots().snapshot().conversationDecorations.single { it.id == "subagents" })
-            assertNotSame(SubagentFeaturePlugin::class.java.classLoader, decoration.presenter.javaClass.classLoader)
+            assertNotSame(SubagentFeaturePlugin::class.java.classLoader, uiImplementation(decoration.presenter).javaClass.classLoader)
             assertSame(ConversationDecorationPosition::class.java,
-                Class.forName(ConversationDecorationPosition::class.java.name, false, decoration.presenter.javaClass.classLoader))
+                Class.forName(ConversationDecorationPosition::class.java.name, false, uiImplementation(decoration.presenter).javaClass.classLoader))
             val target = HistoryConversationState(81, "subagents")
             val agent = SubAgentInfo("/root/worker", "/root", "worker", "prompt")
             target.messages += ChatMessage(1, MessageRole.Assistant, "", subAgents = listOf(agent))

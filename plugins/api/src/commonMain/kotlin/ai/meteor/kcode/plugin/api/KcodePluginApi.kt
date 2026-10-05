@@ -126,69 +126,14 @@ data class ModelAdapter(
 )
 
 /** Service Definition and provider registry for model adapters. */
-class KcodeLlm(ctx: Context) : Service<Unit>(ctx, Key) {
-    private val mutex = Mutex()
-    private val adapters = linkedMapOf<String, ModelAdapter>()
-
-    suspend fun register(adapter: ModelAdapter): Disposable {
-        require(adapter.id.isNotBlank()) { "model adapter id must not be blank" }
-        val catalog = adapter.catalog?.let { specification ->
-            require(specification.displayName?.isNotBlank() != false) {
-                "model provider display name must not be blank"
-            }
-            require(specification.models.isNotEmpty()) { "model catalog must not be empty" }
-            require(specification.models.all {
-                it.provider == specification.provider && it.id.isNotBlank() &&
-                    it.defaultTemperature.isFinite() && it.defaultTemperature in 0.0..1.0
-            }) { "model catalog contains invalid model metadata" }
-            require(specification.models.map { it.id }.distinct().size == specification.models.size) {
-                "model catalog contains duplicate model ids"
-            }
-            specification.copy(models = specification.models.toList())
-        }
-        val lifetime = ModelAdapterLifetime(adapter.id)
-        val registered = adapter.copy(
-            supports = { lifetime.isOpen && adapter.supports(it) },
-            create = { configuration, factory ->
-                lifetime.acquire { adapter.create(configuration, factory) }
-            },
-            catalog = catalog,
-        )
-        mutex.withLock {
-            require(catalog == null || adapters.values.none { it.catalog?.provider == catalog.provider }) {
-                "model provider '${catalog?.provider}' is already registered"
-            }
-            require(adapter.id !in adapters) { "model adapter '${adapter.id}' is already registered" }
-            adapters[adapter.id] = registered
-        }
-        return Disposable {
-            lifetime.requireCanClose()
-            withContext(NonCancellable) {
-                mutex.withLock {
-                    if (adapters[adapter.id] === registered) adapters.remove(adapter.id)
-                }
-                lifetime.close()
-            }
-        }
-    }
-
-    suspend fun resolve(configuration: ModelConfiguration): ModelAdapter = mutex.withLock {
-        adapters.values
-            .filter { it.supports(configuration) }
-            .maxWithOrNull(compareBy<ModelAdapter> { it.priority }.thenBy { it.id })
-            ?: error("no model adapter supports ${configuration.provider.name}")
-    }
-
-    suspend fun catalog(): ModelCatalogSnapshot = mutex.withLock {
-        ModelCatalogSnapshot(adapters.values.mapNotNull { it.catalog }
-            .sortedWith(compareBy<ModelProviderSpec> { it.order }.thenBy { it.provider.name }))
-    }
-
-    suspend fun adapterIds(): List<String> = mutex.withLock { adapters.keys.toList() }
-
-    companion object {
-        val Key = ServiceKey<KcodeLlm>("llm")
-    }
+/** Abstract registry contract; the provider owns implementation and resource lifetimes. */
+abstract class KcodeLlm(ctx: Context) : Service<Unit>(ctx, Key) {
+    abstract suspend fun register(adapter: ModelAdapter): Disposable
+    abstract suspend fun resolve(configuration: ModelConfiguration): ModelAdapter
+    abstract suspend fun catalog(): ModelCatalogSnapshot
+    abstract suspend fun adapterIds(): List<String>
+    abstract suspend fun close()
+    companion object { val Key = ServiceKey<KcodeLlm>("llm") }
 }
 
 /** Optional configuration capability; schema and validation belong to its provider. */

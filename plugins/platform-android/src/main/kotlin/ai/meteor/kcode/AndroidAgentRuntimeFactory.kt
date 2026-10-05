@@ -117,8 +117,6 @@ suspend fun createAndroidKoogChatRuntime(
     )
     return KcodeAgentRuntime(
         chatService = pluginRuntime.chatService,
-        webContainerController = pluginRuntime.webContainerController,
-        artifactRepository = pluginRuntime.artifactRepository,
         conversationOverlayController = pluginRuntime.conversationOverlayController,
         pluginManager = pluginRuntime.pluginManager,
         owner = pluginRuntime,

@@ -30,8 +30,8 @@ Loose classpaths/JVM JNI files,
 publisher signing, remote downloads, automatic generation garbage collection and a plugin
 management UI are not implemented. Immutable generations remain available for rollback and
 restart. Durable plugin data must not live in them. Message Codec, Tools, System Prompt,
-Continuations, Model Settings, Goal, Schedule, Subagent, Settings Commands, Application, pages, settings, Markdown, Goal UI, Localization, Sessions, Conversation Execution, Agent Loop, Native Filesystem, Skills, Notifications, Schedule Dispatch, Conversation Export and filesystem/skill/artifact/Web Search/Shell tool consumers and native tool approvals and the LLM service registry, model adapters and search settings policy and settings-driven interaction, settings storage, history storage and Artifact storage now ship as
-90 independent bundled packages, including HTTP transport, Web containers, overlays,
+Continuations, Model Settings, Goal, Schedule, Subagent, Settings Commands, Application, pages, settings, Markdown, Goal UI, Localization, Sessions, Conversation Execution, Agent Loop, Native Filesystem, Skills, Notifications, Schedule Dispatch, Conversation Export and filesystem/skill/Web Search/Shell tool consumers and native tool approvals and the LLM service registry, model adapters and search settings policy and settings-driven interaction, settings storage, history storage now ship as
+independent bundled packages, including HTTP transport, overlays,
 native Shell/Ubuntu providers and Android Shell mode policy. Production hosts retain only
 SDK contracts, composition/installation infrastructure and SDK-only input adapters. The native
 catalog staging helper verifies resources embedded by the distribution before offering them

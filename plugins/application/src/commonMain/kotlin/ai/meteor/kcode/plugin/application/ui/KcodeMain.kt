@@ -13,9 +13,7 @@ import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.ScheduledTaskCoordinator
 
-import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.webcontainer.WebContainerController
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.StoredAppSettings
 import ai.meteor.kcode.settings.ShellExecutionMode
@@ -46,7 +44,6 @@ import androidx.compose.ui.Modifier
 import ai.meteor.kcode.ui.component.BoxWithResponsiveWidth
 import ai.meteor.kcode.ui.component.kcodeHazeSource
 import ai.meteor.kcode.ui.component.rememberKcodeHazeState
-import ai.meteor.kcode.plugin.ui.api.WebContainersOverlayRequest
 import ai.meteor.kcode.plugin.ui.api.StandaloneConversationRequest
 import ai.meteor.kcode.chat.ConversationSessionFactory
 import androidx.compose.runtime.DisposableEffect
@@ -56,11 +53,9 @@ import ai.meteor.kcode.plugin.ui.api.ApplicationLayoutRequest
 import ai.meteor.kcode.plugin.ui.api.SidebarPageRequest
 import ai.meteor.kcode.plugin.ui.api.NavigationPageRequest
 import ai.meteor.kcode.plugin.ui.api.resolveNavigationDestination
-import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.plugin.ui.api.ApplicationEffectRequest
 import ai.meteor.kcode.plugin.ui.api.ApplicationUiSlots
-import ai.meteor.kcode.plugin.ui.api.ChatPageRequest
-import ai.meteor.kcode.plugin.ui.api.ArtifactsPageRequest
+import ai.meteor.kcode.ApplicationHostOptions
 import ai.meteor.kcode.plugin.ui.api.SettingsPageRequest
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineStart
@@ -72,11 +67,9 @@ import kotlinx.coroutines.launch
 internal fun KcodeMain(
     chatService: ChatService,
     generationRunner: ChatGenerationRunner?,
-    webContainerController: WebContainerController?,
-    artifactRepository: ArtifactRepository?,
     settingsStore: AppSettingsStore,
+    hostOptions: ApplicationHostOptions,
     historyRepository: ConversationHistoryRepository?,
-    conversationSettingsControlsAvailable: Boolean,
     onShellExecutionModeChanged: (ShellExecutionMode) -> Unit,
     onToolPermissionModeChanged: (ToolPermissionMode) -> Unit,
     uiSlots: ApplicationUiSlots,
@@ -119,10 +112,6 @@ internal fun KcodeMain(
 
     fun updateSettings(value: StoredAppSettings) {
         scope.launch(start = CoroutineStart.UNDISPATCHED) { settingsSession.save(value, ::settingsCommitted) }
-    }
-
-    fun updateConfiguration(value: ModelConfiguration) {
-        modelSettings?.let { updateSettings(it.update(settingsSession.draft, value)) }
     }
 
     fun newConversation() {
@@ -172,42 +161,18 @@ internal fun KcodeMain(
                     val mainContent: @Composable (Modifier, Boolean) -> Unit =
                         { contentModifier, isCompact ->
                             navigation.firstOrNull { it.id == destination }?.let { entry ->
-                                val active = conversationSession?.conversations?.firstOrNull { it.id == conversationSession.activeId }
-                                key(entry) {
+                                key(entry.renderKey) {
                                     entry.renderer.Render(NavigationPageRequest(
                                         slots = uiSlots,
                                         conversationSession = conversationSession,
-                                        chat = if (generationRunner != null && conversationSession != null && historyRepository != null) {
-                                            ChatPageRequest(
-                                                modifier = contentModifier,
-                                                compact = isCompact,
-                                                conversation = active,
-                                                conversationExecution = conversationExecution,
-                                                service = chatService,
-                                                generationRunner = generationRunner,
-                                                configuration = configuration,
-                                                onConfigurationChange = ::updateConfiguration,
-                                                onMenu = { sidebarOpen = true },
-                                                onSettings = { settingsOpen = true },
-                                                onNewConversation = ::newConversation,
-                                                onSendToNew = conversationSession::ensureConversation,
-                                                historyRepository = historyRepository,
-                                                goalSessionFactory = goalSessionFactory,
-                                                scheduledTaskCoordinator = scheduledTaskCoordinator,
-                                                settingsEditor = if (conversationSettingsControlsAvailable) SettingsEditorProjection(
-                                                    settingsSession.draft, ::updateSettings,
-                                                ) else null,
-                                            )
-                                        } else null,
-                                        artifacts = artifactRepository?.let { repository ->
-                                            ArtifactsPageRequest(
-                                                repository = repository,
-                                                webContainerController = webContainerController,
-                                                compact = isCompact,
-                                                onMenu = { sidebarOpen = true },
-                                                modifier = contentModifier,
-                                            )
-                                        },
+                                        modifier = contentModifier,
+                                        compact = isCompact,
+                                        settingsEditor = SettingsEditorProjection(settingsSession.draft, ::updateSettings),
+                                        committedSettings = appSettings,
+                                        hostOptions = hostOptions,
+                                        onMenu = { sidebarOpen = true },
+                                        onSettings = { settingsOpen = true },
+                                        onNewConversation = ::newConversation,
                                         onNavigate = { id -> if (navigation.any { it.id == id }) selectedDestination = id },
                                     ))
                                 }
@@ -218,7 +183,7 @@ internal fun KcodeMain(
                         renderer = uiSlots.layout,
                         request = ApplicationLayoutRequest(
                             width = width,
-                            sidebarOpen = sidebarOpen || (
+                            sidebarOpen = sidebarOpen || navigation.isEmpty() || (
                                 (generationRunner == null || conversationSession == null || historyRepository == null) &&
                                     navigation.firstOrNull { it.id == destination }?.handlesConversations == true
                                 ),
@@ -259,14 +224,6 @@ internal fun KcodeMain(
                             )
                         }
                     }
-                }
-            }
-            uiSlots.webContainers?.let { renderer ->
-                key(renderer) {
-                    renderer.Render(WebContainersOverlayRequest(
-                        hazeState = hazeState,
-                        modifier = Modifier.fillMaxSize().navigationBarsPadding(),
-                    ))
                 }
             }
             uiSlots.standaloneConversation?.let { renderer ->

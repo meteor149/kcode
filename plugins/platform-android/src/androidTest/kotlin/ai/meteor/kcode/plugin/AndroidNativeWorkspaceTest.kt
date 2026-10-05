@@ -83,17 +83,17 @@ class AndroidNativeWorkspaceTest {
             assertNotSame(WorkspaceSkillsPlugin::class.java.classLoader, skills.javaClass.classLoader)
             workspace.writeText("/workspace/persisted.txt", "owned-apk")
             assertEquals("owned-apk", fs.readBytes("/workspace/persisted.txt").decodeToString())
-            skills.catalog()
-            val builtin = File(directory, "agent_workspace/.kcode/skills/web-app-builder/SKILL.md")
-            assertTrue(builtin.isFile)
+            workspace.writeText(
+                "/workspace/.agents/skills/example/SKILL.md",
+                "---\nname: example\ndescription: Fixture skill\n---\nInstructions",
+            )
+            assertTrue(skills.catalog().entries.any { it.name == "example" })
             val firstSkills = skills
             runtime.pluginManager.setEnabled(skillsSpec.id, false)
             assertFailsWith<IllegalStateException> { firstSkills.catalog() }
-            assertTrue(builtin.delete())
             runtime.pluginManager.setEnabled(skillsSpec.id, true)
             assertNotSame(firstSkills, skills)
-            skills.catalog()
-            assertTrue(builtin.isFile)
+            assertTrue(skills.catalog().entries.any { it.name == "example" })
             val previousFs = fs
             val previousWorkspace = workspace
             val previousSkills = skills
@@ -105,7 +105,7 @@ class AndroidNativeWorkspaceTest {
             runtime.pluginManager.setEnabled(fsSpec.id, true)
             assertNotSame(previousWorkspace, workspace)
             assertEquals("owned-apk", workspace.readText("/workspace/persisted.txt"))
-            skills.catalog()
+            assertTrue(skills.catalog().entries.any { it.name == "example" })
             runtime.pluginManager.uninstall(fsSpec.id)
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == skillsSpec.id }.state)
         } finally {

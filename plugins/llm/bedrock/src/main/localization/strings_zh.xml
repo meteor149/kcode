@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_bedrock_zh">Amazon Bedrock</string>
+    <string name="provider_bedrock_note_zh">AWS 托管基础模型</string>
+</resources>

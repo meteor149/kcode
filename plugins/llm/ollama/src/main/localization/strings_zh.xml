@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_ollama_zh">Ollama</string>
+    <string name="provider_ollama_note_zh">私有本地模型</string>
+</resources>

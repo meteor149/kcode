@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_openrouter_en">OpenRouter</string>
+    <string name="provider_openrouter_note_en">Models from many providers</string>
+</resources>

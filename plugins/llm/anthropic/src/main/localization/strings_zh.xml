@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_anthropic_zh">Anthropic</string>
+    <string name="provider_anthropic_note_zh">长上下文与智能体</string>
+</resources>

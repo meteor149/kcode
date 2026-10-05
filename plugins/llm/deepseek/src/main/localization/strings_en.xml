@@ -1,0 +1,8 @@
+<resources>
+    <string name="provider_deepseek_en">DeepSeek</string>
+    <string name="provider_deepseek_note_en">Reasoning and code</string>
+    <string name="model_deepseek_flash_en">DeepSeek V4 Flash</string>
+    <string name="model_deepseek_flash_desc_en">Fast reasoning for everyday coding</string>
+    <string name="model_deepseek_pro_en">DeepSeek V4 Pro</string>
+    <string name="model_deepseek_pro_desc_en">Complex reasoning and long-running tasks</string>
+</resources>

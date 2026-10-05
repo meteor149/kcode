@@ -1,8 +1,7 @@
 # Application providers
 
-This module supplies the default `applicationUi` provider. Web containers, settings,
-history and artifact repositories live in their independent provider modules. Definitions
-live in `plugins:api`; platform container implementations remain in their provider modules.
+This module supplies the default `applicationUi` provider. Settings and history
+repositories live in their independent provider modules. Definitions live in `plugins:api`.
 
 Each provider owns one Cordis service. Profiles can replace or disable it by its
 stable inventory id, and consumers declare service dependencies rather than
@@ -12,37 +11,27 @@ module; `plugins:api` retains neutral contracts and `libraries:ui` supplies reus
 `ApplicationHostOptions`. The default plugin prepares its feature projection and render frame for the
 Compose host, preserving UI state when unrelated tools change. The kernel root contract is `ApplicationRenderer` / `ApplicationFrame`; it requires none of the default application services. Only frame preparation can use its generic service lookup. Frame preparation precedes manifest persistence; a failed frame restores the previous composition instead of persisting the candidate.
 
-The model sees tools from the configured consumers. Read-only artifact providers
-do not expose the save tool. Missing provider dependencies suspend consumers
+The model sees tools from the configured consumers. Missing provider dependencies suspend consumers
 until the provider returns. Replacing storage switches the interface used by
 the UI; migrating existing stored data is the provider author's responsibility.
 
 The application renderer is separate from typed UI contributions in
-`plugins:ui-pages`: layout, sidebar, chat, Artifacts, settings, overlays and theme
+`plugins:ui-pages`, `plugins:ui-messages`, `plugins:ui-shell`, and `plugins:ui-theme`: conversation pages, messages, layout/settings and theme
 have reversible slots. Setting forms and validation live in their feature packages. The application forwards generic draft saves and keeps rendering when the model settings provider is absent. Composition
 and installed-package state are persisted by their independent storage plugins.
 See [the architecture guide](../../docs/plugin-architecture.md) for lifecycle rules
 and [the verification guide](../../docs/verification.md) for acceptance criteria and limitations.
 
-The settings, history and artifact provider modules own their respective operation facades.
+The settings and history provider modules own their respective operation facades.
 Factory-backed repositories allocate on mount and release resources after calls settle;
 explicit borrowed repositories remain caller-owned. Previously obtained facades reject
 calls after withdrawal. Durable data survives resource closure. History forwarding preserves
-atomic batch writes, ID allocation and scheduling semantics. Read-only artifact providers
-remain distinct from mutable providers.
-The Web provider publishes its operation-owned facade here.
-Web controller disposal first cancels/joins calls, then invokes its idempotent
-`closeAll` resource contract under non-cancellable cleanup. Default cleanup attempts
-all listed containers and aggregates failures. A missing controller exposes no fake
-capability. Native teardown stops desktop preview servers and their workers, joins
-managed browser processes, and closes Android WebViews and capability-bridge jobs.
-Android also rejects queued launches whose session was already removed. Native
-Activity verification currently requires the connected device to be awake/unlocked;
-see the completion audit for the current verification state.
+atomic batch writes, ID allocation and scheduling semantics.
 
 The native `provider.ui.compose` mount uses `DefaultApplicationUiPlugin`, which
 requires settings infrastructure. History, sessions, generation and localization are optional;
-settings remain usable when these feature providers are absent. `ApplicationUiPlugin` remains available for custom renderers with their
+settings remain usable when these feature providers are absent. Compact layouts show the sidebar
+when no navigation page is available, preserving access to settings. `ApplicationUiPlugin` remains available for custom renderers with their
 own dependency choices. The default mount owns settings operations across its UI
 sessions, invalidates rendering on withdrawal and joins pending writes.
 
@@ -87,13 +76,18 @@ requests. Export contributes prepared actions and notices through the generic pa
 presentation protocol; root and chat know no export menu or state implementation.
 
 API 58 passes generic conversation settings drafts/submission to feature contributions.
-The permission button, schema and mutations live in `interaction-settings`; the root only
+The permission button, schema and mutations live in `interaction`; the root only
 resolves optional configuration policy for host notification. Removing Interaction removes
 its control while preserving unrelated pages, settings and persisted feature documents.
 
-API 60 prepares the settings store from `KcodeSettings.mutationStore`. The application
+API 61 prepares the settings store from `KcodeSettings.mutationStore`. The application
 contains no feature namespace list or validation rules: it merges draft differences in
 the shared transaction, and the settings infrastructure invokes registered feature owners
 before durable commit. A failed validation retains the committed execution configuration
 and editable draft; unavailable owners reject writes of their namespace without blocking
 other settings. Feature registration lifetimes cover the durable save.
+
+The root consumes the UI, model catalog and conversation command snapshots already prepared by
+the runtime. It prepares navigation presenters once before committing a frame and retains their
+renderers. Conversation-specific request construction lives in the conversation page provider,
+while this module coordinates navigation, the shared conversation workspace and settings drafts.

@@ -9,7 +9,6 @@ import ai.meteor.kcode.ui.resources.kcode_mark
 import ai.meteor.kcode.ui.resources.Res
 import ai.meteor.kcode.ui.resources.icon_selection_handle
 import ai.meteor.kcode.ui.resources.icon_add
-import ai.meteor.kcode.ui.resources.icon_artifacts
 import ai.meteor.kcode.ui.resources.icon_back
 import ai.meteor.kcode.ui.resources.icon_bright_data
 import ai.meteor.kcode.ui.resources.icon_chat
@@ -21,7 +20,6 @@ import ai.meteor.kcode.ui.resources.icon_delete
 import ai.meteor.kcode.ui.resources.icon_device
 import ai.meteor.kcode.ui.resources.icon_exa
 import ai.meteor.kcode.ui.resources.icon_google
-import ai.meteor.kcode.ui.resources.icon_web_container
 import ai.meteor.kcode.ui.resources.icon_info
 import ai.meteor.kcode.ui.resources.icon_language
 import ai.meteor.kcode.ui.resources.icon_menu
@@ -46,7 +44,6 @@ import org.jetbrains.compose.resources.painterResource
 enum class KcodeIconAsset(internal val resource: DrawableResource) {
     SelectionHandle(Res.drawable.icon_selection_handle),
     Add(Res.drawable.icon_add),
-    Artifacts(Res.drawable.icon_artifacts),
     Back(Res.drawable.icon_back),
     BrightData(Res.drawable.icon_bright_data),
     Chat(Res.drawable.icon_chat),
@@ -58,7 +55,6 @@ enum class KcodeIconAsset(internal val resource: DrawableResource) {
     Device(Res.drawable.icon_device),
     Exa(Res.drawable.icon_exa),
     Google(Res.drawable.icon_google),
-    WebContainer(Res.drawable.icon_web_container),
     Info(Res.drawable.icon_info),
     Language(Res.drawable.icon_language),
     Menu(Res.drawable.icon_menu),

@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_google_zh">Google Gemini</string>
+    <string name="provider_google_note_zh">Gemini 多模态模型</string>
+</resources>

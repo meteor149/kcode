@@ -1,0 +1,8 @@
+<resources>
+    <string name="provider_azure_openai_zh">Azure OpenAI</string>
+    <string name="provider_azure_openai_note_zh">企业级 Azure 部署</string>
+    <string name="model_gpt4o_mini_zh">GPT-4o mini</string>
+    <string name="model_gpt4o_mini_desc_zh">快速且经济，适合日常任务</string>
+    <string name="model_gpt4o_zh">GPT-4o</string>
+    <string name="model_gpt4o_desc_zh">更强的综合理解与生成能力</string>
+</resources>

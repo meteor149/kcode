@@ -61,13 +61,9 @@ kcode 是 Kotlin Multiplatform 生态中首个开源插件化 AI Harness，原�
 
 任务依赖应用进程运行。重启后会恢复逾期任务，周期任务跳过错过的时间段，不会集中执行补偿任务。
 
-### Skill 与 Web Artifact
+### Skill
 
 在 `/workspace/.agents/skills` 或 `/workspace/.kcode/skills` 下添加 `SKILL.md` 包，为 Agent 提供可复用的指令与工作流。
-
-内置 `kcode-web-app-builder` Skill 支持开发 Web 应用、在内嵌容器中测试、检查 DOM、收集控制台输出与截图并修复问题。经你确认后，应用会保存到 Artifact 应用库，供以后打开使用。Android 还可将定位、传感器、相机和文件选择等受支持的 Web API 桥接到原生能力，并遵循系统权限。
-
-详见 [Artifact 指南](docs/artifacts.md)与 [Web 容器指南](plugins/web-container/WEB_CONTAINER_GUIDE.md)。
 
 ### 自由选择模型
 
@@ -77,7 +73,7 @@ kcode 是 Kotlin Multiplatform 生态中首个开源插件化 AI Harness，原�
 
 ## 平台支持
 
-Android 与桌面共用对话、历史、Goal、调度、多 Agent、Skill、文件工具、联网搜索、Artifact 与会话长图导出。平台差异如下：
+Android 与桌面共用对话、历史、Goal、调度、多 Agent、Skill、文件工具、联网搜索与会话长图导出。平台差异如下：
 
 | 能力 | Android | 桌面 |
 | --- | --- | --- |
@@ -140,29 +136,28 @@ ADB 工作区与应用文件工具的工作区分离。Root 创建的文件可�
 | `plugins/installation-store` | 已安装包与启用状态持久化 |
 | `apps/*`、`plugins/platform-*` | 应用 Host、Loader 与平台适配 |
 
-产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 提供可选的默认 UI 投影，`application` 与 `ui-pages` 提供默认界面；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
+产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 拥有可选的默认 UI 注册表与投影，`application` 协调默认应用根；`ui-pages`、`ui-messages`、`ui-shell` 和 `ui-theme` 分别提供会话页面、消息展示、布局与设置页面以及主题；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
 
-Web Search、Goal、Subagent、Localization、Markdown、Conversation Export 和 WebContainer 各自将相关 Provider 与贡献项包含在一个功能发布包中，内部子插件仍根据可用服务独立响应。
+设置 schema、校验和表单由对应功能模块拥有：权限设置在 `interaction`，执行设置在 `native-execution`，模型设置在 `llm-core`；`settings` 模块负责通用存储与命令分发。
 
-WebContainer 拥有默认浮层实现，默认页面仅消费其可选 UI 插槽。
+Web Search、Goal、Subagent、Localization、Markdown、Conversation Export 各自将相关 Provider 与贡献项包含在一个功能发布包中，内部子插件仍根据可用服务独立响应。
 
 通过插件管理器加载、启用、禁用、替换或卸载外部包，修改组合前先结束或取消活动 Agent 回合。安装状态跨重启保留，替换或清单发布失败时恢复已提交组合。撤销插件时先取消并等待其拥有的操作，再释放资源；切换存储 Provider 不会自动迁移数据。
 
-外部包共享公开 SDK 类型，产品实现与私有依赖独立加载。当前 ABI 为 **Plugin API 60**，旧包需重新编译。自定义根渲染器可以自行选择服务，无需采用默认 UI 契约。
+外部包共享公开 SDK 类型，产品实现与私有依赖独立加载。当前 ABI 为 **Plugin API 63**，旧包需重新编译。自定义根渲染器可以自行选择服务，无需采用默认 UI 契约。
 
 实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
 
-[跨平台插件包格式](docs/plugin-package-format.md)按平台和架构声明变体。原生构建从可独立替换的 `.kplugin` 包加载默认实现，并保留配置、禁用状态、用户替换和卸载选择。Artifact、Web 搜索、Goal、Schedule、Subagent、本地化、Markdown、对话导出和 WebContainer 各自作为一个功能包，包含相关工具、命令、设置和可选界面贡献；模型适配器与可复用基础设施保留独立发布边界。Cordis Gradle 打包插件直接从 KMP 源码模块生成独立 JAR/APK，`:stageBundledPlugins` 消费这些包产物并导出可信清单及包文件；当前模块和平台变体以 `settings.gradle.kts` 及清单为准。宿主保留 SDK 契约、组合／安装基础设施及仅依赖 SDK 的输入适配器。iOS 当前仅支持元数据；运行时支持桌面 JAR 和 Android APK 变体导入、SDK 校验、依赖批次事务和重启恢复。
+[跨平台插件包格式](docs/plugin-package-format.md)按平台和架构声明变体。原生构建从可独立替换的 `.kplugin` 包加载默认实现，并保留配置、禁用状态、用户替换和卸载选择。Web 搜索、Goal、Schedule、Subagent、本地化、Markdown 和对话导出各自作为一个功能包，包含相关工具、命令、设置和可选界面贡献；模型适配器与可复用基础设施保留独立发布边界。Cordis Gradle 打包插件直接从 KMP 源码模块生成独立 JAR/APK，`:stageBundledPlugins` 消费这些包产物并导出可信清单及包文件；当前模块和平台变体以 `settings.gradle.kts` 及清单为准。宿主保留 SDK 契约、组合／安装基础设施及仅依赖 SDK 的输入适配器。iOS 当前仅支持元数据；运行时支持桌面 JAR 和 Android APK 变体导入、SDK 校验、依赖批次事务和重启恢复。
 
 显式交互回调通过仅依赖 SDK 的宿主输入适配器接入。生产宿主不再链接旧 interaction 实现模块；默认设置策略从独立插件包运行。
 
 ## 权限与数据
 
-- **工具策略**：`Deny`、`Ask`、`Bypass` 决定工具是否需要批准。`Bypass` 跳过 kcode 的确认，系统与 Web 权限仍然生效。定时任务使用执行时配置的模型，遵循与交互任务相同的权限策略。
-- **文件**：桌面路径限制在托管 `/workspace` 内，拒绝路径穿越与符号链接逃逸。Android 还可接受真实绝对路径，但受文件系统权限限制。Skill 与 Artifact 资源受各自托管包边界约束。
+- **工具策略**：`Deny`、`Ask`、`Bypass` 决定工具是否需要批准。`Bypass` 跳过 kcode 的确认，系统权限仍然生效。定时任务使用执行时配置的模型，遵循与交互任务相同的权限策略。
+- **文件**：桌面路径限制在托管 `/workspace` 内，拒绝路径穿越与符号链接逃逸。Android 还可接受真实绝对路径，但受文件系统权限限制。Skill 资源受各自托管包边界约束。
 - **凭据**：Android 使用加密 MMKV，密钥由 Keystore 保护；桌面设置保存在应用数据目录。ADB Receiver 要求系统 `DUMP` 权限，通过设置命令校验更新，命令执行期间参数对可信 Host 可见。
 - **Android 执行**：Shizuku/root 不可用时直接失败，不静默切换身份；后台会话浮窗需要“显示在其他应用上层”权限。
-- **Web 应用**：本地应用在运行时请求敏感能力，远程网站不获得本地原生能力桥。保存 Artifact 需要确认，并使用路径校验、容量限制与失败回滚。
 
 安全问题请私下联系维护者。不要提交凭据、`local.properties`、设备截图或生成的数据库。
 
@@ -213,3 +208,12 @@ Copyright 2026 The kcode Authors.
 
 配置存储保存不透明的功能命名空间和历史迁移原始值。功能插件拥有配置结构与默认值；
 v2 快照保留未知数据，不再持续写入各功能的旧标量字段。
+
+UI SDK 模块保留共享服务身份和展示契约，私有注册表实现位于 `ui-contributions` 与
+`default-ui-bridge`。撤销注册表后，已持有的服务引用拒绝调用，注册贡献失效。默认导航
+presenter 在帧准备阶段解析页面依赖，并复用内核已准备的 UI、模型与命令快照。
+默认界面实现模块拆分后仍保留原有插件包 ID 和独立启停状态。
+
+`skills` 模块统一维护技能发现、运行与技能工具；`filesystem` 模块统一维护原生文件系统、技能工作区与文件工具。源码模块合并后，提供者和消费者仍保留各自插件 ID 与独立生命周期。
+
+各模型厂商在 `plugins/llm` 下拥有独立 Gradle 模块，分别维护客户端、模型目录、连接元数据和本地化。`llm-core` 维护公共注册、配置及可选标准界面；设置与会话选项读取同一份已提交模型目录。

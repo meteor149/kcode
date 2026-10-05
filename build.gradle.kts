@@ -135,57 +135,52 @@ val bundledProviders = listOf(
         "ai.meteor.kcode.plugin.messagecodec.MessageCodecProviderPlugin", "messageCodec"),
     BundledProvider("native-execution", "provider.shell.platform", "ai.meteor.kcode.plugin.nativeexecution.DesktopNativeShellPlugin", "shell",
         androidEntry = "ai.meteor.kcode.plugin.nativeexecution.AndroidPackagedShellPlugin", androidPackageSuffix = "native-shell"),
-    BundledProvider("execution-settings", "policy.shell-mode.platform", "ai.meteor.kcode.plugin.executionsettings.SettingsShellModePlugin", "shellMode", desktop = false),
+    BundledProvider("native-execution", "policy.shell-mode.platform", "ai.meteor.kcode.plugin.executionsettings.SettingsShellModePlugin", "shellMode", desktop = false),
     BundledProvider("native-execution", "provider.shell.ubuntu", "ai.meteor.kcode.plugin.nativeexecution.AndroidPackagedUbuntuShellPlugin", "ubuntuShell",
         desktop = false, androidArm64Only = true),
     BundledProvider("conversation-overlay", "core.conversation-overlays", "ai.meteor.kcode.plugin.overlay.NativeConversationOverlaysServicePlugin", "conversationOverlays"),
     BundledProvider("conversation-overlay", "provider.conversation-overlay.platform", "ai.meteor.kcode.plugin.overlay.AndroidNativeConversationOverlayPlugin", "conversationOverlays", desktop = false),
-    BundledProvider("web-container", "feature.web-container", "ai.meteor.kcode.plugin.webcontainer.native.DesktopWebContainerFeaturePlugin", "webContainers,tools,uiSlots",
-        androidEntry = "ai.meteor.kcode.plugin.webcontainer.native.AndroidWebContainerFeaturePlugin"),
     BundledProvider("web-search", "feature.web-search", "ai.meteor.kcode.plugin.websearch.WebSearchFeaturePlugin", "web,tools,searchSettings"),
-    BundledProvider("artifact-repository", "provider.artifacts.platform", "ai.meteor.kcode.plugin.artifacts.DesktopNativeArtifactsPlugin", "artifacts",
-        androidEntry = "ai.meteor.kcode.plugin.artifacts.AndroidNativeArtifactsPlugin"),
     BundledProvider("history-repository", "provider.history.platform", "ai.meteor.kcode.plugin.history.DesktopNativeHistoryPlugin", "history",
         androidEntry = "ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin"),
-    BundledProvider("llm", "provider.llm.koog.OpenAI", "ai.meteor.kcode.plugin.llm.OpenAIModelAdapterPlugin", "llm", androidPackageSuffix = "llm-openai"),
-    BundledProvider("llm", "provider.llm.koog.AzureOpenAI", "ai.meteor.kcode.plugin.llm.AzureOpenAIModelAdapterPlugin", "llm", androidPackageSuffix = "llm-azureopenai"),
-    BundledProvider("llm", "provider.llm.koog.Anthropic", "ai.meteor.kcode.plugin.llm.AnthropicModelAdapterPlugin", "llm", androidPackageSuffix = "llm-anthropic"),
-    BundledProvider("llm", "provider.llm.koog.Google", "ai.meteor.kcode.plugin.llm.GoogleModelAdapterPlugin", "llm", androidPackageSuffix = "llm-google"),
-    BundledProvider("llm", "provider.llm.koog.DeepSeek", "ai.meteor.kcode.plugin.llm.DeepSeekModelAdapterPlugin", "llm", androidPackageSuffix = "llm-deepseek"),
-    BundledProvider("llm", "provider.llm.koog.OpenRouter", "ai.meteor.kcode.plugin.llm.OpenRouterModelAdapterPlugin", "llm", androidPackageSuffix = "llm-openrouter"),
-    BundledProvider("llm", "provider.llm.koog.Bedrock", "ai.meteor.kcode.plugin.llm.BedrockModelAdapterPlugin", "llm", android = false),
-    BundledProvider("llm", "provider.llm.koog.Mistral", "ai.meteor.kcode.plugin.llm.MistralModelAdapterPlugin", "llm", androidPackageSuffix = "llm-mistral"),
-    BundledProvider("llm", "provider.llm.koog.Alibaba", "ai.meteor.kcode.plugin.llm.AlibabaModelAdapterPlugin", "llm", androidPackageSuffix = "llm-alibaba"),
-    BundledProvider("llm", "provider.llm.koog.Ollama", "ai.meteor.kcode.plugin.llm.OllamaModelAdapterPlugin", "llm", androidPackageSuffix = "llm-ollama"),
-    BundledProvider("llm", "provider.llm.koog.GLM", "ai.meteor.kcode.plugin.llm.GLMModelAdapterPlugin", "llm", androidPackageSuffix = "llm-glm"),
-    BundledProvider("interaction-settings", "provider.interaction.platform", "ai.meteor.kcode.plugin.SettingsToolInteractionPlugin", "interaction"),
-    BundledProvider("settings-repository", "provider.settings.platform", "ai.meteor.kcode.plugin.settingsstorage.DesktopNativeSettingsPlugin", "settings",
+    BundledProvider("llm:openai", "provider.llm.koog.OpenAI", "ai.meteor.kcode.plugin.llm.OpenAIModelAdapterPlugin", "llm", androidPackageSuffix = "llm-openai"),
+    BundledProvider("llm:azure-openai", "provider.llm.koog.AzureOpenAI", "ai.meteor.kcode.plugin.llm.AzureOpenAIModelAdapterPlugin", "llm", androidPackageSuffix = "llm-azureopenai"),
+    BundledProvider("llm:anthropic", "provider.llm.koog.Anthropic", "ai.meteor.kcode.plugin.llm.AnthropicModelAdapterPlugin", "llm", androidPackageSuffix = "llm-anthropic"),
+    BundledProvider("llm:google", "provider.llm.koog.Google", "ai.meteor.kcode.plugin.llm.GoogleModelAdapterPlugin", "llm", androidPackageSuffix = "llm-google"),
+    BundledProvider("llm:deepseek", "provider.llm.koog.DeepSeek", "ai.meteor.kcode.plugin.llm.DeepSeekModelAdapterPlugin", "llm", androidPackageSuffix = "llm-deepseek"),
+    BundledProvider("llm:openrouter", "provider.llm.koog.OpenRouter", "ai.meteor.kcode.plugin.llm.OpenRouterModelAdapterPlugin", "llm", androidPackageSuffix = "llm-openrouter"),
+    BundledProvider("llm:bedrock", "provider.llm.koog.Bedrock", "ai.meteor.kcode.plugin.llm.BedrockModelAdapterPlugin", "llm", android = false),
+    BundledProvider("llm:mistral", "provider.llm.koog.Mistral", "ai.meteor.kcode.plugin.llm.MistralModelAdapterPlugin", "llm", androidPackageSuffix = "llm-mistral"),
+    BundledProvider("llm:alibaba", "provider.llm.koog.Alibaba", "ai.meteor.kcode.plugin.llm.AlibabaModelAdapterPlugin", "llm", androidPackageSuffix = "llm-alibaba"),
+    BundledProvider("llm:ollama", "provider.llm.koog.Ollama", "ai.meteor.kcode.plugin.llm.OllamaModelAdapterPlugin", "llm", androidPackageSuffix = "llm-ollama"),
+    BundledProvider("llm:glm", "provider.llm.koog.GLM", "ai.meteor.kcode.plugin.llm.GLMModelAdapterPlugin", "llm", androidPackageSuffix = "llm-glm"),
+    BundledProvider("interaction", "provider.interaction.platform", "ai.meteor.kcode.plugin.SettingsToolInteractionPlugin", "interaction"),
+    BundledProvider("settings", "provider.settings.platform", "ai.meteor.kcode.plugin.settingsstorage.DesktopNativeSettingsPlugin", "settings",
         androidEntry = "ai.meteor.kcode.plugin.settingsstorage.AndroidNativeSettingsPlugin"),
-    BundledProvider("llm-service", "core.llm", "ai.meteor.kcode.plugin.LlmServicePlugin", "llm"),
+    BundledProvider("llm-core", "core.llm", "ai.meteor.kcode.plugin.LlmServicePlugin", "llm"),
     BundledProvider("tools", "core.tools", "ai.meteor.kcode.plugin.ToolsServicePlugin", "tools"),
     BundledProvider("system-prompt", "core.system-prompt", "ai.meteor.kcode.plugin.SystemPromptServicePlugin", "systemPrompt"),
     BundledProvider("system-prompt", "provider.prompt.default", "ai.meteor.kcode.plugin.DefaultSystemPromptPlugin", "systemPrompt"),
     BundledProvider("continuations", "core.continuations", "ai.meteor.kcode.plugin.ContinuationServicePlugin", "continuations"),
-    BundledProvider("model-settings", "provider.model-settings.catalog", "ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin", "modelSettings"),
-    BundledProvider("artifact-tools", "feature.artifacts", "ai.meteor.kcode.plugin.ArtifactFeaturePlugin", "artifact,tools,uiSlots"),
+    BundledProvider("llm-core", "provider.model-settings.catalog", "ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin", "modelSettings"),
     BundledProvider("schedule", "feature.schedule", "ai.meteor.kcode.plugin.ScheduleFeaturePlugin", "schedules,tools,schedule.dispatch"),
     BundledProvider("goal", "feature.goal", "ai.meteor.kcode.plugin.GoalFeaturePlugin", "goals,tools,conversationCommands,continuations,uiSlots"),
     BundledProvider("subagents", "feature.subagents", "ai.meteor.kcode.plugin.SubagentFeaturePlugin", "subagents,tools,continuations,uiSlots"),
-    BundledProvider("settings-commands", "consumer.settings.commands", "ai.meteor.kcode.plugin.settingscommands.SettingsCommandsPlugin", "settingsCommands"),
+    BundledProvider("settings", "consumer.settings.commands", "ai.meteor.kcode.plugin.settingscommands.SettingsCommandsPlugin", "settingsCommands"),
     BundledProvider("ui-contributions", "core.ui-contributions", "ai.meteor.kcode.plugin.UiContributionsServicePlugin", "uiContributions"),
     BundledProvider("default-ui-bridge", "core.ui-slots", "ai.meteor.kcode.plugin.UiSlotsServicePlugin", "uiSlots"),
-    BundledProvider("ui-pages", "provider.ui.conversation.transcript", "ai.meteor.kcode.plugin.DefaultConversationTranscriptUiPlugin", "uiSlots,conversation.transcript"),
-    BundledProvider("ui-pages", "provider.ui.layout", "ai.meteor.kcode.plugin.DefaultLayoutUiPlugin", "uiSlots,application.layout"),
-    BundledProvider("ui-pages", "provider.ui.sidebar", "ai.meteor.kcode.plugin.DefaultSidebarUiPlugin", "uiSlots,page.sidebar"),
+    BundledProvider("ui-messages", "provider.ui.conversation.transcript", "ai.meteor.kcode.plugin.DefaultConversationTranscriptUiPlugin", "uiSlots,conversation.transcript"),
+    BundledProvider("ui-shell", "provider.ui.layout", "ai.meteor.kcode.plugin.DefaultLayoutUiPlugin", "uiSlots,application.layout"),
+    BundledProvider("ui-shell", "provider.ui.sidebar", "ai.meteor.kcode.plugin.DefaultSidebarUiPlugin", "uiSlots,page.sidebar"),
     BundledProvider("ui-pages", "provider.ui.chat", "ai.meteor.kcode.plugin.DefaultChatUiPlugin", "uiSlots,page.chat"),
     BundledProvider("ui-pages", "provider.ui.conversation.standalone", "ai.meteor.kcode.plugin.DefaultStandaloneConversationUiPlugin", "uiSlots,conversation.standalone"),
-    BundledProvider("ui-pages", "provider.ui.settings", "ai.meteor.kcode.plugin.DefaultSettingsUiPlugin", "uiSlots,page.settings"),
-    BundledProvider("ui-pages", "provider.ui.theme", "ai.meteor.kcode.plugin.DefaultThemeUiPlugin", "uiSlots,theme"),
+    BundledProvider("ui-shell", "provider.ui.settings", "ai.meteor.kcode.plugin.DefaultSettingsUiPlugin", "uiSlots,page.settings"),
+    BundledProvider("ui-theme", "provider.ui.theme", "ai.meteor.kcode.plugin.DefaultThemeUiPlugin", "uiSlots,theme"),
     BundledProvider("ui-pages", "provider.ui.navigation.chat", "ai.meteor.kcode.plugin.DefaultChatNavigationPlugin", "uiSlots,navigation"),
-    BundledProvider("ui-pages", "provider.ui.message.user", "ai.meteor.kcode.plugin.DefaultUserMessagePresentationPlugin", "uiSlots,message.renderer"),
-    BundledProvider("ui-pages", "provider.ui.message.assistant", "ai.meteor.kcode.plugin.DefaultAssistantMessagePresentationPlugin", "uiSlots,message.renderer"),
-    BundledProvider("ui-pages", "provider.ui.message.error", "ai.meteor.kcode.plugin.DefaultErrorMessagePresentationPlugin", "uiSlots,message.renderer"),
-    BundledProvider("ui-pages", "provider.ui.tool.default", "ai.meteor.kcode.plugin.DefaultToolUsePresentationPlugin", "uiSlots,tool.renderer"),
+    BundledProvider("ui-messages", "provider.ui.message.user", "ai.meteor.kcode.plugin.DefaultUserMessagePresentationPlugin", "uiSlots,message.renderer"),
+    BundledProvider("ui-messages", "provider.ui.message.assistant", "ai.meteor.kcode.plugin.DefaultAssistantMessagePresentationPlugin", "uiSlots,message.renderer"),
+    BundledProvider("ui-messages", "provider.ui.message.error", "ai.meteor.kcode.plugin.DefaultErrorMessagePresentationPlugin", "uiSlots,message.renderer"),
+    BundledProvider("ui-messages", "provider.ui.tool.default", "ai.meteor.kcode.plugin.DefaultToolUsePresentationPlugin", "uiSlots,tool.renderer"),
     BundledProvider("application", "provider.ui.compose", "ai.meteor.kcode.plugin.DefaultApplicationUiPlugin", "applicationUi"),
     BundledProvider("markdown", "feature.markdown", "ai.meteor.kcode.plugin.markdown.MarkdownFeaturePlugin", "markdown,uiSlots"),
     BundledProvider("localization", "feature.localization", "ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin", "localization,uiSlots"),
@@ -196,7 +191,7 @@ val bundledProviders = listOf(
     BundledProvider("agent-loop", "provider.agent-loop.koog", "ai.meteor.kcode.plugin.KoogAgentLoopPlugin", "agents,agentLoop"),
     BundledProvider("skills", "provider.skills.platform", "ai.meteor.kcode.plugin.skills.WorkspaceSkillsPlugin", "skills"),
     BundledProvider("filesystem", "consumer.tools.filesystem", "ai.meteor.kcode.plugin.feature.FilesystemToolConsumerPlugin", "fs,tools"),
-    BundledProvider("skill-tools", "consumer.tools.skill", "ai.meteor.kcode.plugin.feature.SkillToolConsumerPlugin", "skill,tools"),
+    BundledProvider("skills", "consumer.tools.skill", "ai.meteor.kcode.plugin.feature.SkillToolConsumerPlugin", "skill,tools"),
     BundledProvider("shell", "consumer.tools.shell", "ai.meteor.kcode.plugin.feature.DesktopShellToolConsumerPlugin", "shell,tools", android = false),
     BundledProvider("shell", "consumer.tools.android-shell", "ai.meteor.kcode.plugin.feature.DefaultAndroidShellToolConsumerPlugin", "shell,tools", desktop = false),
     BundledProvider("shell", "consumer.tools.ubuntu-shell", "ai.meteor.kcode.plugin.feature.DefaultUbuntuShellToolConsumerPlugin", "ubuntuShell,tools", desktop = false),
@@ -208,7 +203,7 @@ val bundledProviders = listOf(
         desktop = false),
     BundledProvider("native-notifications", "provider.generation.foreground.android", "ai.meteor.kcode.plugin.notifications.LocalizedAndroidGenerationForegroundPlugin", "generation",
         desktop = false),
-    BundledProvider("native-filesystem", "provider.fs.platform", "ai.meteor.kcode.plugin.nativefilesystem.DesktopNativeFileSystemPlugin", "fs,skillWorkspace",
+    BundledProvider("filesystem", "provider.fs.platform", "ai.meteor.kcode.plugin.nativefilesystem.DesktopNativeFileSystemPlugin", "fs,skillWorkspace",
         androidEntry = "ai.meteor.kcode.plugin.nativefilesystem.AndroidNativeFileSystemPlugin"),
 )
 
@@ -221,13 +216,7 @@ val unitConfiguration = """{"ai.meteor.kcode":{"configuration":{"kind":"unit"}}}
 
 // Exclude the SDK closure, retaining any components also reached through private roots.
 // Host-owned components still exclude their resources/JNI even when clients depend on them.
-val modelClients = mapOf(
-    "OpenAI" to "openai", "AzureOpenAI" to "openai", "GLM" to "openai",
-    "Anthropic" to "anthropic", "Google" to "google", "DeepSeek" to "deepseek",
-    "OpenRouter" to "openrouter", "Bedrock" to "bedrock", "Mistral" to "mistralai",
-    "Alibaba" to "dashscope", "Ollama" to "ollama",
-)
-fun hostComponents(owner: Project, platform: String, vendor: String?) = owner.providers.provider {
+fun hostComponents(owner: Project, platform: String) = owner.providers.provider {
     val configuration = if (platform == "desktop") "desktopRuntimeClasspath" else "debugRuntimeClasspath"
     val graph = owner.configurations.getByName(configuration).incoming.resolutionResult
     val sdk = kcodeHostModules
@@ -253,25 +242,18 @@ fun hostComponents(owner: Project, platform: String, vendor: String?) = owner.pr
     fun closure(roots: List<ResolvedComponentResult>, stopAtSdk: Boolean = false): Set<String> {
         val visited = mutableSetOf<String>()
         fun visit(component: ResolvedComponentResult) {
-            if (stopAtSdk && identity(component) in sdk) return
+            // Private implementation modules may depend directly on shared framework modules.
+            // Their host-owned closure must not become private just because it is reached here.
+            if (stopAtSdk && shared(component)) return
             if (!visited.add(identity(component))) return
             component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { visit(it.selected) }
         }
         roots.forEach(::visit)
         return visited
     }
-    val selectedClients = vendor?.let {
-        setOf(modelClients.getValue(it)) + if (it == "Bedrock") setOf("anthropic") else emptySet()
-    }
-    fun unselectedClient(component: ResolvedComponentResult): Boolean {
-        if (selectedClients == null || component.moduleVersion?.group != "ai.koog") return false
-        val client = Regex("prompt-executor-(.+)-client(?:-jvm|-android)?")
-            .matchEntire(component.moduleVersion!!.name)?.groupValues?.get(1) ?: return false
-        return client !in selectedClients
-    }
     val roots = graph.root.dependencies.filterIsInstance<ResolvedDependencyResult>().map { it.selected }
-    val hostClosure = closure(roots.filter { shared(it) || unselectedClient(it) })
-    val privateClosure = closure(roots.filterNot { shared(it) || unselectedClient(it) }, stopAtSdk = true)
+    val hostClosure = closure(roots.filter { shared(it) })
+    val privateClosure = closure(roots.filterNot { shared(it) }, stopAtSdk = true)
     (hostClosure - privateClosure) + graph.allComponents.filter(::shared).map(::identity)
 }
 
@@ -292,7 +274,7 @@ bundledProviders.forEach { provider ->
                 sharedClasses.addAll(kcodeSharedClasses)
                 ignoreMultiReleaseEntries.set(true)
                 hostModules.addAll(kcodeHostModules)
-                hostModules.addAll(hostComponents(owner, platform, provider.id.substringAfterLast('.').takeIf { provider.module == "llm" }))
+                hostModules.addAll(hostComponents(owner, platform))
                 extensionsFile.set(kcodeVariantMetadata(owner, releaseName, platform, provider.capability.split(',').toSet()))
                 if (platform == "desktop") {
                     jvmTarget.set("desktop")

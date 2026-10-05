@@ -3,6 +3,9 @@ package ai.meteor.kcode.plugin
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
 import ai.meteor.kcode.plugin.ui.api.KcodeUiSlots
+import ai.meteor.kcode.plugin.api.KcodeAgents
+import ai.meteor.kcode.plugin.api.KcodeHistory
+import ai.meteor.kcode.plugin.api.KcodeModelSettings
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.plugin.ui.api.NavigationDestination
@@ -25,18 +28,10 @@ fun navigationPlugin(destination: NavigationDestination): KcodePluginMount = kco
     Unit,
 )
 
-private object ChatNavigationRenderer : UiRenderer<NavigationPageRequest> {
-    @Composable
-    override fun Render(request: NavigationPageRequest) {
-        val chat = request.chat ?: return
-        request.slots.chat?.let { renderer -> key(renderer) { renderer.Render(chat) } }
-    }
-}
-
 object DefaultChatNavigationPlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "navigation-chat"
-    override val inject = dependencies(KcodeUiSlots.Key)
+    override val inject = dependencies(KcodeUiSlots.Key, KcodeAgents.Key, KcodeHistory.Key, KcodeModelSettings.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         effect.collect(
             ctx.require(KcodeUiSlots.Key).registerNavigation(
@@ -45,7 +40,8 @@ object DefaultChatNavigationPlugin : Plugin<Unit> {
                     order = 0,
                     icon = KcodeIconAsset.Chat,
                     title = { text(UiText.Chats) },
-                    renderer = ChatNavigationRenderer,
+                    renderer = UiRenderer { },
+                    presenter = DefaultChatPagePresenter,
                     handlesConversations = true,
                     isAvailable = { it.chat != null },
                 ),

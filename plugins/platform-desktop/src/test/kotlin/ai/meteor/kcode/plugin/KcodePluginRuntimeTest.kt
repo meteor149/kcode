@@ -459,7 +459,7 @@ class KcodePluginRuntimeTest {
         assertTrue(diagnostics.plugins.any { it.id == "provider.agent-loop.koog" })
         assertTrue(diagnostics.plugins.any { it.id == "test.tools" })
         assertEquals(
-            setOf("core/subagent", "core/goal", "core/schedule", "consumer.tools.web-search", "consumer.tools.artifact", "test/tools"),
+            setOf("core/subagent", "core/goal", "core/schedule", "consumer.tools.web-search", "test/tools"),
             diagnostics.toolContributions.toSet(),
         )
         assertEquals(listOf("kcode/default"), diagnostics.promptSections)

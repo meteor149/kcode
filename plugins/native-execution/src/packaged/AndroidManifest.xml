@@ -1,7 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:hasCode="true">
-        <!-- The installed host owns this bridge; an imported plugin does not publish it. -->
-        <provider android:name="rikka.shizuku.ShizukuProvider" tools:node="remove" />
+        <!-- The installed host owns the Shizuku bridge. This standalone payload
+             is compiled directly, so manifest-merger removal markers do not apply. -->
     </application>
 </manifest>

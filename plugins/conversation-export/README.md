@@ -77,3 +77,7 @@ nonblank basenames. The real APK test uses the actual entry, MediaStore pixels a
 URIs; it intercepts Activity handoff for deterministic verification and does not claim to
 validate the foreground chooser UI. The actual desktop module JAR is restored and revoked
 in integration tests; interactive FileDialog behavior still has a separate native UI gate.
+
+The optional UI child contributes an Export row to the conversation More popup via
+`MoreActions`. It opens save/share choices inside that popup; selection mode retains a
+direct share control. The feature owns export state, text, dispatch and withdrawal guards.

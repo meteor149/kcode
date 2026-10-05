@@ -166,9 +166,9 @@ class NativeToolApprovalCompositionTest {
                 error("unreachable")
             }
             val control = permissionControl()
-            assertNotSame(SettingsToolInteractionPlugin::class.java.classLoader, control.presenter.javaClass.classLoader)
-            assertSame(control.presenter.javaClass.classLoader,
-                Class.forName("ai.meteor.kcode.plugin.uitexts.interactionsettings.BuiltinUiTextsKt", false, control.presenter.javaClass.classLoader).classLoader)
+            assertNotSame(SettingsToolInteractionPlugin::class.java.classLoader, uiImplementation(control.presenter).javaClass.classLoader)
+            assertSame(uiImplementation(control.presenter).javaClass.classLoader,
+                Class.forName("ai.meteor.kcode.plugin.uitexts.interaction.BuiltinUiTextsKt", false, uiImplementation(control.presenter).javaClass.classLoader).classLoader)
             val settingsPolicy = requireNotNull(policy.settings)
             assertNotSame(SettingsToolInteractionPlugin::class.java.classLoader, settingsPolicy.javaClass.classLoader)
             val namespaced = settingsPolicy.update(LegacySettings(toolPermissionMode = "deny"), ToolPermissionMode.Bypass)

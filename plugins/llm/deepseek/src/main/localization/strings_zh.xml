@@ -1,0 +1,8 @@
+<resources>
+    <string name="provider_deepseek_zh">DeepSeek</string>
+    <string name="provider_deepseek_note_zh">推理与代码</string>
+    <string name="model_deepseek_flash_zh">DeepSeek V4 Flash</string>
+    <string name="model_deepseek_flash_desc_zh">高速推理，适合日常编码</string>
+    <string name="model_deepseek_pro_zh">DeepSeek V4 Pro</string>
+    <string name="model_deepseek_pro_desc_zh">复杂推理与长程任务</string>
+</resources>

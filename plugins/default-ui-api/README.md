@@ -3,7 +3,7 @@
 This module is the optional contract library for the shipped Compose application. It defines
 its layout/sidebar/page/navigation requests, typed presentation slots, settings sections,
 message and tool presenters, and application effects. Their implementation belongs to
-application, ui-pages and the corresponding feature plugins. Registry/bridge implementations
+application, ui-pages, ui-messages, ui-shell, ui-theme and the corresponding feature plugins. Registry/bridge implementations
 live separately in ui-contributions and default-ui-bridge.
 
 These types are not kernel UI requirements. A different root can use only plugins:api:
@@ -20,11 +20,11 @@ lifecycle bridges transport UiContributionsSnapshot; the default overlay adapter
 selects the default projection. The kernel has no built-in sidebar/page/navigation inventory.
 
 The neutral registry implementation lives in `ui-contributions`; withdrawing the default bridge
-does not withdraw projections used by alternative roots. Concrete pages live in `ui-pages`.
+does not withdraw projections used by alternative roots. Concrete pages live in `ui-pages` and `ui-shell`, message renderers in `ui-messages`, and the theme in `ui-theme`.
 
 The host shares the ai.meteor.kcode.plugin.ui.api namespace to preserve the optional default
 contract identity across actual JAR/APK loaders. Product renderer classes remain private.
-Current package ABI is API 60; older packages must be rebuilt. The default application starts
+Current package ABI is API 63; older packages must be rebuilt. The default application starts
 as a builtin plugin composition; this does not auto-install every feature as an external file.
 The default UI contracts export `libraries:ui` because their requests use its icon and
 opaque glass-state types. The component library itself has no dependency on these
@@ -47,10 +47,6 @@ callbacks and registered sections. Model/search/Shell-specific state and callbac
 to feature renderers. Section visibility is composable so feature renderers can consume
 prepared frame catalogs. Retained sections stop rendering after withdrawal and reject
 stale save callbacks. `settingsSectionPlugin` is an SDK helper for custom contributions.
-
-API 46 permits absent `ApplicationViewServices.artifactRepository` and
-`NavigationPageRequest.artifacts`. Artifact page/navigation consumers declare their own
-repository requirement; withdrawing that feature keeps the default root and settings usable.
 
 API 48 adds generic `ConversationDecorationPosition.Header` and `AboveComposer` anchors,
 with `Header` as the source default. `ConversationPageContext.hazeState` is an optional
@@ -93,3 +89,21 @@ API 58 removes permission-specific mode/availability/callback fields from `ChatP
 composer configuration controls. Missing editor capability means no configuration controls.
 `ApplicationViewServices.toolPermissionSettingsPolicy` is an optional host notification
 projection, resolved by the feature rather than by root storage decoding.
+
+`KcodeUiSlots` is an abstract shared service identity. The default bridge owns its private registry,
+registration tokens, text availability and preparation operation owners. `close()` revokes all
+contributions, cancels and joins active page preparations, and rejects retained registry calls.
+Retained standard renderer wrappers and predicates stop invoking withdrawn providers; standard
+request callbacks reject late actions. Custom request types must guard their own captured callbacks.
+
+`NavigationDestination.presenter` optionally prepares a page renderer from `ApplicationServices`.
+Preparation runs outside the registry mutex and belongs to the destination's registration. Missing
+page dependencies may return null without removing unrelated navigation or settings. The generic
+navigation request carries chrome, session and settings projections, without a named chat request.
+`UiTextDictionary.available` is a borrowed read-only flow; the registry owns its withdrawal signal.
+Provider lifecycle tests live in `default-ui-bridge`; SDK contract tests stay in this module.
+
+Conversation contributions use `MoreActions` to supply rows to the shared More popup.
+The borrowed `ConversationPageContext.moreMenu` opens feature-owned submenu renderers
+and dismisses the popup. The bridge guards retained submenu renderers and navigation
+callbacks with the registration lifetime. This is part of the pending API 62 change.

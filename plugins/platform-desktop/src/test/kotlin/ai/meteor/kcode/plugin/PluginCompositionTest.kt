@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.test.mountUiSlots
 import ai.meteor.kcode.session.HistoryConversationState
 
 import ai.meteor.kcode.plugin.execution.OwnedChatGenerationRunner
@@ -129,7 +130,7 @@ class PluginCompositionTest {
     @Test
     fun retainedSettingsSectionsRejectSavesAfterWithdrawalAndDoNotReviveWithReplacement() = runTest {
         val context = Context()
-        val slots = KcodeUiSlots(context)
+        val slots = mountUiSlots(context)
         val clock = object : MonotonicFrameClock {
             override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {
                 yield()
@@ -208,79 +209,6 @@ class PluginCompositionTest {
     }
 
     @Test
-    fun optionalWebWithdrawalKeepsApplicationMountedAndRestoresOnlyItsContributions() = runTest {
-        val controller = object : ai.meteor.kcode.webcontainer.WebContainerController {
-            override suspend fun launch(request: ai.meteor.kcode.webcontainer.WebPreviewRequest): ai.meteor.kcode.webcontainer.WebPreviewResult = error("Unused")
-            override suspend fun list(): List<ai.meteor.kcode.webcontainer.WebContainerInfo> = emptyList()
-            override suspend fun screenshot(containerId: String): ai.meteor.kcode.webcontainer.WebContainerScreenshot = error("Unused")
-            override suspend fun inspect(containerId: String): ai.meteor.kcode.webcontainer.WebPageInspection = error("Unused")
-            override suspend fun interact(request: ai.meteor.kcode.webcontainer.WebInteractionRequest): ai.meteor.kcode.webcontainer.WebInteractionResult = error("Unused")
-            override suspend fun console(containerId: String, cursor: Long, limit: Int): ai.meteor.kcode.webcontainer.WebConsoleSnapshot = error("Unused")
-            override suspend fun setState(containerId: String, state: ai.meteor.kcode.webcontainer.WebContainerState): ai.meteor.kcode.webcontainer.WebContainerInfo = error("Unused")
-            override suspend fun close(containerId: String) = Unit
-        }
-        val runtime = KcodePluginRuntime.create(config().copy(webContainerController = controller))
-        var starts = 0
-        var stops = 0
-        var remembered: Any? = null
-        var web: ai.meteor.kcode.webcontainer.WebContainerController? = null
-        var slots = ApplicationUiSlots()
-        val renderer = DefaultUiRenderer { services, _ ->
-            remembered = remember { Any() }
-            web = services.webContainerController
-            slots = services.uiSlots
-            DisposableEffect(Unit) { starts++; onDispose { stops++ } }
-        }
-        val clock = object : MonotonicFrameClock {
-            override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R { yield(); return onFrame(System.nanoTime()) }
-        }
-        val recomposer = Recomposer(backgroundScope.coroutineContext + clock)
-        val composition = Composition(UnitApplier(), recomposer)
-        val runner = backgroundScope.launch(clock) { recomposer.runRecomposeAndApplyChanges() }
-        suspend fun renderChanges() {
-            // Apply collector writes synchronously instead of racing Compose's global
-            // snapshot notification thread before awaitIdle observes pending work.
-            Snapshot.withMutableSnapshot { testScheduler.runCurrent() }
-            Snapshot.sendApplyNotifications()
-            testScheduler.runCurrent()
-            recomposer.awaitIdle()
-        }
-        try {
-            runtime.replacePlugin(uiMount(renderer))
-            composition.setContent { runtime.Render(ApplicationHostOptions()) }
-            renderChanges()
-            val state = remembered
-            val previous = requireNotNull(web)
-            val chat = slots.chat
-            assertTrue(state != null)
-            assertEquals(1, starts)
-            assertTrue(slots.webContainers != null)
-            runtime.pluginManager.setEnabled("feature.web-container", false)
-            renderChanges()
-            assertEquals(0, stops)
-            assertSame(state, remembered)
-            assertNull(web)
-            assertNull(slots.webContainers)
-            assertSame(chat, slots.chat)
-            assertFailsWith<IllegalStateException> { previous.list() }
-            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.web-container" }.state)
-            runtime.pluginManager.setEnabled("feature.web-container", true)
-            renderChanges()
-            assertEquals(1, starts)
-            assertEquals(0, stops)
-            assertSame(state, remembered)
-            assertTrue(web != null && web !== previous)
-            assertTrue(slots.webContainers != null)
-        } finally {
-            composition.dispose()
-            recomposer.close()
-            runner.cancel()
-            runtime.close()
-        }
-        assertEquals(1, stops)
-    }
-
-    @Test
     fun actualLayoutHostCleansUpWithdrawnSidebarAndLayoutWhileKeepingApplicationState() = runTest {
         var layoutStarted = 0
         var layoutStopped = 0
@@ -351,55 +279,7 @@ class PluginCompositionTest {
     }
 
     @Test
-    fun webContainersOverlayIsIndependentAndTracksItsProvider() = runTest {
-        lateinit var slots: KcodeUiSlots
-        lateinit var publishedController: ai.meteor.kcode.webcontainer.WebContainerController
-        val closeStarted = CompletableDeferred<Unit>()
-        val releaseClose = CompletableDeferred<Unit>()
-        val capture = kcodePlugin(descriptor("test.web-ui"),
-            plugin<Unit>(name = "web-ui-capture", inject = dependencies(KcodeUiSlots.Key, ai.meteor.kcode.plugin.api.KcodeWebContainers.Key)) { ctx, _ ->
-                slots = ctx.require(KcodeUiSlots.Key)
-                publishedController = checkNotNull(ctx.require(ai.meteor.kcode.plugin.api.KcodeWebContainers.Key).controller)
-            }, Unit)
-        val controller = object : ai.meteor.kcode.webcontainer.WebContainerController {
-            override suspend fun launch(request: ai.meteor.kcode.webcontainer.WebPreviewRequest): ai.meteor.kcode.webcontainer.WebPreviewResult = error("Unused")
-            override suspend fun list(): List<ai.meteor.kcode.webcontainer.WebContainerInfo> = emptyList()
-            override suspend fun screenshot(containerId: String): ai.meteor.kcode.webcontainer.WebContainerScreenshot = error("Unused")
-            override suspend fun inspect(containerId: String): ai.meteor.kcode.webcontainer.WebPageInspection = error("Unused")
-            override suspend fun interact(request: ai.meteor.kcode.webcontainer.WebInteractionRequest): ai.meteor.kcode.webcontainer.WebInteractionResult = error("Unused")
-            override suspend fun console(containerId: String, cursor: Long, limit: Int): ai.meteor.kcode.webcontainer.WebConsoleSnapshot = error("Unused")
-            override suspend fun setState(containerId: String, state: ai.meteor.kcode.webcontainer.WebContainerState): ai.meteor.kcode.webcontainer.WebContainerInfo = error("Unused")
-            override suspend fun close(containerId: String): Unit = error("Unused")
-            override suspend fun closeAll() {
-                closeStarted.complete(Unit)
-                releaseClose.await()
-            }
-        }
-        val runtime = KcodePluginRuntime.create(config().copy(featurePlugins = listOf(capture), webContainerController = controller))
-        try {
-            val initial = slots.snapshot()
-            assertTrue(initial.webContainers != null)
-            val staleController = publishedController
-            val disabling = async { runtime.pluginManager.setEnabled("feature.web-container", false) }
-            closeStarted.await()
-            assertFalse(disabling.isCompleted)
-            assertFailsWith<IllegalStateException> { staleController.list() }
-            releaseClose.complete(Unit)
-            disabling.await()
-            assertNull(slots.snapshot().webContainers)
-            assertSame(initial.chat, slots.snapshot().chat)
-            assertFalse("consumer.tools.web-container" in runtime.diagnostics().toolContributions)
-            assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.web-container" }.state)
-            runtime.pluginManager.setEnabled("feature.web-container", true)
-            assertTrue(slots.snapshot().webContainers != null)
-        } finally {
-            releaseClose.complete(Unit)
-            runtime.close()
-        }
-    }
-
-    @Test
-    fun standaloneAndArtifactViewsWithdrawWhenTheirFeatureOrProviderIsDisabled() = runTest {
+    fun standaloneViewWithdrawsWhenItsProviderIsDisabled() = runTest {
         lateinit var slots: KcodeUiSlots
         val capture = kcodePlugin(descriptor("test.page-dependencies"),
             plugin<Unit>(name = "page-dependencies", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
@@ -409,7 +289,6 @@ class PluginCompositionTest {
         try {
             val initial = slots.snapshot()
             assertTrue(initial.standaloneConversation != null)
-            assertTrue(initial.artifacts != null)
             runtime.pluginManager.setEnabled("provider.ui.conversation.standalone", false)
             assertNull(slots.snapshot().standaloneConversation)
             assertSame(initial.chat, slots.snapshot().chat)
@@ -420,11 +299,6 @@ class PluginCompositionTest {
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == "provider.ui.conversation.standalone" }.state)
             runtime.pluginManager.setEnabled("provider.sessions.history", true)
             assertTrue(slots.snapshot().standaloneConversation != null)
-            runtime.pluginManager.setEnabled("provider.artifacts.platform", false)
-            assertNull(slots.snapshot().artifacts)
-            assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.artifacts" }.state)
-            runtime.pluginManager.setEnabled("provider.artifacts.platform", true)
-            assertTrue(slots.snapshot().artifacts != null)
         } finally {
             runtime.close()
         }
@@ -490,8 +364,12 @@ class PluginCompositionTest {
             }, OwnedChatGenerationRunner(scope = backgroundScope), ai.meteor.kcode.chat.UnavailableScheduledTasks,
             ai.meteor.kcode.chat.ChatFailureMessages("setup", "connection"), {})
         val renderer = RecordingRenderer(pageContext)
-        val runtime = KcodePluginRuntime.create(config(KcodePluginProfile(overrides = listOf(uiMount(renderer))))
-            .copy(featurePlugins = listOf(extension)))
+        // This lifecycle probe uses a UnitApplier rather than a graphics-backed page.
+        // Export presentation is verified separately with an actual Compose scene.
+        val runtime = KcodePluginRuntime.create(config(KcodePluginProfile(
+            overrides = listOf(uiMount(renderer)),
+            disabled = setOf("feature.conversation-export"),
+        )).copy(featurePlugins = listOf(extension)))
         val clock = object : MonotonicFrameClock {
             override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R { yield(); return onFrame(System.nanoTime()) }
         }
@@ -1136,33 +1014,34 @@ class PluginCompositionTest {
             runtime.pluginManager.setEnabled("feature.conversation-export", true)
             renderChanges()
             assertTrue(firstRenderer.exportPresentation != null)
-            assertEquals(listOf("chat", "artifacts"), firstRenderer.slots.navigation.map { it.id })
+            assertEquals(listOf("chat"), firstRenderer.slots.navigation.map { it.id })
             val originalNavigation = firstRenderer.slots.navigation.first()
             runtime.pluginManager.setEnabled("provider.ui.navigation.custom", true)
             renderChanges()
-            assertEquals(listOf("custom", "chat", "artifacts"), firstRenderer.slots.navigation.map { it.id })
+            assertEquals(listOf("custom", "chat"), firstRenderer.slots.navigation.map { it.id })
             assertEquals("custom", ai.meteor.kcode.plugin.ui.api.resolveNavigationDestination("removed", firstRenderer.slots.navigation))
             assertEquals("chat", ai.meteor.kcode.plugin.ui.api.resolveNavigationDestination("chat", firstRenderer.slots.navigation))
             runtime.pluginManager.setEnabled("provider.ui.navigation.custom", false)
             renderChanges()
-            assertEquals(listOf("chat", "artifacts"), firstRenderer.slots.navigation.map { it.id })
+            assertEquals(listOf("chat"), firstRenderer.slots.navigation.map { it.id })
             assertSame(remembered, firstRenderer.remembered)
             runtime.pluginManager.setEnabled("provider.ui.navigation.chat", false)
             renderChanges()
-            assertEquals("artifacts", ai.meteor.kcode.plugin.ui.api.resolveNavigationDestination("chat", firstRenderer.slots.navigation))
+            assertNull(ai.meteor.kcode.plugin.ui.api.resolveNavigationDestination("chat", firstRenderer.slots.navigation))
             runtime.pluginManager.setEnabled("provider.ui.navigation.chat", true)
             renderChanges()
             assertFailsWith<IllegalArgumentException> {
                 runtime.replacePlugin(kcodePlugin(
                     descriptor("provider.ui.navigation.chat"),
                     plugin<Unit>(name = "duplicate-route", inject = dependencies(KcodeUiSlots.Key)) { ctx, _ ->
-                        collect(ctx.require(KcodeUiSlots.Key).registerNavigation(originalNavigation.copy(id = "artifacts")))
+                        collect(ctx.require(KcodeUiSlots.Key).registerNavigation(originalNavigation))
+                        collect(ctx.require(KcodeUiSlots.Key).registerNavigation(originalNavigation))
                     },
                     Unit,
                 ))
             }
             renderChanges()
-            assertEquals(listOf("chat", "artifacts"), firstRenderer.slots.navigation.map { it.id })
+            assertEquals(listOf("chat"), firstRenderer.slots.navigation.map { it.id })
             assertTrue(firstRenderer.slots.effects.none { it.id == "schedule.dispatch" })
             runtime.pluginManager.setEnabled("feature.schedule", false)
             renderChanges()
@@ -1179,10 +1058,15 @@ class PluginCompositionTest {
             runtime.pluginManager.setEnabled("provider.ui.message.assistant", true)
             renderChanges()
             val previousAssistant = firstRenderer.slots.messagePresentations.first { it.id == "assistant" }
-            val customAssistant = previousAssistant.copy(renderer = UiRenderer { })
+            val customAssistant = previousAssistant.copy(
+                supports = { it.role == ai.meteor.kcode.model.MessageRole.Assistant && !it.isError },
+                renderer = UiRenderer { },
+            )
             runtime.replacePlugin(messagePresentationPlugin(customAssistant))
             renderChanges()
-            assertSame(customAssistant, firstRenderer.slots.messagePresentations.first { it.id == "assistant" })
+            val preparedAssistant = firstRenderer.slots.messagePresentations.first { it.id == "assistant" }
+            assertSame(customAssistant.renderer, uiImplementation(preparedAssistant.renderer))
+            assertTrue(preparedAssistant.supports(ai.meteor.kcode.model.ChatMessage(1, ai.meteor.kcode.model.MessageRole.Assistant, "response")))
             runtime.pluginManager.setEnabled("provider.ui.tool.default", false)
             renderChanges()
             assertTrue(firstRenderer.slots.toolUsePresentations.isEmpty())
@@ -1196,25 +1080,20 @@ class PluginCompositionTest {
             assertSame(remembered, firstRenderer.remembered)
             runtime.pluginManager.setEnabled("feature.web-search", true)
             renderChanges()
-            runtime.pluginManager.setEnabled("feature.artifacts", false)
-            renderChanges()
-            assertNull(firstRenderer.slots.artifacts)
             assertEquals(listOf("chat"), firstRenderer.slots.navigation.filter { it.isAvailable(firstRenderer.slots) }.map { it.id })
             assertSame(originalChat, firstRenderer.slots.chat)
             assertSame(remembered, firstRenderer.remembered)
-            runtime.pluginManager.setEnabled("feature.artifacts", true)
             renderChanges()
-            assertTrue(firstRenderer.slots.artifacts != null)
             val replacementChat = UiRenderer<ChatPageRequest> { }
             runtime.replacePlugin(uiSlotPlugin("provider.ui.chat", ApplicationSlots.Chat, replacementChat))
             renderChanges()
-            assertSame(replacementChat, firstRenderer.slots.chat)
+            assertSame(replacementChat, uiImplementation(assertNotNull(firstRenderer.slots.chat)))
             assertSame(remembered, firstRenderer.remembered)
             assertFailsWith<IllegalArgumentException> {
                 runtime.replacePlugin(uiSlotPlugin("provider.ui.chat", ApplicationSlots.Settings, DefaultSettingsPageRenderer))
             }
             renderChanges()
-            assertSame(replacementChat, firstRenderer.slots.chat)
+            assertSame(replacementChat, uiImplementation(assertNotNull(firstRenderer.slots.chat)))
             runtime.pluginManager.setEnabled("feature.goal", false)
             renderChanges()
             assertSame(remembered, firstRenderer.remembered)

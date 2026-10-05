@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_mistral_zh">Mistral AI</string>
+    <string name="provider_mistral_note_zh">欧洲模型与代码能力</string>
+</resources>

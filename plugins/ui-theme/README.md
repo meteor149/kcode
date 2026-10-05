@@ -1,0 +1,30 @@
+# Default theme
+
+`DefaultThemeUiPlugin` publishes `provider.ui.theme` through the optional default UI registry.
+Its private renderer supplies `KcodeTheme` from `libraries:ui`, with deployable colors, tokens
+and font scaling. Validation occurs before replacing the committed provider. Unknown keys,
+invalid types, nonfinite/out-of-range values and inconsistent bubble dimensions are rejected.
+Disabling the theme leaves its slot empty. Configuration and the package ID are unchanged.
+
+Example configuration:
+
+```json
+{
+  "colors": {"surface": "#223344", "onSurface": "#DDEEFF"},
+  "extendedColors": {"panel": "#334455", "selectedSurface": "#445566"},
+  "spacing": {"md": 22},
+  "radius": {"control": 19},
+  "size": {"touchTarget": 64},
+  "glass": {"blurRadius": 6, "tintOpacity": 0.5},
+  "overlay": {"floatingSize": 68},
+  "fontScale": 1.25
+}
+```
+
+Colors support six-digit RGB or eight-digit ARGB strings. Unknown keys, invalid types,
+nonfinite/out-of-range values, and a bubble minimum wider than its maximum are rejected before
+the committed theme is withdrawn. Font scaling preserves system accessibility scaling. Disabling
+the theme leaves the application slot empty; enabling an installed package restores its configuration.
+
+
+Verify with `gradlew.bat :plugins:ui-theme:desktopTest` and platform private rendering tests.

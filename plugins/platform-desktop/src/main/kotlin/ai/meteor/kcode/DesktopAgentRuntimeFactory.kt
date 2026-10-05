@@ -57,8 +57,6 @@ fun createDesktopKoogChatRuntime(
                 .filter { it.id != "provider.history.platform" || historyRepository == null }.map {
                     val release = when (it.id) {
                         "provider.shell.platform" -> it.release.copy(configuration = StoredPluginConfiguration.encode(workspace.toString()))
-                        "feature.web-container" -> it.release.copy(configuration = StoredPluginConfiguration.encode(workspace.toString()))
-                        "provider.artifacts.platform" -> it.release.copy(configuration = StoredPluginConfiguration.encode(workspace.toString()))
                         "provider.fs.platform" -> it.release.copy(configuration = StoredPluginConfiguration.encode(workspace.toString()))
                         "provider.settings.platform" -> it.release.copy(configuration = StoredPluginConfiguration.encode(
                             Path.of(System.getProperty("user.home"), ".kcode", "settings.preferences_pb").toAbsolutePath().toString(),
@@ -88,8 +86,6 @@ fun createDesktopKoogChatRuntime(
     }
     return KcodeAgentRuntime(
         chatService = pluginRuntime.chatService,
-        webContainerController = pluginRuntime.webContainerController,
-        artifactRepository = pluginRuntime.artifactRepository,
         pluginManager = pluginRuntime.pluginManager,
         owner = pluginRuntime,
         applicationContent = pluginRuntime,

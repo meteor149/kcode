@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.platform.ComposeView
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import java.security.MessageDigest
+import org.cordis.packages.packageFileSha256
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -71,8 +71,7 @@ class AndroidIndependentRootUiPrivateLoadingTest {
                 id = "independent.root", version = "test", artifactPath = artifact.path,
                 entryClass = FreeformRootUiPlugin::class.java.name,
                 packageName = instrumentation.context.packageName,
-                sha256 = MessageDigest.getInstance("SHA-256").digest(artifact.readBytes())
-                    .joinToString("") { "%02x".format(it) },
+                sha256 = packageFileSha256(artifact),
             )
             runtime.pluginManager.install(deployment)
             var original = root

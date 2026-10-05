@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_openrouter_zh">OpenRouter</string>
+    <string name="provider_openrouter_note_zh">统一接入多家模型</string>
+</resources>

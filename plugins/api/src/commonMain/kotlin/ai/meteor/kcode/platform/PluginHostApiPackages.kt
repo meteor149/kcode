@@ -49,8 +49,6 @@ val PluginHostApiPackages: Set<String> = setOf(
     "ai.meteor.kcode.tools.permission",
     "ai.meteor.kcode.chat",
     "ai.meteor.kcode.history",
-    "ai.meteor.kcode.artifact",
-    "ai.meteor.kcode.webcontainer",
     "ai.meteor.kcode.skill",
     "ai.meteor.kcode.export",
     "ai.meteor.kcode.ApplicationHostOptions",

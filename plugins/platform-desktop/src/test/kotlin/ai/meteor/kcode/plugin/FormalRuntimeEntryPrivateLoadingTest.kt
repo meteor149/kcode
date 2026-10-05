@@ -29,14 +29,12 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.plugin.feature.SkillToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.FilesystemToolConsumerPlugin
-import ai.meteor.kcode.plugin.feature.WebContainerToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.WebSearchToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.DesktopShellToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.AndroidShellToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.UbuntuShellToolConsumerPlugin
 import ai.meteor.kcode.plugin.feature.skillToolPlugin
 import ai.meteor.kcode.plugin.feature.filesystemToolPlugin
-import ai.meteor.kcode.plugin.feature.webContainerToolPlugin
 import ai.meteor.kcode.plugin.feature.webSearchToolPlugin
 import ai.meteor.kcode.plugin.feature.desktopShellToolPlugin
 import ai.meteor.kcode.plugin.feature.androidShellToolPlugin
@@ -118,10 +116,8 @@ class FormalRuntimeEntryPrivateLoadingTest {
             },
         ))
         val entries = listOf(
-            Entry("feature.artifacts", ArtifactFeaturePlugin::class.java),
             Entry("consumer.tools.skill", SkillToolConsumerPlugin::class.java),
             Entry("consumer.tools.filesystem", FilesystemToolConsumerPlugin::class.java),
-            Entry("feature.web-container", ai.meteor.kcode.plugin.webcontainer.native.DesktopWebContainerFeaturePlugin::class.java, directory.absolutePath),
             Entry("consumer.tools.shell", DesktopShellToolConsumerPlugin::class.java),
             Entry("consumer.tools.android-shell", AndroidShellToolConsumerPlugin::class.java, "Android fixture shell"),
             Entry("consumer.tools.ubuntu-shell", UbuntuShellToolConsumerPlugin::class.java, "Ubuntu fixture shell"),
@@ -129,8 +125,6 @@ class FormalRuntimeEntryPrivateLoadingTest {
             Entry("feature.conversation-export", ConversationExportFeaturePlugin::class.java),
         ).filter(select)
         suspend fun contribution(id: String): Any? = when (id) {
-            "feature.artifacts" -> capturedContext[ai.meteor.kcode.plugin.ui.api.KcodeUiSlots.Key]?.snapshot()?.artifacts
-            "feature.web-container" -> capturedContext[ai.meteor.kcode.plugin.api.KcodeWebContainers.Key]?.controller
             "feature.conversation-export" -> capturedContext[KcodeConversationExport.Key]?.exporter
             "feature.web-search" -> capturedContext[KcodeWebSearch.Key]?.backend
             else -> if (id in tools.contributionIds()) tools else null
@@ -151,7 +145,7 @@ class FormalRuntimeEntryPrivateLoadingTest {
                 runtime.pluginManager.replace(spec)
                 val oldSearchPolicy = capturedContext[KcodeSearchSettings.Key]?.policy
                 val registered = requireNotNull(contribution(id)) { "Missing $id" }
-                if (id == "feature.artifacts" || id == "feature.web-container" || id == "feature.conversation-export" || id == "feature.web-search") {
+                if (id == "feature.conversation-export" || id == "feature.web-search") {
                     val privateLoader = registered.javaClass.classLoader
                     assertNotSame(entry.classLoader, privateLoader)
                     for (contract in listOf(AgentPluginManager::class.java, DynamicPluginSpec::class.java,
@@ -175,14 +169,6 @@ class FormalRuntimeEntryPrivateLoadingTest {
                 }
                 assertFailsWith<IllegalStateException> { runtime.pluginManager.replace(spec.copy(version = "invalid", config = null)) }
                 assertSame(registered, contribution(id))
-                if (id == "feature.artifacts") {
-                    runtime.pluginManager.setEnabled("core.ui-slots", false)
-                    assertEquals(null, contribution(id))
-                    assertTrue("consumer.tools.artifact" in tools.contributionIds())
-                    runtime.pluginManager.setEnabled("core.ui-slots", true)
-                    assertTrue(contribution(id) != null)
-                    assertNotSame(registered, contribution(id))
-                }
                 if (id == "feature.web-search") {
                     val backend = registered as WebSearchBackend
                     val privateLoader = backend.javaClass.classLoader
@@ -208,12 +194,6 @@ class FormalRuntimeEntryPrivateLoadingTest {
                     }
                 } else runtime.pluginManager.setEnabled(id, false)
                 assertEquals(null, contribution(id))
-                if (id == "feature.artifacts") {
-                    assertFalse("consumer.tools.artifact" in tools.contributionIds())
-                    val remaining = capturedContext[ai.meteor.kcode.plugin.ui.api.KcodeUiSlots.Key]!!.snapshot()
-                    assertTrue(remaining.navigation.none { it.id == "artifacts" })
-                    assertTrue(remaining.settings != null)
-                }
                 if (id == "feature.web-search") {
                     val old = oldSearchPolicy!!
                     assertEquals(null, old.providers())
@@ -226,9 +206,6 @@ class FormalRuntimeEntryPrivateLoadingTest {
                 }
                 runtime.pluginManager.setEnabled(id, true)
                 assertTrue(contribution(id) != null)
-                if (id == "feature.artifacts") {
-                    assertEquals(1, tools.contributionIds().count { it == "consumer.tools.artifact" })
-                }
             }
             if (entries.any { it.id == "consumer.tools.filesystem" }) {
                 runtime.pluginManager.setEnabled("test.formal-fs", false)

@@ -14,12 +14,8 @@ import ai.meteor.kcode.plugin.api.ConversationOverlayFactory
 import ai.meteor.kcode.AgentRuntimeOwner
 import ai.meteor.kcode.ApplicationContent
 import ai.meteor.kcode.ApplicationHostOptions
-import ai.meteor.kcode.artifact.ArtifactRepository
 import ai.meteor.kcode.plugin.api.ScheduledTaskNotificationsFactory
 import ai.meteor.kcode.plugin.api.ConversationImageSaverFactory
-import ai.meteor.kcode.plugin.api.ArtifactFileStoreFactory
-import ai.meteor.kcode.artifact.ArtifactFileStore
-import ai.meteor.kcode.artifact.Artifact
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.GoalSession
 import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
@@ -40,7 +36,6 @@ import ai.meteor.kcode.plugin.api.KcodeAgents
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
 import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.chat.ChatGenerationRunner
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import ai.meteor.kcode.chat.UnavailableScheduledTasks
 import ai.meteor.kcode.plugin.api.KcodeConversationExport
 import ai.meteor.kcode.plugin.api.KcodeConversationExecution
@@ -66,13 +61,11 @@ import ai.meteor.kcode.plugin.api.KcodeModelSettings
 import ai.meteor.kcode.plugin.api.KcodeSystemPrompt
 import ai.meteor.kcode.plugin.api.KcodeTools
 import ai.meteor.kcode.plugin.api.KcodeUiContributions
-import ai.meteor.kcode.plugin.api.KcodeWebContainers
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.PluginState
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.skill.SkillRuntime
 import ai.meteor.kcode.plugin.api.UiContributionsSnapshot
-import ai.meteor.kcode.webcontainer.WebContainerController
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -125,13 +118,9 @@ data class KcodePluginRuntimeConfig(
     val settingsStoreFactory: SettingsStoreFactory? = null,
     val historyRepositoryFactory: HistoryRepositoryFactory? = null,
     val historyRepository: ConversationHistoryRepository? = null,
-    val artifactRepository: ArtifactRepository? = null,
-    val webContainerController: WebContainerController? = null,
     val bundle: List<KcodePluginMount>? = null,
     val pluginCompositionStore: PluginCompositionStore? = null,
     val builtinAliases: Map<String, Set<String>>? = null,
-    val artifactFileStore: ArtifactFileStore? = null,
-    val artifactFileStoreFactory: ArtifactFileStoreFactory? = null,
     val conversationImageSaverFactory: ConversationImageSaverFactory? = null,
     val scheduledTaskNotificationsFactory: ScheduledTaskNotificationsFactory? = null,
     val conversationOverlayFactory: (suspend (StateFlow<UiContributionsSnapshot>) -> AgentConversationOverlayController?)? = null,
@@ -195,25 +184,6 @@ class KcodePluginRuntime private constructor(
     }
 
     private val applicationView = MutableStateFlow<ApplicationView?>(null)
-
-    /** Legacy host projection follows the current plugin; it never retains a native repository. */
-    val artifactRepository: ArtifactRepository = object : ArtifactRepository {
-        override suspend fun list(): List<Artifact> {
-            val repository = lock.withLock {
-                check(!closed) { "plugin runtime is closed" }
-                context.require(KcodeArtifacts.Key).repository
-            }
-            return repository.list()
-        }
-    }
-
-    /** Host operations use the current Web provider and reject absence or runtime closure. */
-    val webContainerController: WebContainerController = CurrentWebContainerController {
-        lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
-            requireNotNull(context.require(KcodeWebContainers.Key).controller) { "Web containers are unavailable" }
-        }
-    }
 
     val conversationOverlayController: AgentConversationOverlayController =
         object : AgentConversationOverlayController {
@@ -727,12 +697,19 @@ class KcodePluginRuntime private constructor(
 
     private suspend fun prepareApplicationView(): PreparedApplicationView {
         val uiSlots = context[KcodeUiContributions.Key]?.snapshot() ?: UiContributionsSnapshot()
-        context[KcodeConversationCommands.Key]?.commitSnapshot()
+        val commands = context[KcodeConversationCommands.Key]?.commitSnapshot() ?: ConversationCommandSnapshot()
         val catalog = context[KcodeLlm.Key]?.catalog() ?: ModelCatalogSnapshot()
         val renderer = context[KcodeApplicationUi.Key]?.renderer
         val view = if (closed || renderer == null) null else {
             val preparing = MutableStateFlow(true)
             val services = object : ApplicationServices {
+                override val uiContributions: UiContributionsSnapshot
+                    get() { check(preparing.value); return uiSlots }
+                override val modelCatalog: ModelCatalogSnapshot
+                    get() { check(preparing.value); return catalog }
+                override val conversationCommands: ConversationCommandSnapshot
+                    get() { check(preparing.value); return commands }
+
                 override fun <T> get(key: ServiceKey<T>): T? {
                     check(preparing.value) { "Application service lookup is no longer preparing a frame" }
                     return context[key]
@@ -826,12 +803,8 @@ class KcodePluginRuntime private constructor(
                 settingsStoreFactory = config.settingsStoreFactory,
                 historyRepository = config.historyRepository,
                 historyRepositoryFactory = config.historyRepositoryFactory,
-                artifactRepository = config.artifactRepository,
-                artifactFileStore = config.artifactFileStore,
-                artifactFileStoreFactory = config.artifactFileStoreFactory,
                 conversationImageSaverFactory = config.conversationImageSaverFactory,
                 scheduledTaskNotificationsFactory = config.scheduledTaskNotificationsFactory,
-                webContainerController = config.webContainerController,
                 pluginCompositionStore = config.pluginCompositionStore,
                 conversationOverlayHostState = overlayHostState,
                 packagedProviderIds = config.bundledPackages.map { it.id }.toSet(),

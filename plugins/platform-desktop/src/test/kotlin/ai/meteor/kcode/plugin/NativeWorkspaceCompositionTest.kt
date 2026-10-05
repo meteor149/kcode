@@ -86,17 +86,17 @@ class NativeWorkspaceCompositionTest {
             assertNotSame(fs.javaClass.classLoader, skills.javaClass.classLoader)
             scopedWorkspace.writeText("/workspace/user-data.txt", "persisted")
             assertEquals("persisted", fs.readBytes("/workspace/user-data.txt").decodeToString())
-            skills.catalog()
-            val builtin = File(workspace, ".kcode/skills/web-app-builder/SKILL.md")
-            assertTrue(builtin.isFile)
+            scopedWorkspace.writeText(
+                "/workspace/.agents/skills/example/SKILL.md",
+                "---\nname: example\ndescription: Fixture skill\n---\nInstructions",
+            )
+            assertTrue(skills.catalog().entries.any { it.name == "example" })
             val previousSkills = skills
             runtime.pluginManager.setEnabled(skillsSpec.id, false)
             assertFailsWith<IllegalStateException> { previousSkills.catalog() }
-            assertTrue(builtin.delete())
             runtime.pluginManager.setEnabled(skillsSpec.id, true)
             assertNotSame(previousSkills, skills)
-            skills.catalog()
-            assertTrue(builtin.isFile, "A fresh activation must own a fresh materialization cache")
+            assertTrue(skills.catalog().entries.any { it.name == "example" })
 
             val oldFs = fs
             val oldWorkspace = scopedWorkspace
@@ -110,7 +110,7 @@ class NativeWorkspaceCompositionTest {
             assertNotSame(oldWorkspace, scopedWorkspace)
             assertNotSame(oldSkills, skills)
             assertEquals("persisted", scopedWorkspace.readText("/workspace/user-data.txt"))
-            skills.catalog()
+            assertTrue(skills.catalog().entries.any { it.name == "example" })
             runtime.pluginManager.uninstall(fsSpec.id)
             assertEquals(PluginState.Pending, runtime.diagnostics().plugins.first { it.id == skillsSpec.id }.state)
         } finally {

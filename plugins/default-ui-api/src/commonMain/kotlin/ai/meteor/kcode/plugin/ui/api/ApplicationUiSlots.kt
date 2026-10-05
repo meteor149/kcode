@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin.ui.api
 
-import ai.meteor.kcode.artifact.ArtifactRepository
+import ai.meteor.kcode.ApplicationHostOptions
+import ai.meteor.kcode.plugin.api.ApplicationServices
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.GoalSessionFactory
 import ai.meteor.kcode.chat.ConversationSession
@@ -17,7 +18,6 @@ import ai.meteor.kcode.ui.component.KcodeHazeState
 import ai.meteor.kcode.ui.component.KcodeIconAsset
 import ai.meteor.kcode.plugin.ui.api.PersistenceFailure
 import ai.meteor.kcode.ui.state.ConversationState
-import ai.meteor.kcode.webcontainer.WebContainerController
 import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ToolUseInfo
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -89,11 +89,6 @@ data class ApplicationLayoutRequest(
     val content: @Composable (Modifier, Boolean) -> Unit,
 )
 
-data class WebContainersOverlayRequest(
-    val hazeState: KcodeHazeState,
-    val modifier: Modifier = Modifier,
-)
-
 /** Read-only transcript surface; the consumer owns the window, the provider owns message UI. */
 data class ConversationTranscriptRequest(
     val messageIds: List<Long>,
@@ -105,14 +100,6 @@ data class StandaloneConversationRequest(
     val pendingCount: Int,
     val onAddToRecent: () -> Unit,
     val onClose: () -> Unit,
-)
-
-data class ArtifactsPageRequest(
-    val repository: ArtifactRepository,
-    val webContainerController: WebContainerController?,
-    val compact: Boolean,
-    val onMenu: () -> Unit,
-    val modifier: Modifier = Modifier,
 )
 
 
@@ -183,6 +170,11 @@ data class ApplicationEffect(
 
 val LocalApplicationUiSlots = staticCompositionLocalOf { ApplicationUiSlots() }
 
+/** Resolve page-owned capabilities only during frame preparation. */
+fun interface NavigationPagePresenter {
+    suspend fun prepare(services: ApplicationServices): UiRenderer<NavigationPageRequest>?
+}
+
 /** Each route owns its metadata and renderer; the shell treats route ids as opaque strings. */
 data class NavigationDestination(
     val id: String,
@@ -192,13 +184,22 @@ data class NavigationDestination(
     val renderer: UiRenderer<NavigationPageRequest>,
     val handlesConversations: Boolean = false,
     val isAvailable: (ApplicationUiSlots) -> Boolean = { true },
+    val presenter: NavigationPagePresenter? = null,
+    /** Stable for one registration even when its prepared renderer changes between frames. */
+    val renderKey: Any = renderer,
 )
 
 data class NavigationPageRequest(
     val slots: ApplicationUiSlots,
     val conversationSession: ConversationSession?,
-    val chat: ChatPageRequest?,
-    val artifacts: ArtifactsPageRequest?,
+    val modifier: Modifier,
+    val compact: Boolean,
+    val settingsEditor: SettingsEditorProjection,
+    val committedSettings: StoredAppSettings,
+    val hostOptions: ApplicationHostOptions,
+    val onMenu: () -> Unit,
+    val onSettings: () -> Unit,
+    val onNewConversation: () -> Unit,
     val onNavigate: (String) -> Unit,
 )
 
@@ -210,10 +211,8 @@ data class ApplicationUiSlots(
     val chat: UiRenderer<ChatPageRequest>? = null,
     val layout: UiRenderer<ApplicationLayoutRequest>? = null,
     val sidebar: UiRenderer<SidebarPageRequest>? = null,
-    val webContainers: UiRenderer<WebContainersOverlayRequest>? = null,
     val standaloneConversation: UiRenderer<StandaloneConversationRequest>? = null,
     val conversationTranscript: UiRenderer<ConversationTranscriptRequest>? = null,
-    val artifacts: UiRenderer<ArtifactsPageRequest>? = null,
     val settings: UiRenderer<SettingsPageRequest>? = null,
     val theme: ThemeRenderer? = null,
     val markdown: MarkdownContent? = null,

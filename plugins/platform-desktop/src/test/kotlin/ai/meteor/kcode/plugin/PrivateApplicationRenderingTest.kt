@@ -76,10 +76,12 @@ class PrivateApplicationRenderingTest {
     @Test
     fun privateJarsRenderApplicationAndPagesWithoutBundlingTheHostSdk(): Unit = runBlocking {
         val directory = Files.createTempDirectory("private-application-render").toFile()
-        val artifacts = mutableMapOf<File, File>()
-        fun artifactFor(entry: Class<*>): File {
-            val source = File(entry.protectionDomain.codeSource.location.toURI())
-            return artifacts.getOrPut(source) {
+        val artifacts = mutableMapOf<String, File>()
+        fun artifactFor(id: String, entry: Class<*>): File {
+            val moduleJar = File(entry.protectionDomain.codeSource.location.toURI())
+            val source = File(moduleJar.parentFile.parentFile, "cordis/artifacts/${id.replace('.', '-')}/desktop/plugin.jar")
+            check(source.isFile) { "Missing packaged private dependency closure for $id" }
+            return artifacts.getOrPut(id) {
                 File(directory, "module-${artifacts.size}.jar").also { source.copyTo(it); check(it.setReadOnly()) }
             }
         }
@@ -143,7 +145,7 @@ class PrivateApplicationRenderingTest {
             lateinit var modelSettingsDeployment: DynamicPluginSpec
             lateinit var localizationDeployment: DynamicPluginSpec
             for ((id, entry) in entries) {
-                val artifact = artifactFor(entry)
+                val artifact = artifactFor(id, entry)
                 val deployment = DynamicPluginSpec(
                     id = id,
                     version = "private-render",
@@ -211,22 +213,16 @@ class PrivateApplicationRenderingTest {
                     frames()
                     assertEquals(1.75, resolvedTemperature.get())
                     runtime.pluginManager.setEnabled("provider.model-settings.catalog", false)
-                    runtime.pluginManager.setEnabled("provider.artifacts.platform", false)
                     frames()
-                    assertTrue("Message kcode…" in semanticsLabels(scene))
+                    assertTrue("Message kcode…" !in semanticsLabels(scene))
                     assertTrue(slots.snapshot().settings != null)
-                    assertNull(slots.snapshot().artifacts)
-                    assertTrue(slots.snapshot().navigation.none { it.id == "artifacts" })
                     assertEquals(ai.meteor.kcode.plugin.api.PluginState.Active,
                         runtime.diagnostics().plugins.single { it.id == "provider.ui.compose" }.state)
-                    runtime.pluginManager.setEnabled("provider.artifacts.platform", true)
                     frames()
-                    assertTrue(slots.snapshot().artifacts != null)
-                    assertTrue(slots.snapshot().navigation.any { it.id == "artifacts" })
                     resolvedTemperature.set(null)
                     frames()
                     assertNull(resolvedTemperature.get())
-                    assertTrue("Message kcode…" in semanticsLabels(scene))
+                    assertTrue("Message kcode…" !in semanticsLabels(scene))
                     assertTrue(slots.snapshot().settings != null)
                     assertTrue(slots.snapshot().settingsSections.none { it.id == "model" })
                     runtime.pluginManager.setEnabled("provider.model-settings.catalog", true)
@@ -332,9 +328,9 @@ class PrivateApplicationRenderingTest {
                     val heldCatalog = requireNotNull(fallbackCatalog.get())
                     val featureLabel = ai.meteor.kcode.localization.LocalizedText("test.feature.setting")
                     assertEquals("Feature option", heldCatalog.translate(ai.meteor.kcode.localization.AppLanguage.English, featureLabel))
-                    val privateLayoutLoader = requireNotNull(slots.snapshot().layout).javaClass.classLoader
+                    val privateLayoutLoader = uiImplementation(requireNotNull(slots.snapshot().layout)).javaClass.classLoader
                     assertSame(privateLayoutLoader, Class.forName(
-                        "ai.meteor.kcode.plugin.uitexts.uipages.BuiltinUiTextsKt", false, privateLayoutLoader,
+                        "ai.meteor.kcode.plugin.uitexts.uishell.BuiltinUiTextsKt", false, privateLayoutLoader,
                     ).classLoader)
                     val fallbackTheme = slots.snapshot().theme
                     for ((sectionId, expectedLabel) in listOf("model" to "Provider", "search" to "Search provider")) {

@@ -1,10 +1,13 @@
-# Default UI projection bridge
+# Default UI registry and bridge
 
-`core.ui-slots` / `UiSlotsServicePlugin` requires `KcodeUiContributions`, publishes
-`KcodeUiSlots`, and registers `DefaultUiSnapshotKey`. It owns no concrete page/renderers.
-Withdrawing this bridge retracts default UI contributions while leaving alternative root
-projections registered in the neutral registry. Missing neutral infrastructure suspends the
-bridge; restoration rebinds it. Concrete default pages are consumers in `ui-pages`.
+`UiSlotsServicePlugin` publishes `core.ui-slots` with Unit configuration. It requires
+`KcodeUiContributions`, owns the private default UI registry, and registers its snapshot under
+`DefaultUiSnapshotKey`. SDK modules contain shared identities and contracts only.
 
-Verify withdrawal isolation with `:plugins:default-ui-bridge:desktopTest` and real private
-JAR/APK loading with the platform contribution tests.
+Each registration has a revocation token. Standard renderers, metadata and captured request
+callbacks stop invoking withdrawn contributions. Page preparations use operation owners;
+withdrawal cancels and joins them outside registry locks. Closing the registry rejects retained
+calls, revokes all contributions and waits for cleanup, including concurrent close callers.
+Withdrawing this bridge preserves unrelated neutral projections used by alternative roots.
+
+Verify with `gradlew.bat :plugins:default-ui-bridge:desktopTest` and platform JAR/APK tests.

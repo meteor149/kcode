@@ -1,6 +1,6 @@
 package ai.meteor.kcode.plugin
 
-const val CurrentPluginApiVersion = 60
+const val CurrentPluginApiVersion = 63
 
 interface AgentPluginManager {
     /** Resolve platform packages and commit the complete dependency set as one composition. */

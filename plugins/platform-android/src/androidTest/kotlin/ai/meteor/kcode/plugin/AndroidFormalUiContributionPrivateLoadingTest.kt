@@ -26,7 +26,7 @@ class AndroidFormalUiContributionPrivateLoadingTest {
 
     @Test(timeout = 60000)
     fun privateApkFeaturePageContributions(): Unit = runBlocking {
-        verifyEntries({ it.id in setOf("provider.ui.chat", "feature.artifacts", "provider.ui.conversation.standalone", "provider.ui.conversation.transcript") })
+        verifyEntries({ it.id in setOf("provider.ui.chat", "provider.ui.conversation.standalone", "provider.ui.conversation.transcript") })
     }
 
     @Test(timeout = 60000)
@@ -64,12 +64,10 @@ class AndroidFormalUiContributionPrivateLoadingTest {
             UiCase("provider.ui.layout", DefaultLayoutUiPlugin::class.java) { it.layout },
             UiCase("provider.ui.sidebar", DefaultSidebarUiPlugin::class.java) { it.sidebar },
             UiCase("provider.ui.chat", DefaultChatUiPlugin::class.java) { it.chat },
-            UiCase("feature.artifacts", ArtifactFeaturePlugin::class.java) { it.artifacts },
             UiCase("provider.ui.conversation.standalone", DefaultStandaloneConversationUiPlugin::class.java) { it.standaloneConversation },
             UiCase("provider.ui.settings", DefaultSettingsUiPlugin::class.java) { it.settings },
             UiCase("provider.ui.theme", DefaultThemeUiPlugin::class.java) { it.theme },
             UiCase("provider.ui.navigation.chat", DefaultChatNavigationPlugin::class.java) { it.navigation.singleOrNull { item -> item.id == "chat" }?.renderer },
-            UiCase("feature.artifacts", ArtifactFeaturePlugin::class.java) { it.navigation.singleOrNull { item -> item.id == "artifacts" }?.renderer },
             UiCase("provider.ui.message.user", DefaultUserMessagePresentationPlugin::class.java) { it.messagePresentations.singleOrNull { item -> item.id == "user" }?.renderer },
             UiCase("provider.ui.message.assistant", DefaultAssistantMessagePresentationPlugin::class.java) { it.messagePresentations.singleOrNull { item -> item.id == "assistant" }?.renderer },
             UiCase("provider.ui.message.error", DefaultErrorMessagePresentationPlugin::class.java) { it.messagePresentations.singleOrNull { item -> item.id == "error" }?.renderer },
@@ -85,26 +83,26 @@ class AndroidFormalUiContributionPrivateLoadingTest {
                 val deployment = spec(id, entry)
                 runtime.pluginManager.replace(deployment)
                 val renderer = requireNotNull(select(slots.snapshot())) { "Missing contribution $id" }
-                assertNotSame(ApplicationUiSlots::class.java.classLoader, renderer.javaClass.classLoader, id)
-                assertNotSame(entry.classLoader, renderer.javaClass.classLoader, id)
+                assertNotSame(ApplicationUiSlots::class.java.classLoader, uiImplementation(renderer).javaClass.classLoader, id)
+                assertNotSame(entry.classLoader, uiImplementation(renderer).javaClass.classLoader, id)
                 if (id == "provider.ui.settings") {
                     for (part in listOf("BottomSheetOverlayKt", "BottomSheetDialogPropertiesKt")) {
                         val implementation = Class.forName(
                             "ai.meteor.kcode.ui.component.$part",
                             false,
-                            renderer.javaClass.classLoader,
+                            uiImplementation(renderer).javaClass.classLoader,
                         )
                         assertSame(ai.meteor.kcode.ui.component.KcodeIconAsset::class.java.classLoader, implementation.classLoader, part)
-                        assertNotSame(renderer.javaClass.classLoader, implementation.classLoader, part)
+                        assertNotSame(uiImplementation(renderer).javaClass.classLoader, implementation.classLoader, part)
                     }
                     assertFailsWith<ClassNotFoundException> {
-                        Class.forName("ai.meteor.kcode.plugin.pages.component.BottomSheetOverlayKt", false, renderer.javaClass.classLoader)
+                        Class.forName("ai.meteor.kcode.plugin.pages.component.BottomSheetOverlayKt", false, uiImplementation(renderer).javaClass.classLoader)
                     }
                 }
                 if (id == "provider.ui.theme") {
                     for (part in listOf("DefaultPaletteKt", "DefaultTypographyKt", "DefaultDesignTokensKt")) {
-                        val implementation = Class.forName("ai.meteor.kcode.plugin.pages.ui.design.$part", false, renderer.javaClass.classLoader)
-                        assertSame(renderer.javaClass.classLoader, implementation.classLoader, part)
+                        val implementation = Class.forName("ai.meteor.kcode.plugin.pages.ui.design.$part", false, uiImplementation(renderer).javaClass.classLoader)
+                        assertSame(uiImplementation(renderer).javaClass.classLoader, implementation.classLoader, part)
                     }
                 }
 
@@ -112,11 +110,11 @@ class AndroidFormalUiContributionPrivateLoadingTest {
                     val privateBody = Class.forName(
                         "ai.meteor.kcode.plugin.pages.chat.component.ChatAssistantMessageKt",
                         false,
-                        renderer.javaClass.classLoader,
+                        uiImplementation(renderer).javaClass.classLoader,
                     )
-                    assertSame(renderer.javaClass.classLoader, privateBody.classLoader, id)
+                    assertSame(uiImplementation(renderer).javaClass.classLoader, privateBody.classLoader, id)
                     assertFailsWith<ClassNotFoundException> {
-                        Class.forName("ai.meteor.kcode.ui.component.chat.ChatAssistantMessageKt", false, renderer.javaClass.classLoader)
+                        Class.forName("ai.meteor.kcode.ui.component.chat.ChatAssistantMessageKt", false, uiImplementation(renderer).javaClass.classLoader)
                     }
                 }
                 assertFailsWith<IllegalStateException> {
@@ -126,23 +124,23 @@ class AndroidFormalUiContributionPrivateLoadingTest {
                 runtime.pluginManager.setEnabled(id, false)
                 assertNull(select(slots.snapshot()), id)
                 runtime.pluginManager.setEnabled(id, true)
-                assertNotSame(entry.classLoader, requireNotNull(select(slots.snapshot())).javaClass.classLoader, id)
+                assertNotSame(entry.classLoader, uiImplementation(requireNotNull(select(slots.snapshot()))).javaClass.classLoader, id)
             }
             if (entries.any { it.id == "provider.ui.chat" }) {
                 runtime.pluginManager.setEnabled("provider.conversation-execution.history", false)
                 assertNull(slots.snapshot().chat)
                 runtime.pluginManager.setEnabled("provider.conversation-execution.history", true)
-                assertNotSame(DefaultChatUiPlugin::class.java.classLoader, requireNotNull(slots.snapshot().chat).javaClass.classLoader)
+                assertNotSame(DefaultChatUiPlugin::class.java.classLoader, uiImplementation(requireNotNull(slots.snapshot().chat)).javaClass.classLoader)
             }
             if (verifyCore) {
                 runtime.pluginManager.replace(spec("core.ui-slots", UiSlotsServicePlugin::class.java))
                 val previous = slots
                 runtime.pluginManager.setEnabled("core.ui-slots", false)
-                assertNull(previous.snapshot().layout)
+                assertFailsWith<IllegalStateException> { previous.snapshot() }
                 runtime.pluginManager.setEnabled("core.ui-slots", true)
                 assertNotSame(previous, slots)
                 for ((id, entry, select) in entries) {
-                    assertNotSame(entry.classLoader, requireNotNull(select(slots.snapshot())) { id }.javaClass.classLoader, id)
+                    assertNotSame(entry.classLoader, uiImplementation(requireNotNull(select(slots.snapshot())) { id }).javaClass.classLoader, id)
                 }
             }
         } finally {

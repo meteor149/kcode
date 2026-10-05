@@ -1,0 +1,8 @@
+<resources>
+    <string name="provider_azure_openai_en">Azure OpenAI</string>
+    <string name="provider_azure_openai_note_en">Enterprise Azure deployments</string>
+    <string name="model_gpt4o_mini_en">GPT-4o mini</string>
+    <string name="model_gpt4o_mini_desc_en">Fast and economical for everyday tasks</string>
+    <string name="model_gpt4o_en">GPT-4o</string>
+    <string name="model_gpt4o_desc_en">Stronger general understanding and generation</string>
+</resources>

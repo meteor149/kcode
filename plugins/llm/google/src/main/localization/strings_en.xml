@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_google_en">Google Gemini</string>
+    <string name="provider_google_note_en">Multimodal Gemini models</string>
+</resources>

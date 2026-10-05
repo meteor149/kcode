@@ -88,7 +88,10 @@ class ExportUiPrivateLifecycleTest {
             listOf("feature.conversation-export" to ConversationExportFeaturePlugin::class.java,
                 "provider.ui.chat" to DefaultChatUiPlugin::class.java).forEach { (id, entry) ->
                 val artifact = File(directory, "$id.jar")
-                File(entry.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
+                val moduleJar = File(entry.protectionDomain.codeSource.location.toURI())
+                val packaged = File(moduleJar.parentFile.parentFile, "cordis/artifacts/${id.replace('.', '-')}/desktop/plugin.jar")
+                check(packaged.isFile)
+                packaged.copyTo(artifact)
                 check(artifact.setReadOnly())
                 runtime.pluginManager.replace(DynamicPluginSpec(
                     id = id, version = "private-ui", entryClass = entry.name, artifactPath = artifact.path,
@@ -99,8 +102,8 @@ class ExportUiPrivateLifecycleTest {
             var skin by mutableStateOf(snapshot())
             val originalChat = skin.chat
             val original = skin.conversationDecorations.single { it.id == "conversation-export" }
-            assertNotSame(ConversationExportFeaturePlugin::class.java.classLoader, original.presenter.javaClass.classLoader)
-            val loader = original.presenter.javaClass.classLoader
+            assertNotSame(ConversationExportFeaturePlugin::class.java.classLoader, uiImplementation(original.presenter).javaClass.classLoader)
+            val loader = uiImplementation(original.presenter).javaClass.classLoader
             assertSame(loader, Class.forName("ai.meteor.kcode.plugin.uitexts.conversationexport.BuiltinUiTextsKt", false, loader).classLoader)
             val target = HistoryConversationState(81, "export")
             target.messages += ChatMessage(1, MessageRole.User, "private export message")
@@ -112,8 +115,13 @@ class ExportUiPrivateLifecycleTest {
                 Modifier, true, target, null, chat, generation, null, {}, {}, {},
                 { newRequests++ }, { target }, history, UnavailableGoalSessions, UnavailableScheduledTasks,
             )
+            var menuPage by mutableStateOf<ai.meteor.kcode.plugin.ui.api.UiRenderer<androidx.compose.ui.Modifier>?>(null)
+            val moreMenu = object : ai.meteor.kcode.plugin.ui.api.ConversationMoreMenu {
+                override fun showPage(renderer: ai.meteor.kcode.plugin.ui.api.UiRenderer<androidx.compose.ui.Modifier>) { menuPage = renderer }
+                override fun dismiss() { menuPage = null }
+            }
             val page = ConversationPageContext(target, true, null, chat, generation, UnavailableScheduledTasks,
-                ChatFailureMessages("setup", "connection"), {})
+                ChatFailureMessages("setup", "connection"), {}, moreMenu = moreMenu)
             withContext(Dispatchers.Main.immediate) {
                 val scene = ImageComposeScene(width = 400, height = 600, coroutineContext = coroutineContext) {
                     requireNotNull(skin.theme).Render {
@@ -124,10 +132,17 @@ class ExportUiPrivateLifecycleTest {
                 }
                 var retained by mutableStateOf(original)
                 var preparedCount = -1
-                val probe = ImageComposeScene(width = 200, height = 100, coroutineContext = coroutineContext) {
+                val probe = ImageComposeScene(width = 300, height = 400, coroutineContext = coroutineContext) {
                     LocalizationContext(remember(skin) { SnapshotCatalog(skin) }, "en") {
                         val contents = retained.presenter.Present(page)
                         SideEffect { preparedCount = contents.size }
+                        requireNotNull(skin.theme).Render {
+                            menuPage?.Render(Modifier)
+                            contents.forEach { content ->
+                                check(content.position == ai.meteor.kcode.plugin.ui.api.ConversationDecorationPosition.MoreActions)
+                                content.renderer.Render(Modifier)
+                            }
+                        }
                     }
                 }
                 var frame = 0L
@@ -136,15 +151,21 @@ class ExportUiPrivateLifecycleTest {
                 }
                 try {
                     render()
-                    assertTrue("Export conversation as image" in labels(scene))
+                    assertTrue("Export" in labels(probe))
                     assertTrue("New chat" in labels(scene))
                     assertEquals(1, preparedCount)
+                    click(probe, "Export")
+                    render()
+                    assertTrue("Save to photos" in labels(probe))
+                    assertTrue("Share image" in labels(probe))
                     runtime.pluginManager.setEnabled("feature.conversation-export", false)
                     skin = snapshot()
                     render()
                     assertSame(originalChat, skin.chat)
                     assertEquals(0, preparedCount)
-                    assertTrue("Export conversation as image" !in labels(scene))
+                    assertTrue("Save to photos" !in labels(probe))
+                    assertTrue("Share image" !in labels(probe))
+                    assertTrue("Export" !in labels(probe))
                     assertTrue("New chat" in labels(scene))
                     click(scene, "New chat")
                     assertEquals(1, newRequests)
@@ -153,7 +174,7 @@ class ExportUiPrivateLifecycleTest {
                     retained = skin.conversationDecorations.single { it.id == "conversation-export" }
                     assertNotSame(original.presenter, retained.presenter)
                     render()
-                    assertTrue("Export conversation as image" in labels(scene))
+                    assertTrue("Export" in labels(probe))
                     val liveExporter = exporter
                     runtime.pluginManager.setEnabled("core.ui-slots", false)
                     render()
@@ -173,7 +194,7 @@ class ExportUiPrivateLifecycleTest {
                     retained = skin.conversationDecorations.single { it.id == "conversation-export" }
                     assertSame(liveExporter, exporter)
                     render()
-                    assertTrue("Export conversation as image" in labels(scene))
+                    assertTrue("Export" in labels(probe))
                 } finally { probe.close(); scene.close() }
             }
         } finally {
@@ -193,10 +214,14 @@ class ExportUiPrivateLifecycleTest {
         return collect(root(scene))
     }
     private fun click(scene: ImageComposeScene, label: String) {
+        fun containsText(node: SemanticsNode): Boolean =
+            label in node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } ||
+                node.children.any(::containsText)
         fun find(node: SemanticsNode): (() -> Boolean)? {
             if (label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()) {
                 node.config.getOrNull(SemanticsActions.OnClick)?.action?.let { return it }
             }
+            if (containsText(node)) node.config.getOrNull(SemanticsActions.OnClick)?.action?.let { return it }
             return node.children.firstNotNullOfOrNull(::find)
         }
         assertTrue(requireNotNull(find(root(scene)))())

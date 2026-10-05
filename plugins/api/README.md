@@ -20,9 +20,9 @@ shared Binder/client identities or installed bridge component.
 Android Core/Core KTX and versioned-parcelable are explicit SDK peers for native windows
 and FileProvider components. Core's legacy `android.support` binder/parcelizer classes
 already use the Android host namespace; their corresponding Core/Parcelable types must
-retain the same host identity. WebKit and Web container implementations remain private.
+retain the same host identity.
 
-This shared boundary is Plugin API 60; older
+This shared boundary is Plugin API 63; older
 external packages must be rebuilt against its generated SDK ABI.
 Product tool implementations remain private to their plugin packages.
 
@@ -37,7 +37,7 @@ window and coroutine cleanup. Registry replacement preserves the same host state
 
 - Agent, tool, workspace, shell, skill, model, and conversation contracts describe
   capabilities supplied by plugins.
-- History, settings, artifacts, codecs, search settings, and image export contracts
+- History, settings, codecs, search settings, and image export contracts
   let providers and consumers exchange data without importing provider implementations.
 - Localization contracts, text keys, and Compose adapters share translation identity;
   dictionaries and language selection policy belong to `plugins/localization`.
@@ -83,8 +83,7 @@ from `SettingsPageRequest` and makes section visibility composable. Rebuild exte
 
 API 46 makes `AgentToolContext.coordinator` nullable: a root turn can execute without a
 subagent provider. Consumers contribute subagent tools only with that capability present.
-The optional default UI SDK also makes Artifact capability nullable in application/navigation
-projections. No new namespace is shared; the existing execution and default UI contracts keep
+No new namespace is shared; the existing execution and default UI contracts keep
 their host identity. Rebuild packages against the matching ABI fingerprint.
 
 API 47 narrows Koog exports to framework namespaces and explicit client protocol identities.
@@ -187,4 +186,24 @@ holds every affected registration through durable save. Historical values are re
 on the mutation path; unchanged unknown/disabled namespaces survive. Missing namespace
 owners reject writes rather than permitting stale feature proposals. Registrations may
 not dispose themselves or close their registry during validation. Existing SDK settings
-exports cover these contracts; all external packages must rebuild for ABI 60.
+exports cover these contracts; all external packages must rebuild for ABI 62.
+
+API 61 removes the Web Artifact storage and Web container contracts, runtime projections,
+and default UI slots. Rebuild external packages against the new SDK; packages using these
+removed capabilities are no longer supported.
+
+API 62 makes `KcodeUiContributions` and default `KcodeUiSlots` abstract shared service contracts;
+provider-private implementations own their storage and lifetimes. `ApplicationServices` exposes
+prepared UI, model and command snapshots during the same short-lived frame preparation window.
+Default navigation gains page-owned presenters and a generic chrome/context request. Existing
+external packages must rebuild, and alternative registry providers must implement the service contracts.
+The shared export namespaces remain unchanged; private registry packages are not host exports.
+
+
+API 63 adds provider-owned default UI icon identities and generic region-choice metadata
+to `ModelProviderSpec`. Registration validates choices/defaults and copies supplied metadata.
+The generic model manager consumes that declaration; vendor implementations remain private
+and live in independent `plugins/llm/*` modules. Rebuild external packages for ABI 63.
+
+API 63 also makes `KcodeLlm` an abstract SDK service. Registry state and client lifetime
+wrappers live privately in `llm-core` and close with their owning provider.

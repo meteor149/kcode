@@ -9,7 +9,14 @@ kotlin {
     androidTarget {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
     }
-    sourceSets { commonMain.dependencies { api(project(":plugins:api")) } }
+    sourceSets {
+        commonMain.dependencies {
+            api(project(":plugins:api"))
+            api(project(":plugins:default-ui-api"))
+            implementation(project(":plugins:ui-contributions"))
+            implementation(project(":plugins:default-ui-bridge"))
+        }
+    }
 }
 android {
     namespace = "ai.meteor.kcode.test"

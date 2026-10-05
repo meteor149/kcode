@@ -14,10 +14,6 @@ import ai.meteor.kcode.plugin.api.AndroidPermissionHost
 import ai.koog.http.client.KoogHttpClient
 import ai.meteor.kcode.plugin.api.KcodeInteraction
 import ai.meteor.kcode.history.ConversationHistoryRepository
-import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.artifact.MutableArtifactRepository
-import ai.meteor.kcode.artifact.SaveWebArtifactRequest
-import ai.meteor.kcode.plugin.api.KcodeArtifacts
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import ai.meteor.kcode.plugin.api.KcodeSettings
 import ai.meteor.kcode.settings.AppSettingsStore
@@ -155,17 +151,14 @@ class BundledPluginDistributionTest {
             "ai.meteor.kcode.plugin.InProcessSubagentProviderPlugin", "ai.meteor.kcode.plugin.settingscommands.SettingsCommandsPlugin",
             "ai.meteor.kcode.plugin.UiSlotsServicePlugin",
             "ai.meteor.kcode.plugin.UiContributionsServicePlugin",
-            "ai.meteor.kcode.plugin.WebContainersUiPlugin",
             "ai.meteor.kcode.plugin.DefaultConversationTranscriptUiPlugin",
             "ai.meteor.kcode.plugin.DefaultLayoutUiPlugin",
             "ai.meteor.kcode.plugin.DefaultSidebarUiPlugin",
             "ai.meteor.kcode.plugin.DefaultChatUiPlugin",
-            "ai.meteor.kcode.plugin.DefaultArtifactsUiPlugin",
             "ai.meteor.kcode.plugin.DefaultStandaloneConversationUiPlugin",
             "ai.meteor.kcode.plugin.DefaultSettingsUiPlugin",
             "ai.meteor.kcode.plugin.DefaultThemeUiPlugin",
             "ai.meteor.kcode.plugin.DefaultChatNavigationPlugin",
-            "ai.meteor.kcode.plugin.DefaultArtifactsNavigationPlugin",
             "ai.meteor.kcode.plugin.DefaultUserMessagePresentationPlugin",
             "ai.meteor.kcode.plugin.DefaultAssistantMessagePresentationPlugin",
             "ai.meteor.kcode.plugin.DefaultErrorMessagePresentationPlugin",
@@ -197,9 +190,7 @@ class BundledPluginDistributionTest {
             "ai.meteor.kcode.plugin.export.AndroidNativeImageSavingPlugin",
             "ai.meteor.kcode.plugin.feature.FilesystemToolConsumerPlugin",
             "ai.meteor.kcode.plugin.feature.SkillToolConsumerPlugin",
-            "ai.meteor.kcode.plugin.feature.ArtifactToolConsumerPlugin",
             "ai.meteor.kcode.plugin.feature.WebSearchToolConsumerPlugin",
-            "ai.meteor.kcode.plugin.feature.WebContainerToolConsumerPlugin",
             "ai.meteor.kcode.plugin.overlay.ConversationOverlaysServicePlugin",
             "ai.meteor.kcode.plugin.overlay.NativeConversationOverlaysServicePlugin",
             "ai.meteor.kcode.plugin.executionsettings.SettingsShellModePlugin",
@@ -212,10 +203,6 @@ class BundledPluginDistributionTest {
             "ai.meteor.kcode.plugin.overlay.ConversationOverlayProviderPlugin",
             "ai.meteor.kcode.plugin.overlay.AndroidNativeConversationOverlayPlugin",
             "ai.meteor.kcode.plugin.overlay.AndroidConversationOverlayController",
-            "ai.meteor.kcode.plugin.WebContainersProviderPlugin",
-            "ai.meteor.kcode.plugin.webcontainer.native.AndroidNativeWebContainerPlugin",
-            "ai.meteor.kcode.plugin.webcontainer.native.AndroidWebContainerFeaturePlugin",
-            "ai.meteor.kcode.plugin.WebContainerFeaturePlugin",
             "ai.meteor.kcode.plugin.provider.HttpWebSearchProviderPlugin",
             "ai.meteor.kcode.plugin.searchhttp.HttpWebSearchBackend",
             "ai.meteor.kcode.plugin.feature.DefaultAndroidShellToolConsumerPlugin",
@@ -228,8 +215,6 @@ class BundledPluginDistributionTest {
             "ai.meteor.kcode.plugin.provider.SettingsShellProviderPlugin",
             "ai.meteor.kcode.plugin.provider.SettingsUbuntuShellProviderPlugin",
             "ai.meteor.kcode.plugin.provider.CapabilityProvidersKt",
-            "ai.meteor.kcode.plugin.artifacts.AndroidNativeArtifactsPlugin",
-            "ai.meteor.kcode.plugin.artifacts.FileArtifactRepository",
             "ai.meteor.kcode.plugin.history.AndroidNativeHistoryPlugin",
             "ai.meteor.kcode.plugin.history.HistoryDatabase_Impl",
             "androidx.room3.Room",
@@ -264,7 +249,6 @@ class BundledPluginDistributionTest {
         }
         val directory = File(context.cacheDir, "bundled-distribution-${System.nanoTime()}").also { it.mkdirs() }
         lateinit var interaction: InteractionPolicy
-        lateinit var artifacts: ArtifactRepository
         lateinit var history: ConversationHistoryRepository
         lateinit var settings: AppSettingsStore
         lateinit var mutationSettings: AppSettingsStore
@@ -278,9 +262,8 @@ class BundledPluginDistributionTest {
         lateinit var approver: ToolCallApprover
         var confirmation: ConfirmationDialogRequest? = null
         val capture = kcodePlugin(PluginDescriptor("test.bundled-codec", "test", "test", emptySet()),
-            plugin<Unit>(name = "capture-bundled-codec", inject = dependencies(KcodeArtifacts.Key, KcodeHistory.Key, KcodeInteraction.Key, KcodeSettings.Key, KcodeSearchSettings.Key, KcodeWebSearch.Key, KcodeLlm.Key, KcodeMessageCodec.Key, KcodeSkills.Key, KcodeUiSlots.Key, KcodeConversationImageSaving.Key, KcodeToolApprovals.Key)) { ctx, _ ->
+            plugin<Unit>(name = "capture-bundled-codec", inject = dependencies(KcodeHistory.Key, KcodeInteraction.Key, KcodeSettings.Key, KcodeSearchSettings.Key, KcodeWebSearch.Key, KcodeLlm.Key, KcodeMessageCodec.Key, KcodeSkills.Key, KcodeUiSlots.Key, KcodeConversationImageSaving.Key, KcodeToolApprovals.Key)) { ctx, _ ->
                 interaction = ctx.require(KcodeInteraction.Key).policy
-                artifacts = ctx.require(KcodeArtifacts.Key).repository
                 history = ctx.require(KcodeHistory.Key).repository
                 settings = ctx.require(KcodeSettings.Key).store
                 mutationSettings = ctx.require(KcodeSettings.Key).mutationStore
@@ -341,7 +324,6 @@ class BundledPluginDistributionTest {
             verifyBundledInteraction(runtime, { interaction }, { settings })
             verifyBundledSettingsStorage(runtime) { settings }
             verifyBundledHistoryStorage(runtime) { history }
-            verifyBundledArtifactStorage(runtime, File(context.filesDir, "agent_workspace")) { artifacts }
             val allocationProbe = object : KoogHttpClient.Factory {
                 override fun create(
                     clientName: String,
@@ -406,10 +388,9 @@ class BundledPluginDistributionTest {
             assertTrue(runtime.pluginManager.installed().all { it.packageInstallation?.variantId == "android" })
             val packageIds = runtime.pluginManager.installed().map { it.id }.toSet()
             assertTrue(runtime.diagnostics().plugins.filter { it.id in packageIds }.all { it.state == ai.meteor.kcode.plugin.api.PluginState.Active })
-            listOf("consumer.tools.filesystem", "consumer.tools.skill", "consumer.tools.artifact", "consumer.tools.web-search", "consumer.tools.android-shell", "consumer.tools.ubuntu-shell").forEach { id ->
+            listOf("consumer.tools.filesystem", "consumer.tools.skill", "consumer.tools.web-search", "consumer.tools.android-shell", "consumer.tools.ubuntu-shell").forEach { id ->
                 val pluginId = when (id) {
                     "consumer.tools.web-search" -> "feature.web-search"
-                    "consumer.tools.artifact" -> "feature.artifacts"
                     else -> id
                 }
                 assertTrue(id in runtime.diagnostics().toolContributions)
@@ -424,7 +405,7 @@ class BundledPluginDistributionTest {
             assertNotSame(context.classLoader, codec.javaClass.classLoader)
             val message = ChatMessage(1, MessageRole.Assistant, "bundled independent APK")
             assertEquals(message.content, codec.decode(codec.encode(message)).text)
-            assertTrue(skills.catalog().entries.any { it.name == "kcode-web-app-builder" })
+            skills.catalog()
             assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
             runtime.pluginManager.setEnabled("feature.schedule", false)
             assertEquals(PluginState.Disabled, runtime.diagnostics().plugins.first { it.id == "feature.schedule" }.state)
@@ -577,40 +558,6 @@ private suspend fun verifyBundledHistoryStorage(
         check(Class.forName("androidx.sqlite.driver.bundled.BundledSQLiteDriver", false, currentRepository().javaClass.classLoader) == Class.forName("androidx.sqlite.driver.bundled.BundledSQLiteDriver"))
     } finally {
         currentRepository().deleteConversation(id)
-    }
-}
-private suspend fun verifyBundledArtifactStorage(
-    runtime: KcodePluginRuntime,
-    workspaceDirectory: File,
-    currentRepository: () -> ArtifactRepository,
-) {
-    val id = "package-artifact-${System.nanoTime()}"
-    val source = File(workspaceDirectory, id).also { check(it.mkdirs()) }
-    val manifest = File(workspaceDirectory, "artifacts/manifest.json")
-    val previousManifest = manifest.takeIf { it.exists() }?.readBytes()
-    File(source, "index.html").writeText("<h1>durable packaged artifact</h1>")
-    val request = SaveWebArtifactRequest(id, "Package artifact", "/workspace/$id")
-    try {
-        val saved = (currentRepository() as MutableArtifactRepository).saveWebApp(request)
-        check(currentRepository().list().single { it.id == id } == saved)
-        val resource = File(workspaceDirectory, "artifacts/resources/$id/index.html")
-        check(resource.readText() == "<h1>durable packaged artifact</h1>")
-        val oldRepository = currentRepository()
-        runtime.pluginManager.setEnabled("provider.artifacts.platform", false)
-        check(runCatching { oldRepository.list() }.isFailure)
-        check(runCatching { (oldRepository as MutableArtifactRepository).saveWebApp(request) }.isFailure)
-        check(runtime.diagnostics().plugins.single { it.id == "feature.artifacts" }.state == ai.meteor.kcode.plugin.api.PluginState.Active)
-        runtime.pluginManager.setEnabled("provider.artifacts.platform", true)
-        check(currentRepository() !== oldRepository)
-        check(currentRepository().list().single { it.id == id } == saved)
-        check(resource.readText() == "<h1>durable packaged artifact</h1>")
-        check(runtime.diagnostics().plugins.single { it.id == "feature.artifacts" }.state == ai.meteor.kcode.plugin.api.PluginState.Active)
-        check(Class.forName("ai.meteor.kcode.plugin.artifacts.FileArtifactRepository", false, currentRepository().javaClass.classLoader).classLoader == currentRepository().javaClass.classLoader)
-    } finally {
-        if (previousManifest == null) check(!manifest.exists() || manifest.delete())
-        else manifest.writeBytes(previousManifest)
-        check(File(workspaceDirectory, "artifacts/resources/$id").deleteRecursively())
-        check(source.deleteRecursively())
     }
 }
 private suspend fun verifyBundledHttpSearch(runtime: KcodePluginRuntime, currentBackend: () -> WebSearchBackend) {

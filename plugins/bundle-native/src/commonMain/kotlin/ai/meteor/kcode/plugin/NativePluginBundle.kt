@@ -15,14 +15,8 @@ import ai.meteor.kcode.plugin.notifications.ScheduledTaskNotificationsProviderPl
 import ai.meteor.kcode.plugin.notifications.foregroundOnlyNotificationsFactory
 
 import ai.meteor.kcode.plugin.api.ConversationOverlayFactory
-import ai.meteor.kcode.artifact.ArtifactRepository
-import ai.meteor.kcode.artifact.ArtifactFileStore
 import ai.meteor.kcode.plugin.api.ScheduledTaskNotificationsFactory
 import ai.meteor.kcode.plugin.api.ConversationImageSaverFactory
-import ai.meteor.kcode.plugin.api.ArtifactFileStoreFactory
-import ai.meteor.kcode.plugin.artifacts.FactoryFileArtifactsProviderPlugin
-import ai.meteor.kcode.plugin.artifacts.EmptyArtifactsProviderPlugin
-import ai.meteor.kcode.plugin.artifacts.FileArtifactsProviderPlugin
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.plugin.api.ConversationOverlayHostState
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -30,7 +24,6 @@ import ai.meteor.kcode.plugin.api.PluginCompositionStore
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.skill.SkillRuntime
-import ai.meteor.kcode.webcontainer.WebContainerController
 import ai.meteor.kcode.plugin.messagecodec.MessageCodecProviderPlugin
 import ai.meteor.kcode.plugin.markdown.MarkdownFeaturePlugin
 import ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin
@@ -46,11 +39,7 @@ data class NativePluginServices(
     val settingsStore: AppSettingsStore?,
     val settingsStoreFactory: SettingsStoreFactory? = null,
     val historyRepository: ConversationHistoryRepository?,
-    val artifactRepository: ArtifactRepository?,
-    val webContainerController: WebContainerController?,
     val pluginCompositionStore: PluginCompositionStore? = null,
-    val artifactFileStore: ArtifactFileStore? = null,
-    val artifactFileStoreFactory: ArtifactFileStoreFactory? = null,
     val conversationImageSaverFactory: ConversationImageSaverFactory? = null,
     val scheduledTaskNotificationsFactory: ScheduledTaskNotificationsFactory? = null,
     val historyRepositoryFactory: HistoryRepositoryFactory? = null,
@@ -78,7 +67,6 @@ fun nativePluginBundle(config: NativePluginServices): List<KcodePluginMount> = l
     if ("feature.subagents" !in config.packagedProviderIds) builtin("feature.subagents", SubagentFeaturePlugin, Unit, "subagents", "tools", "continuations", "uiSlots") else null,
     if ("provider.prompt.default" !in config.packagedProviderIds) builtin("provider.prompt.default", DefaultSystemPromptPlugin, Unit, "systemPrompt") else null,
     if ("provider.skills.platform" !in config.packagedProviderIds) builtin("provider.skills.platform", SkillServicePlugin, SkillServicePluginConfig(config.skillRuntime), "skills") else null,
-    if ("feature.artifacts" !in config.packagedProviderIds) builtin("feature.artifacts", ArtifactFeaturePlugin, Unit, "artifact", "tools", "uiSlots") else null,
     if ("feature.schedule" !in config.packagedProviderIds) builtin("feature.schedule", ScheduleFeaturePlugin, Unit, "schedules", "tools", "schedule.dispatch") else null,
     if ("feature.goal" !in config.packagedProviderIds) builtin("feature.goal", GoalFeaturePlugin, Unit, "goals", "tools", "conversationCommands", "continuations", "uiSlots") else null,
     if ("provider.interaction.platform" in config.packagedProviderIds) null else if (config.settingsBackedInteraction) {
@@ -109,14 +97,6 @@ fun nativePluginBundle(config: NativePluginServices): List<KcodePluginMount> = l
     if ("feature.conversation-export" !in config.packagedProviderIds) builtin("feature.conversation-export", ConversationExportFeaturePlugin, config.conversationImageSaverFactory ?: Unit, "conversationImageRendering", "conversationImageSaving", "conversationExport") else null,
     if ("provider.generation" !in config.packagedProviderIds) builtin("provider.generation", GenerationProviderPlugin(), Unit, "generation") else null,
     if ("provider.conversation-execution.history" !in config.packagedProviderIds) builtin("provider.conversation-execution.history", ConversationExecutionProviderPlugin, Unit, "conversationExecution") else null,
-    if ("provider.artifacts.platform" in config.packagedProviderIds) null else config.artifactFileStoreFactory?.let {
-        builtin("provider.artifacts.platform", FactoryFileArtifactsProviderPlugin, it, "artifacts")
-    } ?: config.artifactFileStore?.let {
-        builtin("provider.artifacts.platform", FileArtifactsProviderPlugin, it, "artifacts")
-    } ?: config.artifactRepository?.let {
-        builtin("provider.artifacts.platform", HostArtifactInputPlugin, it, "artifacts")
-    } ?: builtin("provider.artifacts.platform", EmptyArtifactsProviderPlugin, Unit, "artifacts"),
-    if ("feature.web-container" !in config.packagedProviderIds) builtin("feature.web-container", WebContainerFeaturePlugin, config.webContainerController, "webContainers", "tools", "uiSlots") else null,
     if ("provider.agent-loop.koog" !in config.packagedProviderIds) builtin("provider.agent-loop.koog", KoogAgentLoopPlugin, Unit, "agents", "agentLoop") else null,
     if ("core.ui-contributions" !in config.packagedProviderIds) builtin("core.ui-contributions", UiContributionsServicePlugin, Unit, "uiContributions") else null,
     if ("core.ui-slots" !in config.packagedProviderIds) builtin("core.ui-slots", UiSlotsServicePlugin, Unit, "uiSlots") else null,
@@ -138,14 +118,8 @@ fun nativePluginBundle(config: NativePluginServices): List<KcodePluginMount> = l
 
 /** Map retired product identities to their current install/enable boundaries. */
 val NativeBuiltinAliases: Map<String, Set<String>> = buildMap {
-    listOf("consumer.tools.artifact", "provider.ui.artifacts", "provider.ui.navigation.artifacts").forEach {
-        put(it, setOf("feature.artifacts"))
-    }
     listOf("provider.schedules.history", "consumer.tools.schedule", "consumer.schedules.application").forEach {
         put(it, setOf("feature.schedule"))
-    }
-    listOf("provider.web-containers.platform", "consumer.tools.web-container", "provider.ui.web-containers").forEach {
-        put(it, setOf("feature.web-container"))
     }
     listOf("provider.export.image-rendering", "provider.export.image-saving", "provider.export.conversation").forEach {
         put(it, setOf("feature.conversation-export"))

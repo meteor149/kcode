@@ -1,0 +1,4 @@
+<resources>
+    <string name="provider_ollama_en">Ollama</string>
+    <string name="provider_ollama_note_en">Private local models</string>
+</resources>

@@ -1,6 +1,6 @@
 package ai.meteor.kcode.plugin
 
-import ai.meteor.kcode.plugin.api.KcodeUiContributions
+import ai.meteor.kcode.plugin.contributions.OwnedUiContributions
 import org.cordis.ConfigValidator
 import org.cordis.Context
 import org.cordis.EffectScope
@@ -11,7 +11,7 @@ object UiContributionsServicePlugin : Plugin<Unit> {
     override val config = ConfigValidator<Unit> { it }
     override val name = "kcode-ui-contributions"
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
-        val contributions = KcodeUiContributions(ctx)
+        val contributions = OwnedUiContributions(ctx)
         effect.collect { contributions.close() }
     }
 }
