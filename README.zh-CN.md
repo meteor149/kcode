@@ -148,6 +148,8 @@ Web Search、Goal、Subagent、Localization、Markdown、Conversation Export 各
 
 Profile 支持指定位置插入、排序，以及在分组和根节点之间移动。跨父组移动会在新上下文中重新创建实例，同组排序保留资源。无效父组和循环关系会在准备阶段被拒绝；发布失败或分配取消会恢复原层级。
 
+发行 Bundle 显式声明模块成员，插件 ID 前缀不决定所属层；额外可用模块需要通过 Profile 显式选择。
+
 原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。管理和恢复界面仍在开发中。当前行为与限制见 [Profile 指南](docs/profiles.md)。
 
 运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。管理和独立恢复界面尚未完成。

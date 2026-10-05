@@ -9,6 +9,14 @@ injection, interception and local or named service isolation.
 
 ## Native startup
 
+The shipped `kcode.base`, `kcode.agent` and `kcode.default-ui` Bundle layers declare explicit
+module membership. Available platform modules retain catalogue order within each layer;
+missing platform variants are omitted. Undeclared default modules fail preparation instead
+of being assigned by their ID prefix. This restriction belongs to the shipped distribution,
+not the extensible plugin/module catalogue: alternate code remains selectable through Profile
+operations without becoming an implicit default instance. Existing frozen generations keep
+their original Bundle snapshots.
+
 Native factories choose an explicit `profileId`, the repository selection, or the initial
 `native` template. Desktop accepts `--profile <id>` and `--profile=<id>`. Android forwards
 the `profile` Activity intent extra. These choose startup; they do not perform a live switch

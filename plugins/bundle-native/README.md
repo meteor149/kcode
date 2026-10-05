@@ -24,8 +24,14 @@ Legacy standalone settings-item aliases retire to empty sets.
 
 `nativeProfileBundles` produces the ordered data layers `kcode.base`, `kcode.agent` and
 `kcode.default-ui` from the offered native module catalogue. `nativeProfileTemplate` selects
-them for the initial `native` Profile and preserves legacy settings/history scopes. These
-layers describe entries; allocation happens later through the managed Profile runtime.
+them for the initial `native` Profile and preserves legacy settings/history scopes. The
+layers use explicit module membership rather than ID prefixes. Undeclared default modules
+fail preparation and must be assigned in the distribution declaration. Platform-unavailable
+modules are omitted, while available modules retain their catalogue order within each layer.
+Alternate module factories remain available code and do not implicitly create entries or join
+shipped layers; users select them through Profile operations. Existing Bundle IDs, versions and
+membership are preserved, including frozen historical commits. Layers describe entries;
+allocation happens later through the managed Profile runtime.
 Successful commits freeze their contents. The distribution catalogue and profile instance
 tree remain separate, so one release can supply independently configured instances.
 

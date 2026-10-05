@@ -481,3 +481,26 @@ instrumentation coverage or sudden power-loss durability.
 Management/recovery UI, initial startup failure recovery, verified Bundle import,
 credential-safe export, explicit native Bundle catalogues and the final requirement/platform
 audit remain outstanding. Ordering and movement are now implemented; the overall goal remains active.
+
+## Explicit shipped Bundle membership
+
+The native distribution now declares the module membership of kcode.base, kcode.agent and
+kcode.default-ui explicitly. NativeProfileBundles no longer derives membership from core.*
+or provider.ui.* prefixes, and unknown default modules fail preparation with their identities.
+This guards distribution changes; it does not restrict the extensible module catalogue or
+explicit Profile selections. Alternate factories remain available without implicit instances.
+Platform-unavailable members are omitted, and offered catalogue order is preserved within each
+layer. Existing Bundle IDs, version 1 membership and frozen committed snapshots remain intact.
+No SDK ABI change is required in this phase.
+
+The concentrated validation passed 37 Desktop tests: 3 new Bundle declaration tests, 7 native
+Profile host cases, 12 runtime Profile cases and 15 actual package integration cases. All were
+executed with zero failures, errors or skipped cases. These cover explicit subset composition,
+default UI layer omission, undeclared and invalid identities, empty templates, shipped native
+startup/switching/restart, and actual JAR loading. Desktop app compilation and Android app
+assembly also passed against Cordis 9f1ceac. This phase did not run Android instrumentation;
+earlier physical-device evidence remains recorded separately.
+
+Management/recovery UI, initial startup failure recovery, verified Bundle import,
+credential-safe export and the final requirement/platform audit remain outstanding. Explicit
+native Bundle membership is now implemented; the overall goal remains active.
