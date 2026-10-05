@@ -14,7 +14,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":plugins:api"))
-            implementation("io.github.meteor149:include:0.0.1-SNAPSHOT")
+            api("io.github.meteor149:include:0.0.1-SNAPSHOT")
         }
         commonTest.dependencies { implementation(kotlin("test")) }
         val jvmMain by creating { dependsOn(commonMain.get()) }

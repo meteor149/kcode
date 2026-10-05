@@ -3,7 +3,6 @@ package ai.meteor.kcode.plugin.profiles
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 
 /** Portable user intent. Resolved artifacts and host objects never belong here. */
 @Serializable
@@ -46,9 +45,10 @@ data class ProfileDataScope(
 data class ProfileEntry(
     val id: String,
     val packageId: String,
-    val config: JsonElement = JsonNull,
+    val config: JsonElement? = null,
     val enabled: Boolean = true,
     val children: List<ProfileEntry>? = null,
+    val configurationKind: String = "json",
 )
 
 @Serializable
@@ -59,7 +59,7 @@ sealed interface ProfileOperation {
 
     @Serializable
     @SerialName("configure")
-    data class Configure(val target: String, val config: JsonElement) : ProfileOperation
+    data class Configure(val target: String, val config: JsonElement, val configurationKind: String = "json") : ProfileOperation
 
     @Serializable
     @SerialName("enable")

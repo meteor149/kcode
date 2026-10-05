@@ -29,6 +29,22 @@ are versioned; unknown targets produce diagnostics rather than silently changing
 
 ## Outstanding invariants
 
+Package preparation now uses the existing PluginPackageResolver with dependency archive
+hints and verified closure locks. Entry IDs remain independent of release IDs, and group
+structure is preserved for runtime binding. Profile configuration keeps Unit/scalar/JSON
+codec identities; omitted configuration requests module defaults.
+
+Legacy migration projects enable state, explicit uninstalls and external configuration into
+profile operations. Bootstrap reads the last committed intent before a draft and retains
+legacy snapshots after interrupted initial migration. ProfileCompositionSession implements
+the existing composition store boundary and provides atomic definition/snapshot publication.
+
+These APIs are not yet connected to native hosts. The next phase must bind the resolved tree
+to actual module instances, adapt default product bundles and platform inputs, preserve group
+service scopes, and publish a first generation even when startup does not change its snapshot.
+Do not claim runtime Profile support from preparation tests alone. External entry-instance
+identity, data-scope binding, profile switching and UI management remain outstanding.
+
 Phase-one validation passed: Cordis `:include:jvmTest` (14 tests), Kcode
 `:plugins:profiles:desktopTest` (4 tests), using the Cordis composite source build.
 No host or instrumentation validation has been claimed at this stage.

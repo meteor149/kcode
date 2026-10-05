@@ -38,12 +38,17 @@ class ProfileCompiler {
             config = value.children?.map(::entry) ?: value.config,
             group = value.children?.let { true },
             disabled = !value.enabled,
+            extra = mapOf("kcode.configurationKind" to value.configurationKind),
         )
     }
 
     private fun patch(operation: ProfileOperation): PatchOptions = when (operation) {
         is ProfileOperation.Insert -> PatchOptions(id = operation.parent, insert = operation.entries.map(::entry))
-        is ProfileOperation.Configure -> PatchOptions(id = operation.target, config = changeTo(operation.config))
+        is ProfileOperation.Configure -> PatchOptions(
+            id = operation.target,
+            config = changeTo(operation.config),
+            extra = mapOf("kcode.configurationKind" to operation.configurationKind),
+        )
         is ProfileOperation.Enable -> PatchOptions(id = operation.target, disabled = changeTo(false))
         is ProfileOperation.Disable -> PatchOptions(id = operation.target, disabled = changeTo(true))
         is ProfileOperation.Replace -> PatchOptions(

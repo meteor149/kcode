@@ -6,7 +6,9 @@ interpretation to Cordis's detached composition engine, so preview and activatio
 the same semantics. It does not import modules or allocate providers.
 
 Layer precedence is bundle order, profile, machine and launch. Configure replaces the whole
-configuration; explicit JSON null is preserved. Replacement supports an expected module
+configuration; an absent entry config uses the module default, while explicit JSON null is
+preserved. Configuration kinds retain SDK scalar and Unit identities during migration.
+Replacement supports an expected module
 identity guard. Package verification, credential resolution and platform adaptation belong
 to activation, not compilation.
 
@@ -20,5 +22,16 @@ The package lock has no artifact paths or credentials; runtime snapshots retain 
 Selection only references committed profiles, and deleting the selected profile is refused.
 Package caches and provider data are outside this repository and are never deleted with it.
 
-This module is under development; package resolution, migrations, runtime integration and
-management UI follow the implementation phases in `docs/profiles-implementation.md`.
+`ProfileResolver` collects only referenced package releases and their dependency archive
+hints. The existing native package resolver verifies the actual graph, platform variant and
+ABI, and every retained release is reverified. Resolution retains separate entry identities
+and group scopes; it does not allocate plugin instances or flatten the tree.
+
+`prepareProfileBootstrap` prefers the last successful definition over editable drafts. Legacy
+enable/configuration state and explicit uninstalls migrate without rewriting the old store;
+an interrupted first migration keeps legacy installations available for retry.
+`ProfileCompositionSession` adapts managed runtime snapshot publication to Profile generation
+commits. Hosts must make `commitDefinition` their last fallible transaction step.
+
+This module is under development; native runtime activation, default bundles, profile
+switching and management UI follow the phases in `docs/profiles-implementation.md`.
