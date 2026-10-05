@@ -43,6 +43,13 @@ code is retained until old tree restoration completes on failure. See the [Profi
 for command semantics, durable documents and remaining management/switch work.
 
 Profiles isolate persistent settings/history independently from Cordis service realms.
+
+Native Profile hosts own a `ProfileCommandGateway` outside the replaceable product tree.
+An infrastructure bridge in each tree exports the neutral SDK `KcodeProfiles` contract.
+Its metadata operations withdraw with the bridge; synchronously accepted commands keep host
+ownership through tree replacement. Command handles contain neutral state rather than provider
+objects. Starting rejects requests until host binding. RecoveryRequired preserves host metadata
+and explicit activation independently of product services. Management UI remains optional.
 Machine paths and borrowed callbacks stay outside portable intent. Closing providers and
 deleting composition metadata do not erase durable business data.
 

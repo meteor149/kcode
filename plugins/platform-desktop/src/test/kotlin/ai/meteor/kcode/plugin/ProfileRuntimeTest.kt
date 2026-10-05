@@ -416,6 +416,8 @@ class ProfileJarFixture : Plugin<String> {
         check(javaClass.classLoader !== PluginDescriptor::class.java.classLoader)
         check(javaClass.classLoader.loadClass(ProfileDefinition::class.java.name) === ProfileDefinition::class.java)
         check(javaClass.classLoader.loadClass(ai.meteor.kcode.plugin.api.profiles.ProfileTarget::class.java.name) === ai.meteor.kcode.plugin.api.profiles.ProfileTarget::class.java)
+        check(javaClass.classLoader.loadClass(ai.meteor.kcode.plugin.api.profiles.KcodeProfiles::class.java.name) === ai.meteor.kcode.plugin.api.profiles.KcodeProfiles::class.java)
+        check(javaClass.classLoader.loadClass(ai.meteor.kcode.plugin.api.profiles.ProfileCommandHandle::class.java.name) === ai.meteor.kcode.plugin.api.profiles.ProfileCommandHandle::class.java)
         check(ProfileDefinition::class.java.classLoader === PluginDescriptor::class.java.classLoader)
         val origin = requireNotNull(ai.meteor.kcode.plugin.api.PluginCodeOrigin.current(ctx))
         val file = File(config)

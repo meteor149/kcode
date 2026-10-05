@@ -22,7 +22,7 @@ and FileProvider components. Core's legacy `android.support` binder/parcelizer c
 already use the Android host namespace; their corresponding Core/Parcelable types must
 retain the same host identity.
 
-This shared boundary is Plugin API 66; older
+This shared boundary is Plugin API 67; older
 external packages must be rebuilt against its generated SDK ABI.
 
 API 65 exports portable Profile definitions, entries, bundle declarations and operations under
@@ -39,11 +39,23 @@ distinguishes saved selection from the active runtime. Preview verifies package 
 not provider allocation or service readiness. Implementations stay in profiles/runtime/platform
 modules; the existing SDK namespace export retains shared identity.
 
+API 67 adds the injected `KcodeProfiles` service and neutral command handles/statuses, host
+management state and module catalogue summaries. Declare `inject = dependencies(KcodeProfiles.Key)`
+and use its `client`. `submit` accepts a detached command synchronously into a bounded host-owned
+queue; awaiting a handle is observation, so cancelling that observer or withdrawing its plugin
+does not cancel accepted work. Use `handle.cancel()` for explicit cancellation. Cancellation
+after durable publication reports the committed result. A withdrawn client rejects new requests.
+During initial allocation the service reports Starting and rejects queries/submissions until
+the host binds; await readiness from owned background work rather than blocking plugin apply.
+Ready clients can read/edit drafts, clone, preview, inspect history/modules and submit activation,
+active edits or module selection. RecoveryRequired retains host metadata and explicit activation;
+active composition and module queries still require a live product runtime. No UI is implicit.
+
 API 64 adds lazy `KcodePluginMount.export` for declarative Profile instances.
 Exports preserve typed defaults and ConfigValidator checks while deferring resource
 allocation to apply. Existing opaque host mounts support default configuration only.
 The existing exact KcodePluginMount/KcodePluginCompositionKt exports retain shared identity;
-rebuild external packages against the generated API 66 ABI fingerprint.
+rebuild external packages against the generated API 67 ABI fingerprint.
 Product tool implementations remain private to their plugin packages.
 
 API 43 introduced `ShellModePolicy` and `KcodeShellMode`. Native Shell consumers declare this

@@ -207,9 +207,19 @@ default instances. The host's selectProfileModule(packageId, moduleId, expected)
 Profile identity/generation and applies the existing typed transaction. Its expected value comes
 from currentProfile(). Selection is retained through native switching and restart when the same
 catalogue is supplied. Hosts do not serialize functions or retain previous runtime mounts to
-recreate products. Plugin-facing command submission and public catalogue UI remain pending.
+recreate products. Plugin API 67 exposes the `KcodeProfiles` service for injected management
+consumers. Its client reads metadata and the current module catalogue; `submit` enqueues
+activation, active edits or module selection without waiting for the submitting plugin's
+withdrawal. The host owns accepted work across product reconstruction. Cancelling a handle
+observer does not cancel the command; explicit handle cancellation before publication can
+abort it, while cancellation after publication reports its committed result. Old clients reject
+new calls after withdrawal. The queue accepts at most 32 pending/running commands and retains
+bounded recent status history. At initial allocation the service reports Starting and rejects
+requests until host binding; plugin apply must not wait for readiness. Native hosts retain
+`profileCommands` for metadata/activation in RecoveryRequired when no product tree is available.
+The public catalogue UI remains pending.
 
-External bundle import, credential-safe export, plugin-facing management service integration and
+External bundle import, credential-safe export and
 management/recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Android tests on

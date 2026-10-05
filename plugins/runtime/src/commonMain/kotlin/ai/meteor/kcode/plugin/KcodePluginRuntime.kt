@@ -3,6 +3,8 @@ package ai.meteor.kcode.plugin
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
 import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
+import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSource
+import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSummary
 import ai.meteor.kcode.plugin.api.PluginHostInputs
 import ai.meteor.kcode.plugin.api.SettingsStoreFactory
 import ai.meteor.kcode.plugin.api.HistoryRepositoryFactory
@@ -651,6 +653,7 @@ class KcodePluginRuntime private constructor(
                 val keep = bindings.values.mapTo(mutableSetOf()) { it.key }
                 (oldKeys - keep).forEach(loader.builtins::remove)
                 commitApplicationView(prepared)
+                recordProfileCommandPublication(activation.session.currentCompositionState())
             }
         } catch (error: Throwable) {
             // Cordis restores old bindings before candidate code resources can be released.
@@ -810,6 +813,26 @@ class KcodePluginRuntime private constructor(
             replaceProfileModuleLocked(activation, packageId, replacement)
             activation.session.currentCompositionState()
         }
+    }
+
+    suspend fun profileModuleCatalogue(): List<ProfileModuleSummary> = lock.withLock {
+        check(!closed) { "plugin runtime is closed" }
+        val activation = checkNotNull(activeProfile) { "Runtime has no active Profile" }
+        val instances = linkedMapOf<String, MutableList<String>>()
+        fun index(entries: List<EntryOptions>) {
+            entries.forEach { entry ->
+                if (entry.group == true) index((entry.config as List<*>).map { it as EntryOptions })
+                else instances.getOrPut(entry.name) { mutableListOf() }.add(entry.id)
+            }
+        }
+        index(activation.resolved.composition.entries)
+        val catalogue = profileModules.mapValues { (id, mount) ->
+            ProfileModuleSummary(id, mount.descriptor.version, ProfileModuleSource.Host, instances[id].orEmpty().toList())
+        }.toMutableMap()
+        activation.resolved.packages.forEach { spec ->
+            catalogue[spec.id] = ProfileModuleSummary(spec.id, spec.version, ProfileModuleSource.Package, instances[spec.id].orEmpty().toList())
+        }
+        catalogue.values.sortedBy { it.id }
     }
 
     private suspend fun tryReplaceProfileModule(packageId: String, replacement: KcodePluginMount): Boolean {

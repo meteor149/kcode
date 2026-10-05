@@ -36,3 +36,11 @@ through the Profile transaction and checks expected active identity/generation. 
 catalogue after restart; missing selected code rejects preparation. Default/package collisions
 and factory descriptor mismatch reject before product allocation. Host code is borrowed and
 does not claim verified archive identity; resources still allocate/close in provider effects.
+
+Native hosts now own a bounded `ProfileCommandGateway` and expose Plugin API 67 `KcodeProfiles`
+through a fresh infrastructure bridge in each product tree. Initial apply sees Starting until
+the host binds; do not await readiness from apply. Injected clients submit detached activation,
+edit or module-selection commands synchronously, then observe their host-owned handles. Accepted
+work survives the submitting provider's withdrawal. Old clients reject new calls; explicit
+cancellation after publication retains the committed result. The host's `profileCommands` client
+remains available for metadata/activation after failed restoration. UI remains optional/pending.

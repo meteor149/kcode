@@ -7,6 +7,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.AgentConversationOverlayController
 import ai.meteor.kcode.AgentConversationOverlayTurn
@@ -72,6 +73,7 @@ class KcodeProfileHost(
     initialProfileId: String,
     private val factory: ProfileRuntimeFactory,
     private val management: ProfileManagement? = null,
+    private val commandGateway: ProfileCommandGateway? = null,
 ) : AgentRuntimeOwner, ApplicationContent {
     private class HostCall(val host: KcodeProfileHost) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<HostCall>
@@ -88,6 +90,7 @@ class KcodeProfileHost(
     private val pendingRetirement = mutableListOf<KcodeAgentRuntime>()
     private val mutableState = MutableStateFlow(ProfileHostState(initialProfileId))
     val state: StateFlow<ProfileHostState> = mutableState.asStateFlow()
+    val profileCommands: ProfileManagementClient? get() = commandGateway
     private var foreground = true
     private var overlayClosed = false
     private val closeCompletion = CompletableDeferred<Unit>()
@@ -241,6 +244,10 @@ class KcodeProfileHost(
         checkNotNull(it.owner as? KcodePluginRuntime) { "Native module selection is unavailable" }
             .selectProfileModule(packageId, moduleId, expected)
     }
+
+    suspend fun profileModules() = call {
+        checkNotNull(it.owner as? KcodePluginRuntime) { "Native module catalogue is unavailable" }.profileModuleCatalogue()
+    }
     @Composable
     override fun Render(options: ApplicationHostOptions) {
         val active by view.collectAsState()
@@ -308,6 +315,7 @@ class KcodeProfileHost(
                         view.value = candidate
                         mutableState.value = ProfileHostState(id)
                     }
+                    recordProfileCommandPublication(target!!.activation.session.currentCompositionState())
                 }
             }
         } catch (error: Throwable) {
@@ -387,6 +395,7 @@ class KcodeProfileHost(
                             view.value = candidate
                             mutableState.value = ProfileHostState(id)
                         }
+                        recordProfileCommandPublication(target!!.activation.session.currentCompositionState())
                     }
                 }
             } catch (error: Throwable) {
@@ -429,6 +438,7 @@ class KcodeProfileHost(
 
     override suspend fun close() {
         outsideCall()
+        commandGateway?.close()
         command.withLock {
             val jobs = admission.withLock {
                 if (mutableState.value.phase == ProfileHostPhase.Closed) null else {

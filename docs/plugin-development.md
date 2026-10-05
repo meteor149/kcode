@@ -32,6 +32,14 @@ Keep `apply` cancellable and move ongoing background work into owned operations.
 native work needs a platform-specific cancellation strategy. Attempt every release even if
 another fails; preserve durable data when closing a repository or settings provider.
 
+Profile management consumers inject `KcodeProfiles` and call `client.submit(command)` to
+change composition. Acceptance is synchronous and execution belongs to the host, so submitting
+from a provider callback cannot unload that provider within its own owned call. Observe the
+handle from owned UI/background work; observer cancellation does not cancel accepted work.
+Use `handle.cancel()` for explicit cancellation. After publication the result remains Succeeded.
+Initial apply sees Starting; defer queries/submission until readiness without blocking apply.
+Withdrawn clients reject new requests, but accepted handles remain observable across switches.
+
 ## Packaging and composition
 
 Use the Cordis packager and existing native release catalogue. A release requires compatible

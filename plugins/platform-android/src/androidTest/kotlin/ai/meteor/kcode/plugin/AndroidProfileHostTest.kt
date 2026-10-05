@@ -20,6 +20,11 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
+import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
+import ai.meteor.kcode.plugin.api.profiles.ProfileCommandPhase
+import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
+import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSource
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsUpdate
@@ -31,6 +36,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
@@ -49,6 +59,33 @@ import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class AndroidProfileHostTest {
+    @Test(timeout = 300_000)
+    fun injectedManagementCommandsSurviveWithdrawalAndShareSdkIdentityWithApkProviders(): Unit = runBlocking {
+        val fixture = Fixture()
+        val host = fixture.start()
+        try {
+            val old = fixture.profiles
+            val catalogue = old.catalogue()
+            val id = "commands-${System.nanoTime()}"
+            val cloned = old.clone(ProfileCloneRequest(ProfileTarget("native"), id, catalogue.revision))
+            val ticket = old.submit(ProfileCommand.Activate(ProfileActivationRequest(ProfileTarget(id, ProfileSource.Draft), cloned.revision)))
+            val observer = async(start = CoroutineStart.UNDISPATCHED) { ticket.await() }
+            observer.cancelAndJoin()
+            val result = ticket.await()
+            assertEquals(ProfileCommandPhase.Succeeded, result.phase)
+            assertEquals(id, result.result!!.definition.id)
+            assertEquals(1, fixture.live)
+            assertFailsWith<IllegalStateException> { old.catalogue() }
+            assertFailsWith<IllegalStateException> { old.submit(ProfileCommand.Activate(ProfileActivationRequest(ProfileTarget("native"), cloned.revision))) }
+            assertEquals(id, fixture.profiles.catalogue().activeProfileId)
+            assertEquals(ProfileModuleSource.Package, fixture.profiles.modules().single { it.id == "provider.fs.platform" }.source)
+            assertSame(KcodeProfiles::class.java, checkNotNull(fixture.fs.javaClass.classLoader).loadClass(KcodeProfiles::class.java.name))
+            fixture.fs.writeBytes("/workspace/commands.txt", "host owned command".encodeToByteArray())
+            assertEquals(0, fixture.shell.run(ShellRequest("cat commands.txt")).exitCode)
+            withTimeout(10_000) { fixture.profiles.commands.first { values -> values.any { it.id == ticket.id && it.phase == ProfileCommandPhase.Succeeded } } }
+        } finally { host.close(); fixture.remove() }
+    }
+
     @Test(timeout = 300_000)
     fun typedAlternateCatalogueRetainsSelectionAndApkDataAcrossSwitchingAndRestart(): Unit = runBlocking {
         val fixture = Fixture()
@@ -257,6 +294,7 @@ class AndroidProfileHostTest {
         lateinit var history: ConversationHistoryRepository
         lateinit var fs: FileSystemBackend
         lateinit var shell: ShellBackend
+        lateinit var profiles: ProfileManagementClient
         var ubuntu: ShellBackend? = null
         var mode = ShellExecutionMode.App
         var live = 0
@@ -266,6 +304,7 @@ class AndroidProfileHostTest {
                 add(KcodeHistory.Key)
                 add(KcodeFileSystem.Key)
                 add(KcodeShell.Key)
+                add(KcodeProfiles.Key)
                 if (androidPackageHost().arch == "arm64") add(KcodeUbuntuShell.Key)
             }.toTypedArray())) { ctx, config ->
                 live++
@@ -275,6 +314,7 @@ class AndroidProfileHostTest {
                 history = ctx.require(KcodeHistory.Key).repository
                 fs = ctx.require(KcodeFileSystem.Key).backend
                 shell = ctx.require(KcodeShell.Key).executor
+                profiles = ctx.require(KcodeProfiles.Key).client
                 ubuntu = ctx[KcodeUbuntuShell.Key]?.executor
             }, "okay")
 

@@ -63,3 +63,11 @@ and cannot shadow native packages/default modules. Provider resources allocate d
 The added typed-alternate instrumentation case passed on ARM64 API 36 with actual APK filesystem/
 history providers, scoped App workspace IO, stale-reference rejection, switching and restart.
 It was run separately from the four previously validated Profile cases; see implementation evidence.
+
+Native hosts now own a bounded `ProfileCommandGateway` and expose Plugin API 67 `KcodeProfiles`
+through a fresh infrastructure bridge in each product tree. Initial apply sees Starting until
+the host binds; do not await readiness from apply. Injected clients submit detached activation,
+edit or module-selection commands synchronously, then observe their host-owned handles. Accepted
+work survives the submitting provider's withdrawal. Old clients reject new calls; explicit
+cancellation after publication retains the committed result. The host's `profileCommands` client
+remains available for metadata/activation after failed restoration. UI remains optional/pending.

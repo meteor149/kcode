@@ -102,3 +102,7 @@ Imports, code replacement and removals use joint native module-generation and tr
 Candidate exports are borrowed by instance bindings until successful publication or completed
 restoration; portable metadata never contains these runtime exports. See the Profile guide for
 instance/package removal semantics and the remaining management/switching work.
+
+Plugin API 67 consumers inject `KcodeProfiles`; its native
+runtime bridge delegates these metadata contracts and submits composition commands to a
+host-owned queue. This module does not own product UI or the command execution scope.

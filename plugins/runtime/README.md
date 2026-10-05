@@ -49,3 +49,13 @@ Same-ID in-process overwrite is rejected in Profile mode. profileModuleFactories
 separate available-code catalogue for each runtime, rejecting collisions and factory ID mismatch.
 Native hosts expose selectProfileModule(packageId, moduleId, expected), with active identity/
 generation checks through the existing transaction. Verified external release replacement is separate.
+
+`ProfileCommandGateway` owns a bounded command queue in the native host scope. Each product
+tree mounts a fresh infrastructure bridge exporting Plugin API 67 `KcodeProfiles`; metadata
+operations belong to that bridge, but accepted activation/edit/module-selection commands belong
+to the host and survive its withdrawal. Old clients reject new work. Initial consumers observe
+Starting until host binding and must not block apply waiting for readiness. The stable host also
+exposes the client for independent recovery presentation. Host closure cancels/joins the queue
+before releasing the product owner. Notifications and cancellation callbacks run outside locks.
+Command-local publication evidence preserves successful results when cancellation interrupts
+the return path after the generation and application view have committed.

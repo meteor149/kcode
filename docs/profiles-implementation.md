@@ -406,3 +406,40 @@ restoration, full instrumentation-suite coverage or sudden power-loss durability
 Plugin-facing catalogue/command services, management and independent recovery UI, initial startup
 failure recovery, verified Bundle import and credential-safe export remain outstanding. Focused
 phase checks do not replace the final requirement audit and platform validation.
+
+## Host-owned injected management commands (Plugin API 67)
+
+Native Desktop/Android hosts now allocate a ProfileCommandGateway independently of the
+replaceable product tree. Every allocation mounts a fresh infrastructure bridge exporting
+KcodeProfiles. The neutral SDK exposes metadata/module queries, management state, a bounded
+command queue and observable handles for activation, active edits and typed module selection.
+Submit detaches request data and accepts synchronously; accepted work survives withdrawal of
+the submitting bridge, and cancelling an awaiting observer does not cancel the command.
+Withdrawn clients reject new calls. Explicit cancellation after durable publication returns
+the command's own committed result, recorded only after product/application publication.
+Closing the host cancels and joins running/queued work before releasing runtime resources.
+RecoveryRequired retains the host client for metadata and explicit recovery activation.
+Starting clients reject requests until host binding; consumers must not block plugin apply.
+
+The final concentrated build passed 164 tests: 42 SDK, 37 Profile and 85 focused Desktop
+runtime/native/Profile/package cases, with zero failures/errors/skipped cases. Desktop app
+compilation, Android app assembly and instrumentation APK assembly passed against Cordis
+f08918d. Six new gateway tests cover accepted activation across observer cancellation and
+bridge withdrawal, detached serialized edits, cancelled queued work, queue saturation, host
+closure, restoration failure/recovery, and cancellation at activation/edit publication.
+The two publication tests also call the active agent to verify the committed implementation.
+Those strengthened six tests and the updated instrumentation APK then passed a focused check.
+Actual JAR loading checks shared identity for KcodeProfiles and ProfileCommandHandle.
+
+The updated SDK 67 instrumentation APK was installed on the physical ARM64 API 36 device.
+injectedManagementCommandsSurviveWithdrawalAndShareSdkIdentityWithApkProviders passed:
+OK (1 test), 35.957 seconds. It exercises an injected client, cloning/draft activation,
+cancelling an awaiting observer, withdrawal/replacement of the submitting client, module
+catalogue queries, actual APK SDK identity and filesystem/App-shell scoped workspace IO.
+Only the new case ran in this phase; prior device cases retain their separate evidence.
+This does not establish Root/Shizuku authorization, startup failure recovery, device recovery
+after failed restoration, full instrumentation-suite coverage or sudden power-loss durability.
+
+Management/recovery UI, initial startup failure recovery, verified Bundle import,
+credential-safe export, ordering/move operations and the final requirement/platform audit
+remain outstanding. The implementation goal remains active.

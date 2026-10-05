@@ -22,6 +22,7 @@ import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.PreparedProfileRuntime
 import ai.meteor.kcode.plugin.ProfileRuntimeFactory
+import ai.meteor.kcode.plugin.ProfileCommandGateway
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
 import ai.meteor.kcode.plugin.api.AndroidPermissionHost
@@ -51,6 +52,8 @@ import android.app.Activity
 import android.content.Context
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /** Native loader bridge for custom compositions; the factory borrows the application context. */
 fun androidPluginControllerFactory(context: Context, directory: File): DynamicPluginControllerFactory {
@@ -111,6 +114,7 @@ suspend fun createAndroidProfileHost(
     moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
 ): KcodeProfileHost {
     val availableModuleFactories = moduleFactories.toMap()
+    val commands = ProfileCommandGateway()
     val nativeOverrides = if (profile.includeDefaults) buildList {
         if (toolCallApprover == null && !settingsBackedInteraction && profile.overrides.none { it.descriptor.id == "provider.interaction.platform" }) {
             val descriptor = PluginDescriptor("provider.interaction.platform", "builtin", "native", setOf("interaction"))
@@ -196,7 +200,7 @@ suspend fun createAndroidProfileHost(
         profile = nativeProfile,
         settingsStore = settingsStore,
         historyRepository = historyRepository,
-        featurePlugins = nativeFeaturePlugins.filter { it.descriptor.id == "provider.plugin-packages.platform" },
+        featurePlugins = nativeFeaturePlugins.filter { it.descriptor.id == "provider.plugin-packages.platform" } + commands.pluginMount(),
         pluginCompositionStore = legacyStore,
         dynamicPluginControllerFactory = androidPluginControllerFactory(activity, pluginDirectory),
     )
@@ -207,7 +211,12 @@ suspend fun createAndroidProfileHost(
         owner = runtime,
         applicationContent = runtime,
     )
-    val initial = KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs()))
+    val initial = try {
+        KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs()))
+    } catch (error: Throwable) {
+        withContext(NonCancellable) { commands.close() }
+        throw error
+    }
     suspend fun prepared(id: String, request: ProfileActivationRequest? = null): PreparedProfileRuntime {
         val activation = prepare(id, staging = true, request = request)
         return PreparedProfileRuntime(activation) {
@@ -227,5 +236,5 @@ suspend fun createAndroidProfileHost(
     val management = ProfileManagement(repository,
         { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
-    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management)
+    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management, commands).also(commands::bind)
 }

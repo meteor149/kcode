@@ -22,6 +22,7 @@ import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.PreparedProfileRuntime
 import ai.meteor.kcode.plugin.ProfileRuntimeFactory
+import ai.meteor.kcode.plugin.ProfileCommandGateway
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.api.DesktopPluginHostInputs
 import ai.meteor.kcode.plugin.api.InteractionPolicy
@@ -43,6 +44,8 @@ import ai.meteor.kcode.plugin.profiles.profileDataScopeKey
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 fun createDesktopKoogChatService(settingsStore: AppSettingsStore? = null): ChatService =
     createDesktopKoogChatRuntime(settingsStore).chatService
@@ -70,6 +73,7 @@ suspend fun createDesktopProfileHost(
     moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
 ): KcodeProfileHost {
     val availableModuleFactories = moduleFactories.toMap()
+    val commands = ProfileCommandGateway()
     val workspace = Files.createDirectories(
         homeDirectory.resolve("workspace"),
     ).toRealPath()
@@ -82,7 +86,7 @@ suspend fun createDesktopProfileHost(
             PluginDescriptor("provider.plugin-packages.platform", "builtin", "native", setOf("pluginPackages")),
             NativePluginPackagesPlugin(pluginDirectory, desktopPackageHost()), Unit,
         ),
-    )
+    ) + commands.pluginMount()
     lateinit var catalogue: Set<String>
     lateinit var initialActivation: ProfileActivation
     val legacyStore = FilePluginCompositionStore(pluginDirectory)
@@ -151,7 +155,12 @@ suspend fun createDesktopProfileHost(
         owner = runtime,
         applicationContent = runtime,
     )
-    val initial = KcodePluginRuntime.create(configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow)))
+    val initial = try {
+        KcodePluginRuntime.create(configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow)))
+    } catch (error: Throwable) {
+        withContext(NonCancellable) { commands.close() }
+        throw error
+    }
     suspend fun prepared(id: String, request: ProfileActivationRequest? = null): PreparedProfileRuntime {
         val activation = prepare(id, staging = true, request = request)
         return PreparedProfileRuntime(activation) {
@@ -171,5 +180,5 @@ suspend fun createDesktopProfileHost(
     val management = ProfileManagement(repository,
         { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
-    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management)
+    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management, commands).also(commands::bind)
 }
