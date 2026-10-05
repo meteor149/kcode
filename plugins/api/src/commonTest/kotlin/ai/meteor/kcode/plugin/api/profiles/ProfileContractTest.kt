@@ -9,8 +9,20 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class ProfileContractTest {
+    @Test
+    fun activationTargetsDistinguishSavedDraftAndHistoricalIntent() {
+        ProfileTarget("coding").validate()
+        ProfileTarget("coding", ProfileSource.Draft).validate()
+        ProfileTarget("coding", ProfileSource.History, 1).validate()
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("coding", ProfileSource.History).validate() }
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("coding", ProfileSource.Draft, 1).validate() }
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("coding", ProfileSource.History, 0).validate() }
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("../coding").validate() }
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     @Test
     fun omittedConfigurationAndExplicitNullHaveDistinctWireMeaningAndCompleteDescriptors() {

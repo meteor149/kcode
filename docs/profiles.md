@@ -22,10 +22,10 @@ and join them. Target preflight precedes old-runtime withdrawal; failed allocati
 reconstructs the old locked generation without rewriting history. Failed old closure or failed
 restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's admitted current
 runtime rather than a retained old owner. Each allocation receives fresh host inputs. Recovery UI
-remains pending. Whole-host switching is currently a native runtime API.
+remains pending. Native hosts also expose explicit activation through the SDK plugin manager.
 
 Portable definitions, entries, bundles and operations are shared SDK contracts under
-`ai.meteor.kcode.plugin.api.profiles` (Plugin API 65). The stable `AgentPluginManager` exposes
+`ai.meteor.kcode.plugin.api.profiles` (introduced in Plugin API 65). The stable `AgentPluginManager` exposes
 `currentProfile()` and `editProfile(ProfileCompositionEdit)`. An edit compares the active Profile
 ID and generation before any withdrawal, compiles operations through the ordinary layer stack,
 retains required package dependencies and publishes through the existing module/tree transaction.
@@ -33,8 +33,23 @@ It supports insertion of independently configured instances and groups, configur
 enable/disable, replacement, removal and context configuration. Context fields omitted from an
 operation remain unchanged; an empty map clears explicit inject/intercept/isolate configuration.
 Incoming operations and returned intent are detached from caller collections. An empty edit
-returns the current generation without publishing. Draft/catalogue management,
-preview, historical activation and switching SDK commands remain separate outstanding work.
+returns the current generation without publishing.
+
+Plugin API 66 adds catalogue/draft reads, revision-checked draft creation/update, cloning,
+deletion, preview, history and activation. `ProfileTarget` explicitly chooses `Committed`,
+`Draft` or `History`; only History includes a generation. `activateProfile` compares the
+repository revision before preparing code and commits generation/selection only after the
+candidate settles. Applying history appends a new generation rather than rewinding pointers.
+The current runtime's generation is checked against its restoration recipe before withdrawal.
+An active Profile cannot be deleted, even if startup has not saved a selection.
+
+Clones retain frozen bundle/code intent in their draft base recipe and default to separate
+settings/history/workspace scopes. They never copy business data. Preview uses the same
+composition/preparation path without mounting providers or publishing metadata. It reports
+structural/package preparation diagnostics, entries and field origins. `packagesVerified`
+does not establish ConfigValidator success, service readiness or provider allocation; those
+remain activation checks. Effective preview entries may contain machine paths, while its
+portable definition does not. Public management UI and recovery UI remain outstanding.
 
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
@@ -44,11 +59,15 @@ omit default UI or leave consumers waiting for required providers.
 ## Documents and restart
 
 Desktop metadata lives in `.kcode/profiles` by default; Android uses
-`filesDir/cordis_profiles`. Each Profile directory contains editable `profile.json` and
-immutable `generations/<document-id>.json` files. Root `.profile-state.json` is the single
+`filesDir/cordis_profiles`. Each Profile directory contains immutable
+`drafts/<document-id>.json` and `generations/<document-id>.json` files. Root `.profile-state.json` is the single
 authority for visible Profiles, generation history and current selection. Generation files
 are synced and staged before atomic replacement of that authority; unreferenced files are
-never adopted as successful commits.
+never adopted as successful commits. Authority format 2 adds draft pointers and names;
+format 1 authorities remain readable and upgrade on successful mutation. Legacy `profile.json`
+is a read-only draft migration input. Draft replacement stages a new document before publishing
+its pointer, so a refused publication cannot replace the visible draft. A draft can retain a
+local frozen generation recipe for clone/reproducible preparation; it is not a portable export.
 
 A format 2 committed document contains the definition, frozen bundle layers, verified
 package lock and local runtime snapshot. Publication uses generation compare-and-set,
@@ -148,8 +167,8 @@ Code availability and locked releases do not change during an enable-only transa
 Publication failure preserves the previous committed intent. Repository generation CAS
 remains the authority for concurrent writers.
 
-Complete public Profile management/activation commands,
-external bundle import, credential-safe export and management/recovery UI remain incomplete.
+External bundle import, credential-safe export, typed host-module replacement and
+management/recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Three Android tests on
 an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu

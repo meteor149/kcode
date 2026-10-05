@@ -15,6 +15,11 @@ import ai.meteor.kcode.plugin.nativefilesystem.AndroidNativeFileSystemPlugin
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
+import ai.meteor.kcode.plugin.api.profiles.ProfileSource
+import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.history.ConversationHistoryRepository
 import ai.meteor.kcode.settings.AppSettingsStore
 import ai.meteor.kcode.settings.SettingsUpdate
@@ -44,6 +49,42 @@ import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class AndroidProfileHostTest {
+    @Test(timeout = 300_000)
+    fun sdkActivatesDraftAndHistoricalRecipesWithActualApkProviders(): Unit = runBlocking {
+        val fixture = Fixture()
+        val host = fixture.start()
+        try {
+            val manager = host.pluginManager
+            val id = "managed-${System.nanoTime()}"
+            val initial = manager.profileCatalogue()
+            val cloned = manager.cloneProfile(ProfileCloneRequest(ProfileTarget("native"), id, initial.revision))
+            val beforePreview = fixture.repository.state()
+            val preview = manager.previewProfile(ProfileTarget(id, ProfileSource.Draft))
+            assertTrue(preview.packagesVerified)
+            assertTrue(preview.diagnostics.isEmpty())
+            assertEquals(beforePreview, fixture.repository.state())
+            assertEquals(1, fixture.live)
+            val original = manager.activateProfile(ProfileActivationRequest(ProfileTarget(id, ProfileSource.Draft), cloned.revision))
+            assertEquals(1L, original.generation)
+            fixture.fs.writeBytes("/workspace/sdk.txt", "SDK activation".encodeToByteArray())
+            assertEquals(0, fixture.shell.run(ShellRequest("cat sdk.txt")).exitCode)
+            val changed = original.definition.copy(displayName = "Edited")
+            val saved = manager.writeProfileDraft(ProfileDraftWrite(changed, manager.profileCatalogue().revision))
+            assertEquals(original, manager.currentProfile())
+            assertEquals(2L, manager.activateProfile(ProfileActivationRequest(ProfileTarget(id, ProfileSource.Draft), saved.revision)).generation)
+            val restored = manager.activateProfile(ProfileActivationRequest(ProfileTarget(id, ProfileSource.History, 1), manager.profileCatalogue().revision))
+            assertEquals(3L, restored.generation)
+            assertEquals(original.definition, restored.definition)
+            assertEquals("SDK activation", fixture.fs.readBytes("/workspace/sdk.txt").decodeToString())
+            assertEquals(listOf(1L, 2L, 3L), manager.profileHistory(id).map { it.generation })
+            assertFailsWith<IllegalArgumentException> { manager.deleteProfile(id, manager.profileCatalogue().revision) }
+            manager.activateProfile(ProfileActivationRequest(ProfileTarget("native"), manager.profileCatalogue().revision))
+            manager.deleteProfile(id, manager.profileCatalogue().revision)
+            assertTrue(fixture.repository.generations(id).isEmpty())
+            assertEquals("native", fixture.repository.selected())
+        } finally { host.close(); fixture.remove() }
+    }
+
     @Test(timeout = 300_000)
     fun apkProvidersSwitchSettingsHistoryAndWorkspaceScopesAndRestartSelection(): Unit = runBlocking {
         val fixture = Fixture()

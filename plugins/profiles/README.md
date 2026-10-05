@@ -13,6 +13,13 @@ managed module/tree publisher. Returned intent and incoming operations are detac
 collections. Context operations replace present fields and clear explicit configuration when
 given empty maps.
 
+API 66 adds native manager catalogue/draft/clone/delete/preview/history/activation commands.
+Draft writes and activation compare repository revisions. Explicit activation chooses committed,
+draft or historical intent; history restoration appends a new generation. Clone drafts retain a
+local frozen source recipe but never copy settings/history/workspace data. Preview prepares and
+verifies package intent without mounting providers; ConfigValidator and service readiness remain
+activation checks.
+
 Layer precedence is bundle order, profile, machine and launch. Configure replaces the whole
 configuration; an absent entry config uses the module default, while explicit JSON null is
 preserved. Configuration kinds retain SDK scalar and Unit identities during migration.
@@ -21,7 +28,10 @@ identity guard. Package verification, credential resolution and platform adaptat
 to activation, not compilation.
 
 `FileProfileRepository` shares its JVM implementation between desktop and Android. Drafts
-are independent of committed generations. Each committed JSON document atomically contains
+are independent of committed generations and use immutable documents with authority pointers.
+Legacy `profile.json` and format 1 authority records remain migration inputs; successful mutation
+upgrades the authority to format 2. Failed draft publication leaves the previous pointer readable.
+Each committed JSON document atomically contains
 the definition, frozen bundle layers, verified package lock and local runtime composition. Publication uses a
 compare-and-set generation check, process serialization, a file lock and a synced temporary
 file followed by atomic replacement. Immutable generation documents are referenced by one
@@ -80,7 +90,7 @@ The shipped factories bind settings/history/workspace scopes on both native plat
 Android App shell and Ubuntu share the scoped workspace with file tools; app-private scopes
 reject ADB execution before authorization. Root execution remains unverified. Caller-supplied
 stores remain borrowed. Native switching and active declaration edits are implemented; complete
-catalogue/draft/history activation commands and management/recovery UI remain under development. See
+management/recovery UI, external bundle import and credential-safe export remain under development. See
 `docs/profiles.md` and `docs/profiles-implementation.md`.
 
 Resolved profiles retain machine and launch operations separately from portable definitions.

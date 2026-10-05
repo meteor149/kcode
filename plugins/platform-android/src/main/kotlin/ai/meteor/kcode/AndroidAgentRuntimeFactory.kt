@@ -1,5 +1,8 @@
 package ai.meteor.kcode
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.profiles.ProfileManagement
+
 import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
 import ai.meteor.kcode.plugin.BundledPluginPackage
@@ -134,11 +137,9 @@ suspend fun createAndroidProfileHost(
         .filter { it.id != "provider.history.platform" || historyRepository == null }
     val legacyStore = FilePluginCompositionStore(pluginDirectory)
     val repository = FileProfileRepository(File(activity.filesDir, "cordis_profiles"))
-    var requestedId = profileId
-    var staging = false
     lateinit var catalogue: Set<String>
     lateinit var initialActivation: ProfileActivation
-    suspend fun prepare(): ProfileActivation {
+    suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
         val bundles = nativeProfileBundles((catalogue + bundled.map { it.id }).toList())
         return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
             NativePluginPackageResolver(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity)),
@@ -169,6 +170,7 @@ suspend fun createAndroidProfileHost(
                     if (historyRepository != null) add("provider.history.platform")
                 },
             stageSwitch = staging,
+            activationRequest = request,
         )
     }
     val startup = ProfileStartupFactory { modules ->
@@ -201,11 +203,9 @@ suspend fun createAndroidProfileHost(
         applicationContent = runtime,
     )
     val initial = KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs()))
-    staging = true
-    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, ProfileRuntimeFactory { id ->
-        requestedId = id
-        val activation = prepare()
-        PreparedProfileRuntime(activation) {
+    suspend fun prepared(id: String, request: ProfileActivationRequest? = null): PreparedProfileRuntime {
+        val activation = prepare(id, staging = true, request = request)
+        return PreparedProfileRuntime(activation) {
             facade(KcodePluginRuntime.create(configuration.copy(
                 hostInputs = hostInputs(),
                 profileStartup = ProfileStartupFactory { modules ->
@@ -214,5 +214,13 @@ suspend fun createAndroidProfileHost(
                 },
             )))
         }
-    })
+    }
+    val factory = object : ProfileRuntimeFactory {
+        override suspend fun prepare(id: String) = prepared(id)
+        override suspend fun prepare(request: ProfileActivationRequest) = prepared(request.target.profileId, request)
+    }
+    val management = ProfileManagement(repository,
+        { nativeProfileBundles((catalogue + bundled.map { it.id }).toList()) },
+        { request -> prepare(request.target.profileId, staging = true, request = request) })
+    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management)
 }

@@ -1,6 +1,13 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
+import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
+import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
+import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.AgentConversationOverlayController
 import ai.meteor.kcode.AgentConversationOverlayTurn
 import ai.meteor.kcode.AgentRuntimeOwner
@@ -47,6 +54,8 @@ class PreparedProfileRuntime(
 
 fun interface ProfileRuntimeFactory {
     suspend fun prepare(id: String): PreparedProfileRuntime
+    suspend fun prepare(request: ProfileActivationRequest): PreparedProfileRuntime =
+        error("This factory does not support explicit Profile activation")
 }
 
 enum class ProfileHostPhase { Ready, Preparing, Switching, RecoveryRequired, Closed }
@@ -62,6 +71,7 @@ class KcodeProfileHost(
     initial: KcodeAgentRuntime,
     initialProfileId: String,
     private val factory: ProfileRuntimeFactory,
+    private val management: ProfileManagement? = null,
 ) : AgentRuntimeOwner, ApplicationContent {
     private class HostCall(val host: KcodeProfileHost) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<HostCall>
@@ -120,6 +130,21 @@ class KcodeProfileHost(
     }
 
     val pluginManager: AgentPluginManager = object : AgentPluginManager {
+        override suspend fun profileCatalogue() = metadata { it.catalogue().withActive() }
+        override suspend fun profileDraft(id: String) = metadata { it.draft(id) }
+        override suspend fun writeProfileDraft(write: ProfileDraftWrite) = metadata { it.write(write).withActive() }
+        override suspend fun cloneProfile(request: ProfileCloneRequest) = metadata { it.clone(request).withActive() }
+        override suspend fun deleteProfile(id: String, expectedRevision: Long) = metadata {
+            require(id != state.value.profileId) { "Cannot delete the active Profile" }
+            it.remove(id, expectedRevision).withActive()
+        }
+        override suspend fun previewProfile(target: ProfileTarget) = metadata { it.preview(target) }
+        override suspend fun profileHistory(id: String) = metadata { it.history(id) }
+        override suspend fun activateProfile(request: ProfileActivationRequest, cancelActive: Boolean): ProfileCompositionState {
+            checkNotNull(management) { "Profile management is unavailable" }
+            request.target.validate()
+            return switchInternal(request.target.profileId, cancelActive, request)
+        }
         override suspend fun currentProfile() = call { checkNotNull(it.pluginManager).currentProfile() }
         override suspend fun editProfile(edit: ProfileCompositionEdit) =
             call { checkNotNull(it.pluginManager).editProfile(edit) }
@@ -130,6 +155,11 @@ class KcodeProfileHost(
         override suspend fun uninstall(id: String) = call { checkNotNull(it.pluginManager).uninstall(id) }
         override suspend fun installed(): List<DynamicPluginSpec> = call { checkNotNull(it.pluginManager).installed() }
         override suspend fun setEnabled(id: String, enabled: Boolean) = call { checkNotNull(it.pluginManager).setEnabled(id, enabled) }
+    }
+
+    private fun ProfileCatalogue.withActive(): ProfileCatalogue = copy(activeProfileId = state.value.profileId)
+    private suspend fun <T> metadata(block: suspend (ProfileManagement) -> T): T = call {
+        block(checkNotNull(management) { "Profile management is unavailable" })
     }
 
     private inner class OverlayTurn(val delegate: AgentConversationOverlayTurn) : AgentConversationOverlayTurn {
@@ -216,8 +246,12 @@ class KcodeProfileHost(
 
     /** Default rejects active work; explicit cancellation cancels and joins it before disposal. */
     suspend fun switchTo(id: String, cancelActive: Boolean = false) {
+        switchInternal(id, cancelActive, null)
+    }
+
+    private suspend fun switchInternal(id: String, cancelActive: Boolean, request: ProfileActivationRequest?): ProfileCompositionState {
         outsideCall()
-        command.withLock {
+        return command.withLock {
             val previousState = admission.withLock {
                 val previous = mutableState.value
                 check(previous.phase == ProfileHostPhase.Ready) { "Profile host cannot switch: ${previous.phase}" }
@@ -240,12 +274,16 @@ class KcodeProfileHost(
                         jobs.forEach { it.join() }
                         finishOverlays()
                     }
-                    target = factory.prepare(id)
+                    val previousIntent = current?.pluginManager?.currentProfile()
+                    target = if (request == null) factory.prepare(id) else factory.prepare(request)
                     check(target!!.activation.resolved.definition.id == id) { "Prepared Profile identity mismatch" }
                     target!!.activation.session.requirePreparedSwitch()
                     recovery = factory.prepare(previousState.profileId)
                     check(recovery!!.activation.resolved.definition.id == previousState.profileId) { "Recovery Profile identity mismatch" }
                     recovery!!.activation.session.requirePreparedSwitch()
+                    if (previousIntent != null) check(recovery!!.activation.session.currentCompositionState() == previousIntent) {
+                        "Active Profile changed outside its runtime; refresh before switching"
+                    }
                     currentCoroutineContext().ensureActive()
                     // Closure and commit finalization must complete even if the requesting UI is cancelled.
                     withContext(NonCancellable) {
@@ -306,6 +344,7 @@ class KcodeProfileHost(
             } finally {
                 if (!recoveryResumed) withContext(NonCancellable) { recovery?.activation?.session?.discardPreparedSwitch() }
             }
+            withContext(NonCancellable) { checkNotNull(target).activation.session.currentCompositionState() }
         }
     }
 

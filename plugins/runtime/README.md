@@ -29,6 +29,8 @@ and keep candidate facades private. Public Profile management and recovery UI re
 
 Named startup, manager mutations and native switching on Desktop and Android are implemented.
 The SDK manager also edits active Profile declarations with identity/generation checks through
-the same module/tree publisher. Public catalogue/draft/history activation commands, external
-bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
+the same module/tree publisher. Native stable managers now expose catalogue/draft/clone/delete/
+preview/history commands and revision-checked committed/draft/historical activation. Explicit
+activation uses the host's shutdown/recreation/recovery boundary, including same-ID activation.
+External bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
 `docs/profiles-implementation.md` for behavior and evidence limits.

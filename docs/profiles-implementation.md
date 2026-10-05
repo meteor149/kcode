@@ -278,3 +278,36 @@ This phase exposes active declaration editing, not complete Profile catalogue/dr
 management. Public preview and historical activation, external Bundle import, credential-safe
 export, typed host-module replacement and management/recovery UI still require implementation
 and their own validation. Final whole-suite and platform evidence remain necessary for completion.
+
+## Draft, preview and historical activation evidence
+
+Plugin API 66 adds catalogue/draft reads, revision-checked draft creation/update, cloning,
+deletion, preview, history and explicit committed/draft/historical activation. New shared DTOs
+remain under the existing exported SDK namespace; external packages must rebuild against the
+generated API 66 ABI. Preview reuses native preparation without allocating providers or
+publishing metadata. Its package verification flag does not prove runtime configuration
+validation, provider allocation or service readiness. Clones retain frozen bundle/code intent
+while defaulting to independent business data scopes. Applying a historical recipe appends a
+new generation rather than rewinding the committed head.
+
+Drafts now use immutable documents and atomic authority pointers. Format 1 authorities and
+legacy profile.json drafts remain readable; successful mutation publishes format 2 authority.
+Tests cover stale writes, failed pointer publication after staging, readonly legacy migration,
+frozen clone intent, structural preview diagnostics and historical append semantics. Native
+host coverage checks preview does not allocate, active deletion is refused, failed draft
+activation restores the committed runtime and deletion preserves business data.
+
+The phase build passed 147 tests: 42 SDK, 37 Profile compiler/repository/preparation and 68
+related desktop runtime/native/package tests, with zero failures/errors/skipped cases. Desktop
+app compilation, Android app assembly and platform instrumentation APK assembly passed against
+Cordis f08918d. The final API 66 instrumentation APK ran all four AndroidProfileHostTest cases
+on the ARM64 API 36 physical device: OK (4 tests), 269.597 seconds. The added case exercises
+SDK clone/preview, draft activation and historical restoration using actual APK providers and
+preserved workspace files. Existing cases continue to cover scoped settings/history/workspace,
+actual Ubuntu workspace execution, stale references, selection restart, failed allocation
+reconstruction and rejection of scoped ADB before authorization.
+
+This is focused phase evidence. Public management UI, independent recovery UI, verified Bundle
+import, credential-safe portable export and full typed host-module replacement remain pending.
+It does not establish full device-suite coverage, real Root/Shizuku authorization, sudden
+power-loss durability or completion of the overall Profile goal.

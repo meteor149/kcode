@@ -45,3 +45,8 @@ separate real Shizuku/root evidence described in the verification guide.
 `AndroidProfileHostTest` covers real bundled APK providers, scope switching, stale references,
 saved-selection restart, failed target reconstruction and scoped ADB rejection. Device results
 are recorded separately from build evidence in `docs/profiles-implementation.md`.
+The Plugin API 66 stable manager also exposes draft/clone/preview/history commands and
+revision-checked activation of committed, draft or historical intent. The dedicated device
+suite exercises draft activation and historical restoration with actual APK providers;
+historical restoration appends a generation and preserves the Profile workspace.
+Management UI and independent recovery UI remain pending.

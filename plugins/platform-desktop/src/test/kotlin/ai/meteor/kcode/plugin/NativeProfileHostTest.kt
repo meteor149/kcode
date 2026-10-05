@@ -5,6 +5,11 @@ import ai.meteor.kcode.createDesktopProfileHost
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
+import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
+import ai.meteor.kcode.plugin.api.profiles.ProfileSource
+import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,6 +30,86 @@ import org.cordis.ConfigValidator
 import kotlinx.serialization.json.JsonPrimitive
 
 class NativeProfileHostTest {
+    @Test
+    fun sdkManagesDraftsPreviewsHistoryAndNativeActivationWithoutCopyingBusinessData(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-native-profile-management")
+        lateinit var history: ConversationHistoryRepository
+        var live = 0
+        var allocations = 0
+        val capture = kcodePlugin(PluginDescriptor("provider.ui.compose", "test", "test", emptySet()),
+            plugin<String>(validator = ConfigValidator { require(it != "invalid"); it }, inject = dependencies(KcodeHistory.Key)) { context, config ->
+                live++
+                allocations++
+                collect { live-- }
+                check(config != "fail") { "allocation refused" }
+                history = context.require(KcodeHistory.Key).repository
+            }, "okay")
+        val host = createDesktopProfileHost(homeDirectory = home, profile = KcodePluginProfile(overrides = listOf(capture)))
+        try {
+            val manager = host.pluginManager
+            val baseline = assertNotNull(manager.currentProfile())
+            history.appendMessage(1, "Native data", 1, "User", "native data")
+            val initial = manager.profileCatalogue()
+            assertEquals("native", initial.activeProfileId)
+            assertFailsWith<IllegalArgumentException> { manager.deleteProfile("native", initial.revision) }
+            val cloned = manager.cloneProfile(ProfileCloneRequest(ProfileTarget("native"), "managed", initial.revision))
+            val draft = assertNotNull(manager.profileDraft("managed"))
+            assertEquals("profile", draft.dataScope.history)
+            assertEquals("profile", draft.dataScope.workspace)
+            assertEquals(null, cloned.profiles.single { it.id == "managed" }.generation)
+            val preview = manager.previewProfile(ProfileTarget("managed", ProfileSource.Draft))
+            assertTrue(preview.packagesVerified)
+            assertTrue(preview.diagnostics.isEmpty())
+            assertEquals(cloned.revision, preview.revision)
+            assertEquals(1, allocations)
+            assertEquals(baseline, manager.currentProfile())
+            assertFailsWith<IllegalArgumentException> {
+                manager.activateProfile(ProfileActivationRequest(ProfileTarget("managed", ProfileSource.Draft), initial.revision))
+            }
+            val activated = manager.activateProfile(ProfileActivationRequest(ProfileTarget("managed", ProfileSource.Draft), cloned.revision))
+            assertEquals(1L, activated.generation)
+            assertEquals("managed", manager.profileCatalogue().selectedProfileId)
+            assertTrue(history.loadAll().isEmpty())
+            history.appendMessage(2, "Managed data", 2, "User", "managed data")
+            val edited = activated.definition.copy(patches = activated.definition.patches + ProfileOperation.Disable("provider.ui.compose"))
+            val saved = manager.writeProfileDraft(ProfileDraftWrite(edited, manager.profileCatalogue().revision))
+            assertEquals(activated, manager.currentProfile())
+            val changed = manager.activateProfile(ProfileActivationRequest(ProfileTarget("managed", ProfileSource.Draft), saved.revision))
+            assertEquals(2L, changed.generation)
+            assertEquals(0, live)
+            val restored = manager.activateProfile(ProfileActivationRequest(ProfileTarget("managed", ProfileSource.History, 1), manager.profileCatalogue().revision))
+            assertEquals(3L, restored.generation)
+            assertEquals(activated.definition, restored.definition)
+            assertEquals(listOf(1L, 2L, 3L), manager.profileHistory("managed").map { it.generation })
+            assertEquals("managed data", history.loadAll().single().messages.single().content)
+            val broken = restored.definition.copy(patches = restored.definition.patches +
+                ProfileOperation.Configure("provider.ui.compose", JsonPrimitive("fail"), "string"))
+            val beforeFailure = manager.writeProfileDraft(ProfileDraftWrite(broken, manager.profileCatalogue().revision))
+            assertFailsWith<IllegalStateException> {
+                manager.activateProfile(ProfileActivationRequest(ProfileTarget("managed", ProfileSource.Draft), beforeFailure.revision))
+            }
+            assertEquals(beforeFailure, manager.profileCatalogue())
+            assertEquals(restored, manager.currentProfile())
+            assertEquals(1, live)
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            manager.activateProfile(ProfileActivationRequest(ProfileTarget("native"), manager.profileCatalogue().revision))
+            assertEquals("native data", history.loadAll().single().messages.single().content)
+            val dataFile = home.resolve("profile-data/profile-managed/history.db")
+            assertTrue(Files.exists(dataFile))
+            val deleted = manager.deleteProfile("managed", manager.profileCatalogue().revision)
+            assertTrue(deleted.profiles.none { it.id == "managed" })
+            assertTrue(Files.exists(dataFile))
+            assertFailsWith<IllegalArgumentException> { manager.writeProfileDraft(ProfileDraftWrite(draft, beforeFailure.revision)) }
+            val reopened = FileProfileRepository(home.resolve("profiles").toFile())
+            assertEquals("native", reopened.selected())
+            assertTrue(reopened.generations("managed").isEmpty())
+        } finally {
+            host.close()
+            assertEquals(0, live)
+            home.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun nativeFacadesSwitchScopesAndRestartTheSavedSelection(): Unit = runBlocking {
         val home = Files.createTempDirectory("kcode-native-live-profile")

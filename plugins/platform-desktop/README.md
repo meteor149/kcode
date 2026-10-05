@@ -20,4 +20,8 @@ closes the previous product, publishes generation/selection together and changes
 Failed target activation restores the old locked generation. Active work requires explicit
 cancellation/join, and failed closure/restoration closes execution admission. Each allocation
 receives fresh host inputs; the retained catalogue contains IDs rather than old mounts/resources.
-The management SDK/UI and recovery UI remain pending; see the Profile guide.
+The Plugin API 66 manager exposes catalogue/draft reads, revision-checked draft writes,
+cloning, deletion, preview, history and activation of committed/draft/historical intent.
+Preview prepares the deployment without mounting providers. Historical activation appends a
+new generation; clones retain code intent and use separate business data scopes by default.
+Management UI and recovery UI remain pending; see the Profile guide.

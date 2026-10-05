@@ -1,6 +1,8 @@
 package ai.meteor.kcode.plugin.profiles
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
+import ai.meteor.kcode.plugin.api.profiles.ProfileSummary
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.channels.FileChannel
@@ -138,10 +140,12 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
     }
 
     private fun validateAuthority(value: Authority) {
-        require(value.formatVersion == 1 && value.revision >= 0) { "Invalid Profile repository state" }
+        require(value.formatVersion in 1..2 && value.revision >= 0) { "Invalid Profile repository state" }
         value.profiles.forEach { (id, record) ->
             profileDirectory(id)
             require(record.draft || record.generations.isNotEmpty()) { "Empty Profile record" }
+            require(record.draftDocument == null || record.draft && record.draftDocument.matches(DocumentId)) { "Invalid draft pointer" }
+            require(record.draftName == null || record.draft && record.draftName.isNotBlank()) { "Invalid draft name" }
             var previous = 0L
             record.generations.forEach { pointer ->
                 require(pointer.generation > previous && pointer.document.matches(DocumentId)) { "Invalid generation history" }
@@ -156,30 +160,67 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
 
     private fun publish(previous: Authority, next: Authority) {
         require(previous.revision < Long.MAX_VALUE) { "Profile repository revision exhausted" }
-        val updated = next.copy(revision = previous.revision + 1)
+        val updated = next.copy(formatVersion = 2, revision = previous.revision + 1)
         validateAuthority(updated)
         write(root.resolve(StateFilename), json.encodeToString(updated))
     }
 
     override suspend fun list(): List<String> = access { authority().profiles.keys.sorted() }
 
-    override suspend fun loadDraft(id: String): ProfileDefinition? = access {
-        val path = profileDirectory(id)
-        if (authority().profiles[id]?.draft != true) null else {
-            val text = requireNotNull(read(path.resolve("profile.json"))) { "Profile draft is missing" }
-            json.decodeFromString<ProfileDefinition>(text).also { value ->
-                value.validate()
-                require(value.id == id) { "Profile identity mismatch" }
-            }
-        }
+    private fun draftPath(id: String, document: String, create: Boolean = false): Path {
+        require(document.matches(DocumentId)) { "Invalid draft document identity" }
+        return checkedDirectory(profileDirectory(id, create).resolve("drafts"), create).resolve("$document.json")
+    }
+
+    private fun draft(id: String, record: ProfileRecord?): ProfileDraftDocument? {
+        val directory = profileDirectory(id)
+        if (record?.draft != true) return null
+        val document = record.draftDocument
+        val path = if (document == null) directory.resolve("profile.json") else draftPath(id, document)
+        val text = requireNotNull(read(path)) { "Profile draft is missing" }
+        val value = if (document == null) ProfileDraftDocument(json.decodeFromString<ProfileDefinition>(text))
+            else json.decodeFromString<ProfileDraftDocument>(text)
+        value.validate()
+        require(value.definition.id == id) { "Profile identity mismatch" }
+        return value
+    }
+
+    override suspend fun loadDraft(id: String): ProfileDefinition? = loadDraftDocument(id)?.definition
+    override suspend fun loadDraftDocument(id: String): ProfileDraftDocument? = access {
+        draft(id, authority().profiles[id])
+    }
+
+    private fun writeDraft(document: ProfileDraftDocument, previous: Authority, createOnly: Boolean) {
+        document.validate()
+        val id = document.definition.id
+        require(!createOnly || id !in previous.profiles) { "Profile already exists" }
+        val pointer = UUID.randomUUID().toString()
+        write(draftPath(id, pointer, create = true), json.encodeToString(document), replace = false)
+        val record = previous.profiles[id] ?: ProfileRecord()
+        publish(previous, previous.copy(profiles = previous.profiles + (id to record.copy(
+            draft = true, draftDocument = pointer, draftName = document.definition.displayName))))
     }
 
     override suspend fun saveDraft(definition: ProfileDefinition) = access(atomic = true) {
-        definition.validate()
         val previous = authority()
-        write(profileDirectory(definition.id, create = true).resolve("profile.json"), json.encodeToString(definition))
-        val record = previous.profiles[definition.id] ?: ProfileRecord()
-        publish(previous, previous.copy(profiles = previous.profiles + (definition.id to record.copy(draft = true))))
+        val record = previous.profiles[definition.id]
+        val base = record?.generations?.lastOrNull()?.let { load(definition.id, it) }
+            ?: draft(definition.id, record)?.base
+        writeDraft(ProfileDraftDocument(definition, base), previous, createOnly = false)
+    }
+
+    override suspend fun writeDraft(document: ProfileDraftDocument, expectedRevision: Long, createOnly: Boolean) = access(atomic = true) {
+        val previous = authority()
+        require(previous.revision == expectedRevision) { "Profile repository changed; refresh before editing" }
+        writeDraft(document, previous, createOnly)
+    }
+
+    override suspend fun catalogue(): ProfileCatalogue = access {
+        val previous = authority()
+        ProfileCatalogue(previous.revision, previous.selected, previous.profiles.entries.sortedBy { it.key }.map { (id, record) ->
+            val latest = record.generations.lastOrNull()?.let { load(id, it) }
+            ProfileSummary(id, latest?.definition?.displayName ?: record.draftName ?: id, record.draft, latest?.generation, record.draftName)
+        })
     }
 
     override suspend fun loadCommitted(id: String): CommittedProfileGeneration? = access {
@@ -240,24 +281,33 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
         if (previous.selected != id) publish(previous, previous.copy(selected = id))
     }
 
-    override suspend fun remove(id: String) = access(atomic = true) {
+    private fun removeRecord(id: String, expectedRevision: Long?) {
         profileDirectory(id)
         val previous = authority()
+        require(expectedRevision == null || previous.revision == expectedRevision) { "Profile repository changed; refresh before deleting" }
         require(previous.selected != id) { "Cannot remove the selected profile" }
         if (id in previous.profiles) publish(previous, previous.copy(profiles = previous.profiles - id))
         // Logical deletion is final. Retained metadata is unreachable and cannot reappear on reopen.
         // Physical reclamation is separate from publication and never deletes provider business data.
     }
 
+    override suspend fun remove(id: String) = access(atomic = true) { removeRecord(id, null) }
+    override suspend fun remove(id: String, expectedRevision: Long) = access(atomic = true) { removeRecord(id, expectedRevision) }
+
     @Serializable
     private data class GenerationPointer(val generation: Long, val document: String)
 
     @Serializable
-    private data class ProfileRecord(val draft: Boolean = false, val generations: List<GenerationPointer> = emptyList())
+    private data class ProfileRecord(
+        val draft: Boolean = false,
+        val generations: List<GenerationPointer> = emptyList(),
+        val draftDocument: String? = null,
+        val draftName: String? = null,
+    )
 
     @Serializable
     private data class Authority(
-        val formatVersion: Int = 1,
+        val formatVersion: Int = 2,
         val revision: Long = 0,
         val selected: String? = null,
         val profiles: Map<String, ProfileRecord> = emptyMap(),

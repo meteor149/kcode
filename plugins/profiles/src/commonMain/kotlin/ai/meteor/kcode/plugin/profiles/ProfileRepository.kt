@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin.profiles
 
+import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
@@ -101,9 +102,28 @@ data class ProfileRepositoryState(
 
 /** Historical storage and the atomic publisher used when switching runtime ownership. */
 interface ProfileGenerationRepository : ProfileRepository {
+    suspend fun catalogue(): ProfileCatalogue
+    suspend fun loadDraftDocument(id: String): ProfileDraftDocument?
+    /** Stage immutable draft bytes and publish only if the authority revision still matches. */
+    suspend fun writeDraft(document: ProfileDraftDocument, expectedRevision: Long, createOnly: Boolean = false)
+    suspend fun remove(id: String, expectedRevision: Long)
     suspend fun state(): ProfileRepositoryState
     suspend fun generations(id: String): List<Long>
     suspend fun loadGeneration(id: String, generation: Long): CommittedProfileGeneration?
     /** Compare both target generation and repository revision, then publish and select together. */
     suspend fun commitAndSelect(value: CommittedProfileGeneration, expectedGeneration: Long?, expectedRevision: Long)
+}
+
+/** A cloned draft retains the source's frozen bundle/code recipe without copying business data. */
+@Serializable
+data class ProfileDraftDocument(
+    val definition: ProfileDefinition,
+    val base: CommittedProfileGeneration? = null,
+    val formatVersion: Int = 1,
+) {
+    fun validate() {
+        require(formatVersion == 1) { "Unsupported Profile draft format" }
+        definition.validate()
+        base?.validate(restoring = true)
+    }
 }

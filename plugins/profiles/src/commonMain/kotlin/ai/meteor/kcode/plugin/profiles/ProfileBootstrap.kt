@@ -22,8 +22,9 @@ suspend fun prepareProfileBootstrap(
     machineConfiguredPackages: Set<String> = emptySet(),
     switchRevision: Long? = null,
 ): PreparedProfileBootstrap {
-    suspend fun session(definition: ProfileDefinition, snapshot: PluginCompositionSnapshot = PluginCompositionSnapshot()): ProfileCompositionSession {
-        val referenced = bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } }
+    suspend fun session(definition: ProfileDefinition, snapshot: PluginCompositionSnapshot = PluginCompositionSnapshot(),
+        availableBundles: List<ProfileBundle> = bundles): ProfileCompositionSession {
+        val referenced = availableBundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } }
         return if (switchRevision == null) ProfileCompositionSession.open(repository, definition, snapshot, referenced)
         else ProfileCompositionSession.prepareSwitch(
             requireNotNull(repository as? ProfileGenerationRepository) { "Repository does not support atomic Profile switching" },
@@ -41,8 +42,10 @@ suspend fun prepareProfileBootstrap(
         // A previous migration may have saved its draft and then failed activation.
         // Keep legacy installation state until the first generation actually commits.
         val legacy = if (id == template.id) legacyStore?.load() else null
+        val base = (repository as? ProfileGenerationRepository)?.loadDraftDocument(id)?.base
+        val frozen = base?.let { profileIntentBundles(ProfileIntent(draft, it), bundles) } ?: bundles
         return PreparedProfileBootstrap(
-            draft, session(draft, legacy ?: PluginCompositionSnapshot()),
+            draft, session(draft, legacy ?: base?.composition ?: PluginCompositionSnapshot(), frozen),
             migrating = legacy != null,
         )
     }

@@ -19,12 +19,13 @@ class ProfileCompositionSession private constructor(
     initialSnapshot: PluginCompositionSnapshot,
     initialBundles: List<ProfileBundle>,
     private var switchRevision: Long? = null,
+    usePreparedIntent: Boolean = false,
 ) : PluginCompositionStore {
     private val mutex = Mutex()
     private var generation = initial?.generation
     private var definition = definition
-    private var snapshot = initial?.composition ?: initialSnapshot
-    private var bundles = initial?.bundles?.takeIf { initial.formatVersion == 2 || it.isNotEmpty() } ?: initialBundles
+    private var snapshot = if (usePreparedIntent) initialSnapshot else initial?.composition ?: initialSnapshot
+    private var bundles = if (usePreparedIntent) initialBundles else initial?.bundles?.takeIf { initial.formatVersion == 2 || it.isNotEmpty() } ?: initialBundles
     private var staged: CommittedProfileGeneration? = null
     private var discarded = false
     private val original = initial
@@ -129,6 +130,15 @@ class ProfileCompositionSession private constructor(
             require(expectedRevision >= 0) { "Invalid Profile repository revision" }
             val previous = repository.loadCommitted(definition.id)
             return ProfileCompositionSession(repository, previous, previous?.definition ?: definition, initialSnapshot, initialBundles, expectedRevision)
+        }
+
+        /** Draft/history intent is new, while generation CAS still compares the current head. */
+        suspend fun prepareCandidate(repository: ProfileGenerationRepository, definition: ProfileDefinition,
+            expectedRevision: Long, snapshot: PluginCompositionSnapshot, bundles: List<ProfileBundle>): ProfileCompositionSession {
+            definition.validate()
+            require(expectedRevision >= 0) { "Invalid Profile repository revision" }
+            return ProfileCompositionSession(repository, repository.loadCommitted(definition.id), definition,
+                snapshot, bundles, expectedRevision, usePreparedIntent = true)
         }
     }
 }
