@@ -25,3 +25,6 @@ cloning, deletion, preview, history and activation of committed/draft/historical
 Preview prepares the deployment without mounting providers. Historical activation appends a
 new generation; clones retain code intent and use separate business data scopes by default.
 Management UI and recovery UI remain pending; see the Profile guide.
+After failed restoration, the retained host admits metadata/preview and explicit SDK activation
+without a product runtime. recoverTo(id) retries normal recipe activation after retiring any
+owner whose cleanup previously failed. Further closure failure prevents new allocation.

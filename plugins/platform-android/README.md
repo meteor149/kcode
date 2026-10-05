@@ -50,3 +50,6 @@ revision-checked activation of committed, draft or historical intent. The dedica
 suite exercises draft activation and historical restoration with actual APK providers;
 historical restoration appends a generation and preserves the Profile workspace.
 Management UI and independent recovery UI remain pending.
+The common host exposes metadata and explicit activation in RecoveryRequired, independently
+of the withdrawn product tree. Desktop recovery tests do not prove this path on an Android
+device or recover failures that happen before initial host construction.

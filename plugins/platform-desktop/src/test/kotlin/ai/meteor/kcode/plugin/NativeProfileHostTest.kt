@@ -31,6 +31,59 @@ import kotlinx.serialization.json.JsonPrimitive
 
 class NativeProfileHostTest {
     @Test
+    fun metadataAndSdkActivationRemainAvailableAfterFailedRestoration(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-profile-sdk-recovery")
+        var refuseAllocation = false
+        var live = 0
+        var allocations = 0
+        val capture = kcodePlugin(PluginDescriptor("provider.ui.compose", "test", "test", emptySet()),
+            plugin<Unit> { _, _ ->
+                live++
+                allocations++
+                collect { live-- }
+                check(!refuseAllocation) { "allocation refused" }
+            }, Unit)
+        val host = createDesktopProfileHost(homeDirectory = home, profile = KcodePluginProfile(overrides = listOf(capture)))
+        try {
+            val manager = host.pluginManager
+            val cloned = manager.cloneProfile(ProfileCloneRequest(ProfileTarget("native"), "recovered", manager.profileCatalogue().revision))
+            refuseAllocation = true
+            assertFailsWith<IllegalStateException> {
+                manager.activateProfile(ProfileActivationRequest(ProfileTarget("recovered", ProfileSource.Draft), cloned.revision))
+            }
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(0, live)
+            val catalogue = manager.profileCatalogue()
+            assertEquals(null, catalogue.activeProfileId)
+            assertEquals(cloned.selectedProfileId, catalogue.selectedProfileId)
+            assertEquals(cloned.revision, catalogue.revision)
+            assertFailsWith<IllegalStateException> { manager.currentProfile() }
+            assertTrue(manager.profileHistory("native").isNotEmpty())
+            val draft = assertNotNull(manager.profileDraft("recovered"))
+            val updated = manager.writeProfileDraft(ProfileDraftWrite(draft.copy(displayName = "Recovered draft"), catalogue.revision))
+            val allocationsBefore = allocations
+            val preview = manager.previewProfile(ProfileTarget("recovered", ProfileSource.Draft))
+            assertTrue(preview.packagesVerified)
+            assertEquals(allocationsBefore, allocations)
+            refuseAllocation = false
+            assertFailsWith<IllegalArgumentException> {
+                manager.activateProfile(ProfileActivationRequest(ProfileTarget("recovered", ProfileSource.Draft), cloned.revision))
+            }
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            val recovered = manager.activateProfile(ProfileActivationRequest(ProfileTarget("recovered", ProfileSource.Draft), updated.revision))
+            assertEquals(1L, recovered.generation)
+            assertEquals("Recovered draft", recovered.definition.displayName)
+            assertEquals(ProfileHostState("recovered"), host.state.value)
+            assertEquals("recovered", manager.profileCatalogue().activeProfileId)
+            assertEquals(1, live)
+        } finally {
+            host.close()
+            assertEquals(0, live)
+            home.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun sdkManagesDraftsPreviewsHistoryAndNativeActivationWithoutCopyingBusinessData(): Unit = runBlocking {
         val home = Files.createTempDirectory("kcode-native-profile-management")
         lateinit var history: ConversationHistoryRepository

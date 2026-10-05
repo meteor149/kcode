@@ -32,5 +32,10 @@ The SDK manager also edits active Profile declarations with identity/generation 
 the same module/tree publisher. Native stable managers now expose catalogue/draft/clone/delete/
 preview/history commands and revision-checked committed/draft/historical activation. Explicit
 activation uses the host's shutdown/recreation/recovery boundary, including same-ID activation.
+In RecoveryRequired, host-owned metadata commands remain admitted and explicit SDK activation
+can recover an available recipe. recoverTo(id) is an independent host command. Failed closure
+retains the owner until successful cleanup retry; no new allocation overlaps unresolved owners.
+Failure/cancellation leaves admission closed and does not publish a generation. Initial host
+construction failures and independent recovery presentation still require implementation.
 External bundle import and management/recovery UI remain pending. See `docs/profiles.md` and
 `docs/profiles-implementation.md` for behavior and evidence limits.

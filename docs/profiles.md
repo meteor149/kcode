@@ -24,6 +24,19 @@ restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's a
 runtime rather than a retained old owner. Each allocation receives fresh host inputs. Recovery UI
 remains pending. Native hosts also expose explicit activation through the SDK plugin manager.
 
+In `RecoveryRequired`, host-owned catalogue/draft/clone/delete/preview/history commands remain
+available without the product tree. The catalogue reports no active Profile; the durable selection
+remains unchanged. Ordinary agent work and active-composition commands remain closed. SDK
+`activateProfile` can prepare and activate a committed, draft or historical target from this state;
+the host also offers `recoverTo(id)` for normal committed/draft startup selection. Recovery uses
+fresh resources and appends a generation only after successful allocation and publication.
+Failed or cancelled attempts retain `RecoveryRequired` and the previous authority.
+
+Owners whose closure failed are retained for explicit cleanup retry. No candidate allocation or
+automatic old-runtime restoration overlaps such an owner. If closure continues to fail, recovery
+continues to reject allocation; a process restart may be needed. This host command path does not
+yet provide an independent recovery UI or recover failures before initial host construction.
+
 Portable definitions, entries, bundles and operations are shared SDK contracts under
 `ai.meteor.kcode.plugin.api.profiles` (introduced in Plugin API 65). The stable `AgentPluginManager` exposes
 `currentProfile()` and `editProfile(ProfileCompositionEdit)`. An edit compares the active Profile
@@ -170,8 +183,10 @@ remains the authority for concurrent writers.
 External bundle import, credential-safe export, typed host-module replacement and
 management/recovery UI remain incomplete.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
-actual package startup, switching, persistence, rollback and restart. Three Android tests on
+actual package startup, switching, persistence, rollback and restart. Four Android tests on
 an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu
 workspace binding, stale services, selection restart, failed allocation recovery and scoped
 ADB rejection. They do not establish root or Shizuku authorization. See [verification](verification.md)
-for evidence boundaries; complete declaration editing and recovery UI are still required.
+for evidence boundaries; management and independent recovery UI are still required. Explicit
+recovery commands are tested on Desktop and compiled for Android; device recovery-after-restoration-
+failure behavior requires its own instrumentation evidence.

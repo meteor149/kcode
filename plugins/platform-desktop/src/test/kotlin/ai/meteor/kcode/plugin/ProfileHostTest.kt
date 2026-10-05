@@ -239,6 +239,116 @@ class ProfileHostTest {
         } finally { fixture.close() }
     }
 
+    @Test
+    fun explicitRecoveryRetriesWithoutPublishingFailuresAndAppendsOnSuccess(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.failAllocation += setOf("target", "old")
+            assertFailsWith<IllegalStateException> { host.switchTo("target") }
+            assertFailsWith<IllegalStateException> { host.recoverTo("old") }
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(before, fixture.repository.state())
+            assertTrue(fixture.live.isEmpty())
+            fixture.failAllocation.clear()
+            val recovered = host.recoverTo("old")
+            assertEquals(2L, recovered.generation)
+            assertEquals(listOf(1L, 2L), fixture.repository.generations("old"))
+            assertEquals(ProfileHostState("old"), host.state.value)
+            assertEquals(listOf("old"), fixture.live)
+            assertEquals("old", host.chatService.reply(configuration, emptyList(), "recovered"))
+            assertFailsWith<IllegalStateException> { host.recoverTo("target") }
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun recoveryRetiresFailedOwnerBeforeAllocatingAnotherRuntime(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.failClosure += "old"
+            assertFailsWith<IllegalStateException> { host.switchTo("target") }
+            assertFailsWith<IllegalStateException> { host.recoverTo("target") }
+            assertEquals(listOf("old"), fixture.allocations)
+            assertEquals(before, fixture.repository.state())
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            fixture.failClosure.clear()
+            host.recoverTo("target")
+            assertEquals(listOf("old", "target"), fixture.allocations)
+            assertEquals(listOf("target"), fixture.live)
+            assertEquals("target", fixture.repository.selected())
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun cancellingRecoveryAllocationLeavesAdmissionClosedAndAuthorityUnchanged(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            fixture.failAllocation += setOf("target", "old")
+            assertFailsWith<IllegalStateException> { host.switchTo("target") }
+            fixture.failAllocation.clear()
+            val before = fixture.repository.state()
+            fixture.suspendAllocation = CompletableDeferred()
+            val recovery = async { host.recoverTo("target") }
+            fixture.suspendAllocation!!.await()
+            assertEquals(ProfileHostPhase.Switching, host.state.value.phase)
+            recovery.cancelAndJoin()
+            assertEquals(before, fixture.repository.state())
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertTrue(fixture.live.isEmpty())
+            assertFailsWith<IllegalStateException> { host.chatService.reply(configuration, emptyList(), "cancelled") }
+            fixture.suspendAllocation = null
+            host.recoverTo("old")
+            assertEquals(listOf("old"), fixture.live)
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun failedCandidateRetirementPreventsAutomaticRestorationAndIsRetriedByRecovery(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.refusePublication = true
+            fixture.failClosure += "target"
+            val failure = assertFailsWith<IllegalStateException> { host.switchTo("target") }
+            assertTrue(failure.suppressedExceptions.isNotEmpty())
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(listOf("old", "target"), fixture.allocations)
+            assertEquals(before, fixture.repository.state())
+            assertFailsWith<IllegalStateException> { host.recoverTo("old") }
+            assertEquals(listOf("old", "target"), fixture.allocations)
+            fixture.refusePublication = false
+            fixture.failClosure.clear()
+            host.recoverTo("old")
+            assertEquals(listOf("old", "target", "old"), fixture.allocations)
+            assertEquals(listOf("old"), fixture.live)
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun cancellationAtRecoveryPublicationKeepsCommittedCandidateLive(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            fixture.failAllocation += setOf("target", "old")
+            assertFailsWith<IllegalStateException> { host.switchTo("target") }
+            fixture.failAllocation.clear()
+            lateinit var change: Deferred<Unit>
+            fixture.afterPublication = { change.cancel() }
+            change = async { host.recoverTo("target"); Unit }
+            change.join()
+            assertTrue(change.isCancelled)
+            assertEquals("target", fixture.repository.selected())
+            assertEquals(ProfileHostState("target"), host.state.value)
+            assertEquals(listOf("target"), fixture.live)
+            assertEquals("target", host.chatService.reply(configuration, emptyList(), "after publication"))
+        } finally { fixture.close() }
+    }
+
     private class Fixture {
         val root = Files.createTempDirectory("kcode-profile-host").toFile()
         val storage = FileProfileRepository(root)
@@ -321,6 +431,7 @@ class ProfileHostTest {
         }
 
         suspend fun close() {
+            failClosure.clear()
             try { host?.close() } finally { root.deleteRecursively() }
         }
     }

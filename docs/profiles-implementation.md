@@ -311,3 +311,31 @@ This is focused phase evidence. Public management UI, independent recovery UI, v
 import, credential-safe portable export and full typed host-module replacement remain pending.
 It does not establish full device-suite coverage, real Root/Shizuku authorization, sudden
 power-loss durability or completion of the overall Profile goal.
+
+## Host recovery commands and retained owner cleanup evidence
+
+The stable native manager now admits host-owned metadata commands in RecoveryRequired even
+when no product runtime remains. Catalogue activeProfileId is null in that state; durable
+selection and history do not change merely because restoration failed. Explicit SDK activation
+uses the same prepared generation publisher to recover committed, draft or historical intent.
+The host's recoverTo(id) command supports normal recipe selection independently of the product
+tree. These changes use existing API 66 contracts and do not expand the exported plugin ABI.
+
+Old, candidate and restoration runtimes whose closure fails are retained for cleanup retry.
+Unresolved closure prevents automatic restoration and new candidate allocation. Recovery first
+prepares the target, then retries retained cleanup before allocating; continued failure leaves
+RecoveryRequired. Failure or cancellation closes any returned candidate, retains unpublished
+authority, and permits a later retry. Cancellation after durable publication retains the new
+runtime. Normal agent/composition calls remain closed until successful recovery.
+
+The phase passed 35 focused desktop tests: 14 KcodePluginRuntimeTest, 16 ProfileHostTest and
+5 NativeProfileHostTest, with zero failures/errors/skipped cases. Six added cases cover failed
+recovery and successful retry, old-owner retirement failure, cancelled allocation, failed candidate
+retirement blocking automatic restoration, cancellation at recovery publication and SDK metadata/
+draft/preview/activation without a live product runtime. Desktop app compilation and Android app
+assembly also passed against Cordis f08918d. The prior phase's four Android device tests are not
+new evidence for this recovery path; no device recovery-after-restoration-failure result is claimed.
+
+Independent recovery presentation, initial construction failure recovery, plugin-facing command
+submission ownership, full typed module replacement and Bundle import/export remain outstanding.
+This phase does not mark the overall Profile goal complete.

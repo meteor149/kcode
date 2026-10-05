@@ -85,6 +85,7 @@ class KcodeProfileHost(
     private val overlayTurns = mutableSetOf<OverlayTurn>()
     private val view = MutableStateFlow<KcodeAgentRuntime?>(initial)
     private var current: KcodeAgentRuntime? = initial
+    private val pendingRetirement = mutableListOf<KcodeAgentRuntime>()
     private val mutableState = MutableStateFlow(ProfileHostState(initialProfileId))
     val state: StateFlow<ProfileHostState> = mutableState.asStateFlow()
     private var foreground = true
@@ -100,13 +101,16 @@ class KcodeProfileHost(
         }
     }
 
-    private suspend fun <T> call(block: suspend (KcodeAgentRuntime) -> T): T {
+    private suspend fun <T> admitted(allowRecovery: Boolean = false, block: suspend () -> T): T {
         val job = checkNotNull(currentCoroutineContext()[Job])
-        val runtime = admission.withLock {
-            check(mutableState.value.phase == ProfileHostPhase.Ready) { "Profile host does not admit work: ${mutableState.value.phase}" }
-            checkNotNull(current).also { calls[job] = (calls[job] ?: 0) + 1 }
+        admission.withLock {
+            val phase = mutableState.value.phase
+            check(phase == ProfileHostPhase.Ready || allowRecovery && phase == ProfileHostPhase.RecoveryRequired) {
+                "Profile host does not admit work: $phase"
+            }
+            calls[job] = (calls[job] ?: 0) + 1
         }
-        try { return withContext(HostCall(this)) { block(runtime) } }
+        try { return withContext(HostCall(this)) { block() } }
         finally {
             withContext(NonCancellable) {
                 admission.withLock {
@@ -115,6 +119,10 @@ class KcodeProfileHost(
                 }
             }
         }
+    }
+
+    private suspend fun <T> call(block: suspend (KcodeAgentRuntime) -> T): T = admitted {
+        block(checkNotNull(current))
     }
 
     val chatService: ChatService = object : ChatService {
@@ -143,7 +151,7 @@ class KcodeProfileHost(
         override suspend fun activateProfile(request: ProfileActivationRequest, cancelActive: Boolean): ProfileCompositionState {
             checkNotNull(management) { "Profile management is unavailable" }
             request.target.validate()
-            return switchInternal(request.target.profileId, cancelActive, request)
+            return switchInternal(request.target.profileId, cancelActive, request, allowRecovery = true)
         }
         override suspend fun currentProfile() = call { checkNotNull(it.pluginManager).currentProfile() }
         override suspend fun editProfile(edit: ProfileCompositionEdit) =
@@ -157,8 +165,10 @@ class KcodeProfileHost(
         override suspend fun setEnabled(id: String, enabled: Boolean) = call { checkNotNull(it.pluginManager).setEnabled(id, enabled) }
     }
 
-    private fun ProfileCatalogue.withActive(): ProfileCatalogue = copy(activeProfileId = state.value.profileId)
-    private suspend fun <T> metadata(block: suspend (ProfileManagement) -> T): T = call {
+    private fun ProfileCatalogue.withActive(): ProfileCatalogue = copy(
+        activeProfileId = if (state.value.phase == ProfileHostPhase.Ready) state.value.profileId else null,
+    )
+    private suspend fun <T> metadata(block: suspend (ProfileManagement) -> T): T = admitted(allowRecovery = true) {
         block(checkNotNull(management) { "Profile management is unavailable" })
     }
 
@@ -249,9 +259,73 @@ class KcodeProfileHost(
         switchInternal(id, cancelActive, null)
     }
 
-    private suspend fun switchInternal(id: String, cancelActive: Boolean, request: ProfileActivationRequest?): ProfileCompositionState {
+    /** Host-owned recovery works even when the product tree and its UI have been withdrawn. */
+    suspend fun recoverTo(id: String): ProfileCompositionState =
+        switchInternal(id, false, null, allowRecovery = true, recoveryOnly = true)
+
+    private suspend fun releaseRuntime(runtime: KcodeAgentRuntime) {
+        try {
+            runtime.close()
+            pendingRetirement.remove(runtime)
+        } catch (error: Throwable) {
+            if (runtime !in pendingRetirement) pendingRetirement += runtime
+            throw error
+        }
+    }
+
+    private suspend fun recoverInternal(id: String, request: ProfileActivationRequest?): ProfileCompositionState {
+        val previous = admission.withLock {
+            check(calls.isEmpty() && overlayTurns.isEmpty()) { "Finish recovery metadata calls before activating a Profile" }
+            mutableState.value.also { mutableState.value = it.copy(phase = ProfileHostPhase.Preparing) }
+        }
+        var target: PreparedProfileRuntime? = null
+        var candidate: KcodeAgentRuntime? = null
+        var published = false
+        try {
+            withContext(Transition(this)) {
+                target = if (request == null) factory.prepare(id) else factory.prepare(request)
+                check(target!!.activation.resolved.definition.id == id) { "Prepared Profile identity mismatch" }
+                target!!.activation.session.requirePreparedSwitch()
+                currentCoroutineContext().ensureActive()
+                withContext(NonCancellable) {
+                    // Never overlap a new owner with resources whose retirement failed.
+                    pendingRetirement.toList().forEach { releaseRuntime(it) }
+                    admission.withLock { mutableState.value = previous.copy(phase = ProfileHostPhase.Switching) }
+                }
+                currentCoroutineContext().ensureActive()
+                candidate = target!!.create()
+                candidate!!.conversationOverlayController?.setHostForeground(foreground)
+                withContext(NonCancellable) {
+                    target!!.activation.session.publishPreparedSwitch()
+                    published = true
+                    admission.withLock {
+                        current = candidate
+                        view.value = candidate
+                        mutableState.value = ProfileHostState(id)
+                    }
+                }
+            }
+        } catch (error: Throwable) {
+            if (!published) withContext(NonCancellable + Transition(this)) {
+                try { candidate?.let { releaseRuntime(it) } }
+                catch (cleanup: Throwable) { if (cleanup !== error) error.addSuppressed(cleanup) }
+                admission.withLock { mutableState.value = previous.copy(failure = error) }
+            }
+            throw error
+        } finally {
+            if (!published) withContext(NonCancellable) { target?.activation?.session?.discardPreparedSwitch() }
+        }
+        return withContext(NonCancellable) { checkNotNull(target).activation.session.currentCompositionState() }
+    }
+
+    private suspend fun switchInternal(id: String, cancelActive: Boolean, request: ProfileActivationRequest?,
+        allowRecovery: Boolean = false, recoveryOnly: Boolean = false): ProfileCompositionState {
         outsideCall()
         return command.withLock {
+            if (recoveryOnly) check(state.value.phase == ProfileHostPhase.RecoveryRequired) { "Profile host does not require recovery" }
+            if (allowRecovery && state.value.phase == ProfileHostPhase.RecoveryRequired) {
+                return@withLock recoverInternal(id, request)
+            }
             val previousState = admission.withLock {
                 val previous = mutableState.value
                 check(previous.phase == ProfileHostPhase.Ready) { "Profile host cannot switch: ${previous.phase}" }
@@ -294,7 +368,7 @@ class KcodeProfileHost(
                             withdrawn = true
                             checkNotNull(current).also { current = null }
                         }
-                        old.close()
+                        releaseRuntime(old)
                         previousReleased = true
                     }
                     currentCoroutineContext().ensureActive()
@@ -316,10 +390,10 @@ class KcodeProfileHost(
                     suspend fun release(action: suspend () -> Unit) {
                         try { action() } catch (cleanup: Throwable) { if (cleanup !== error) error.addSuppressed(cleanup) }
                     }
-                    release { candidate?.close() }
+                    release { candidate?.let { releaseRuntime(it) } }
                     release { target?.activation?.session?.discardPreparedSwitch() }
                     if (!withdrawn) admission.withLock { mutableState.value = previousState.copy(failure = error) }
-                    else if (!previousReleased) admission.withLock {
+                    else if (!previousReleased || pendingRetirement.isNotEmpty()) admission.withLock {
                         mutableState.value = previousState.copy(phase = ProfileHostPhase.RecoveryRequired, failure = error)
                     } else {
                         var restored: KcodeAgentRuntime? = null
@@ -335,7 +409,7 @@ class KcodeProfileHost(
                             }
                         } catch (restoreError: Throwable) {
                             if (restoreError !== error) error.addSuppressed(restoreError)
-                            release { restored?.close() }
+                            release { restored?.let { releaseRuntime(it) } }
                             admission.withLock { mutableState.value = previousState.copy(phase = ProfileHostPhase.RecoveryRequired, failure = error) }
                         }
                     }
@@ -370,7 +444,10 @@ class KcodeProfileHost(
                 jobs.forEach { it.join() }
                 release { finishOverlays() }
                 val old = admission.withLock { current.also { current = null } }
-                release { old?.close() }
+                release { old?.let { releaseRuntime(it) } }
+                pendingRetirement.toList().filterNot { it === old }.forEach { retired ->
+                    release { releaseRuntime(retired) }
+                }
                 if (failure == null) closeCompletion.complete(Unit) else closeCompletion.completeExceptionally(failure!!)
                 failure?.let { throw it }
             }
