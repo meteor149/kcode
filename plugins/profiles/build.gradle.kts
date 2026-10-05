@@ -17,6 +17,9 @@ kotlin {
             implementation("io.github.meteor149:include:0.0.1-SNAPSHOT")
         }
         commonTest.dependencies { implementation(kotlin("test")) }
+        val jvmMain by creating { dependsOn(commonMain.get()) }
+        getByName("desktopMain").dependsOn(jvmMain)
+        getByName("androidMain").dependsOn(jvmMain)
     }
 }
 

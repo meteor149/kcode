@@ -10,5 +10,15 @@ configuration; explicit JSON null is preserved. Replacement supports an expected
 identity guard. Package verification, credential resolution and platform adaptation belong
 to activation, not compilation.
 
-This module is under development; persistent profiles and runtime integration follow the
-implementation phases in `docs/profiles-implementation.md`.
+`FileProfileRepository` shares its JVM implementation between desktop and Android. Drafts
+are independent of committed generations. Each committed JSON document atomically contains
+the definition, verified package lock and local runtime composition. Publication uses a
+compare-and-set generation check, process serialization, a file lock and a synced temporary
+file followed by atomic replacement. A corrupt existing commit fails closed without rewrite.
+
+The package lock has no artifact paths or credentials; runtime snapshots retain local paths.
+Selection only references committed profiles, and deleting the selected profile is refused.
+Package caches and provider data are outside this repository and are never deleted with it.
+
+This module is under development; package resolution, migrations, runtime integration and
+management UI follow the implementation phases in `docs/profiles-implementation.md`.
