@@ -164,6 +164,7 @@ internal class OwnedUiSlots(ctx: Context) : KcodeUiSlots(ctx) {
             title = { if (active.collectAsState().value) section.title() else "" },
             description = { if (active.collectAsState().value) section.description(it) else "" },
             isVisible = { active.collectAsState().value && section.isVisible(it) },
+            onLeave = { proceed -> if (active.value) section.onLeave(proceed) else proceed() },
             renderer = guardedRenderer(section.renderer, registrationOwner),
         )
         val texts = if (section.texts.isEmpty()) null else registerTexts(UiTextDictionary("settings.${section.id}", section.texts))

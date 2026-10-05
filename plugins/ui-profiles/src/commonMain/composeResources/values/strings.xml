@@ -145,4 +145,12 @@
     <string name="profile_remove_bundle_zh">移除层</string>
     <string name="profile_add_bundle_zh">添加层到草稿</string>
     <string name="profile_rename_zh">重命名所选 Profile</string>
+    <string name="profile_leave_question">Save your changes before leaving this profile?</string>
+    <string name="profile_save_leave">Save draft and leave</string>
+    <string name="profile_discard_leave">Discard changes and leave</string>
+    <string name="profile_continue_editing">Continue editing</string>
+    <string name="profile_leave_question_zh">离开此 Profile 前是否保存修改？</string>
+    <string name="profile_save_leave_zh">保存草稿并离开</string>
+    <string name="profile_discard_leave_zh">放弃修改并离开</string>
+    <string name="profile_continue_editing_zh">继续编辑</string>
 </resources>

@@ -35,6 +35,12 @@ Existing committed generations retain their frozen version 1 Bundle definitions;
 do not silently acquire new UI. Explicit Profile editing can insert
 `provider.ui.settings.profiles` when that module is available.
 
-Unsaved-edit confirmation on navigation away, import/export, independent recovery UI, and rendered desktop/device
+Unsaved raw edits defer section return, system back and sheet dismissal before the exit
+animation. Users can save the revision-checked draft and leave, discard to the saved document,
+or continue editing. Invalid documents, authority conflicts and changed confirmation targets
+retain the editor; saving never activates the draft. Forced provider withdrawal bypasses the
+confirmation and cancels owned work without running pending navigation.
+
+Import/export, independent recovery UI, and rendered desktop/device
 acceptance remain outstanding. Unit tests establish session behavior; native tests establish
 actual private JAR contribution registration, withdrawal and recovery, not visual acceptance.

@@ -116,8 +116,12 @@ when a later preview query fails; late asynchronous callbacks are ignored after 
 
 Queries and observers are cancelled/joined on withdrawal. Accepted activation remains owned
 by the host, and recent command state survives UI reconstruction. This screen does not supply
-the independent recovery entry point when the product root fails. Navigation-away confirmation,
-import/export and rendered desktop/device acceptance remain
+the independent recovery entry point when the product root fails. Unsaved raw edits defer
+section return, system back and sheet dismissal before exit animation. Saving and leaving
+publishes a draft without activating it; invalid documents or revision conflicts preserve
+the editor. Discard restores the saved document, while continuing retains edits. Confirmation
+captures the document/target/revision and cannot discard newer input. Forced withdrawal bypasses
+the prompt and never invokes pending navigation. Import/export and rendered desktop/device acceptance remain
 outstanding. Session and actual JAR contribution tests do not establish visual acceptance.
 
 ## Documents and restart

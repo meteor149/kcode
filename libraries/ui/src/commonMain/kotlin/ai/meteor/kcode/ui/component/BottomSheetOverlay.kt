@@ -60,6 +60,7 @@ fun BottomSheetOverlay(
     compactHeightFraction: Float = .99f,
     sheetMaxWidth: androidx.compose.ui.unit.Dp = KcodeOverlay.sheetMaxWidth,
     sheetMaxHeight: androidx.compose.ui.unit.Dp = KcodeOverlay.sheetMaxHeight,
+    onDismissAttempt: ((proceed: () -> Unit) -> Unit)? = null,
     content: @Composable (dismiss: () -> Unit) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -70,7 +71,7 @@ fun BottomSheetOverlay(
         animationSpec = tween(220),
         label = "bottom-sheet-scrim",
     )
-    val dismiss = {
+    val beginDismiss: () -> Unit = {
         if (!dismissing) {
             dismissing = true
             scope.launch {
@@ -78,6 +79,11 @@ fun BottomSheetOverlay(
                 delay(240)
                 onDismissRequest()
             }
+        }
+    }
+    val dismiss: () -> Unit = {
+        if (!dismissing) {
+            onDismissAttempt?.invoke(beginDismiss) ?: beginDismiss()
         }
     }
 

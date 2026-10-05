@@ -15,6 +15,7 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_cancel
 import ai.meteor.kcode.plugin.profileui.resources.profile_cancel_active
 import ai.meteor.kcode.plugin.profileui.resources.profile_cancel_command
 import ai.meteor.kcode.plugin.profileui.resources.profile_cancelled
+import ai.meteor.kcode.plugin.profileui.resources.profile_continue_editing
 import ai.meteor.kcode.plugin.profileui.resources.profile_clone
 import ai.meteor.kcode.plugin.profileui.resources.profile_closed
 import ai.meteor.kcode.plugin.profileui.resources.profile_command_failed
@@ -26,6 +27,8 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_discard
 import ai.meteor.kcode.plugin.profileui.resources.profile_draft
 import ai.meteor.kcode.plugin.profileui.resources.profile_editor
 import ai.meteor.kcode.plugin.profileui.resources.profile_failed
+import ai.meteor.kcode.plugin.profileui.resources.profile_leave_question
+import ai.meteor.kcode.plugin.profileui.resources.profile_discard_leave
 import ai.meteor.kcode.plugin.profileui.resources.profile_history
 import ai.meteor.kcode.plugin.profileui.resources.profile_host_busy
 import ai.meteor.kcode.plugin.profileui.resources.profile_host_starting
@@ -41,6 +44,7 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_refresh
 import ai.meteor.kcode.plugin.profileui.resources.profile_rename
 import ai.meteor.kcode.plugin.profileui.resources.profile_running
 import ai.meteor.kcode.plugin.profileui.resources.profile_save
+import ai.meteor.kcode.plugin.profileui.resources.profile_save_leave
 import ai.meteor.kcode.plugin.profileui.resources.profile_saved
 import ai.meteor.kcode.plugin.profileui.resources.profile_succeeded
 import ai.meteor.kcode.plugin.profileui.resources.profile_title
@@ -92,7 +96,7 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
     val hostReady = host.phase == ProfileManagementPhase.Ready || host.phase == ProfileManagementPhase.RecoveryRequired
     val enabled = hostReady && !state.busy
     LaunchedEffect(session, host.phase) {
-        if (hostReady && state.catalogue == null) session.refresh()
+        if (hostReady && !state.dirty) session.refresh()
     }
     LazyColumn(Modifier.fillMaxSize().padding(KcodeSpacing.md), verticalArrangement = Arrangement.spacedBy(KcodeSpacing.sm)) {
         item {
@@ -220,6 +224,32 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
         confirmButton = { TextButton(onClick = { deletion = null; scope.launch { session.delete(pending.first, pending.second) } }) {
             Text(profileText(Res.string.profile_confirm))
         } }, dismissButton = { TextButton(onClick = { deletion = null }) { Text(profileText(Res.string.profile_cancel)) } }) }
+    if (state.leaveRequested) AlertDialog(
+        onDismissRequest = { try { session.cancelLeave() } catch (error: IllegalStateException) { /* Withdrawn editor. */ } },
+        text = {
+            Column {
+                Text(profileText(Res.string.profile_leave_question))
+                if (state.failure != null) Text(profileText(
+                    if (state.failure == ProfileUiFailure.InvalidDocument) Res.string.profile_invalid_document else Res.string.profile_failed,
+                ), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !state.busy, onClick = { scope.launch { session.saveAndLeave() } }) {
+                Text(profileText(Res.string.profile_save_leave))
+            }
+        },
+        dismissButton = {
+            Column {
+                TextButton(enabled = !state.busy, onClick = {
+                    try { session.discardAndLeave() } catch (error: IllegalStateException) { /* Stale confirmation cannot discard. */ }
+                }) { Text(profileText(Res.string.profile_discard_leave)) }
+                TextButton(enabled = !state.busy, onClick = {
+                    try { session.cancelLeave() } catch (error: IllegalStateException) { /* Withdrawn editor. */ }
+                }) { Text(profileText(Res.string.profile_continue_editing)) }
+            }
+        },
+    )
 }
 
 @Composable

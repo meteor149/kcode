@@ -144,7 +144,7 @@ Web Search, Goal, Subagent, Localization, Markdown, and Conversation Export each
 
 Use the plugin manager to load, enable, disable, replace, or unload external packages. Finish or cancel active agent turns before changing composition. Installed state persists across restarts, and failed replacement or manifest publication restores the committed composition. Withdrawal cancels and waits for owned operations before releasing resources. Replacing storage does not automatically migrate data.
 
-External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 68**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
+External packages share public SDK identities while loading product implementations and private dependencies separately. The current ABI is **Plugin API 69**; older packages must be rebuilt. Custom root renderers can choose their own services without adopting the default UI contracts.
 
 Profiles support positioned insertion, ordering and movement between groups or the root. Cross-parent movement recreates instances in their new context; same-parent ordering retains resources. Invalid parents/cycles reject preparation, and failed publication or cancelled allocation restores the old hierarchy.
 

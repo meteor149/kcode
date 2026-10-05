@@ -24,7 +24,11 @@ does not withdraw projections used by alternative roots. Concrete pages live in 
 
 The host shares the ai.meteor.kcode.plugin.ui.api namespace to preserve the optional default
 contract identity across actual JAR/APK loaders. Product renderer classes remain private.
-Current package ABI is API 63; older packages must be rebuilt. The default application starts
+Settings sections may defer user navigation through `onLeave(proceed)`, for example while
+confirming unsaved edits. The default shell invokes it for section return and sheet dismissal
+before the exit animation. Withdrawal removes the section without invoking its gate; guarded
+callbacks from old snapshots permit navigation rather than calling a withdrawn provider.
+Current package ABI is API 69; older packages must be rebuilt. The default application starts
 as a builtin plugin composition; this does not auto-install every feature as an external file.
 The default UI contracts export `libraries:ui` because their requests use its icon and
 opaque glass-state types. The component library itself has no dependency on these

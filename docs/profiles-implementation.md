@@ -574,3 +574,36 @@ This phase did not run desktop/device rendering or Android instrumentation. Visu
 navigation-away confirmation, independent recovery UI, initial startup failure recovery,
 verified Bundle import, credential-safe export and the final requirement/platform audit remain
 outstanding. Structured forms are implemented; the overall goal remains active.
+
+## Unsaved navigation phase evidence
+
+Plugin API 69 adds SettingsSection.onLeave within the existing default-UI shared namespace
+and BottomSheetOverlay.onDismissAttempt within the existing component exports. The default
+shell routes section return, system back and sheet dismissal through the section gate before
+starting the exit animation. Withdrawn section snapshots bypass the old gate; provider removal
+never asks permission to withdraw. External packages are rebuilt for the generated ABI.
+
+Profile sessions retain a saved-document baseline and capture the document, target, revision
+and first navigation destination for confirmation. Continue editing retains input, discard
+restores the baseline without a write, and save/leave publishes a revision-checked draft before
+calling navigation outside the owned operation. Invalid documents and authority conflicts keep
+the prompt and edits. Changed confirmations cannot discard newer input; closure cancels owned
+queries and drops pending navigation. Saving a draft does not activate it.
+
+Concentrated validation passed 99 tests: 20 Profile UI session/form, 13 default-UI bridge,
+43 SDK and 23 focused native host/private-JAR package tests, with zero failures, errors or
+skipped cases. The optional default-UI API desktop test task has no test sources; it is not
+counted as a test suite. Desktop application compilation, Android application assembly and
+platform instrumentation APK assembly passed against Cordis 9f1ceac in the same build.
+
+The newly built API 69 instrumentation APK passed
+AndroidProfileHostTest.injectedManagementCommandsSurviveWithdrawalAndShareSdkIdentityWithApkProviders
+on the ARM64 API 36 physical device: OK (1 test), INSTRUMENTATION_CODE -1, 40.896 seconds.
+This verifies accepted command completion across provider withdrawal, shared SDK identity with
+actual APK implementations, grouped filesystem movement and stale-reference rejection under
+the new ABI. It does not render or interact with the unsaved-edit confirmation dialog.
+
+This evidence does not establish rendered confirmation behavior. Desktop/device rendering,
+independent recovery UI, failures before initial host construction, verified Bundle import,
+credential-safe export, recovery/closure failure auditing and final platform acceptance remain
+outstanding. The overall goal remains active.

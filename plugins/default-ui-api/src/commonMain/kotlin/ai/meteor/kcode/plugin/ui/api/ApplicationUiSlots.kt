@@ -123,6 +123,8 @@ data class SettingsSection(
     val renderer: UiRenderer<SettingsSectionRequest>,
     val isVisible: @Composable (SettingsPageRequest) -> Boolean = { true },
     val texts: Map<String, String> = emptyMap(),
+    /** User navigation may be deferred by unsaved editors. Withdrawal does not invoke this gate. */
+    val onLeave: (proceed: () -> Unit) -> Unit = { proceed -> proceed() },
 )
 
 

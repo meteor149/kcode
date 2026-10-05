@@ -36,6 +36,7 @@ private object ProfileSettingsContribution : Plugin<Unit> {
             title = { profileText(Res.string.profile_title) },
             description = { profileText(Res.string.profile_description) },
             renderer = UiRenderer { request -> ProfileSettings(session, client, request.onReturn) },
+            onLeave = session::requestLeave,
         )))
     }
 }

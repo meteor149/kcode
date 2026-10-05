@@ -39,6 +39,106 @@ import kotlin.test.assertTrue
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProfileUiSessionTest {
     @Test
+    fun navigationPreservesEditsUntilExplicitDiscardAndKeepsFirstDestination(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            var destination = ""
+            session.requestLeave { destination = "clean" }
+            assertEquals("clean", destination)
+            val baseline = session.state.value.document
+            session.edit("unfinished")
+            session.requestLeave { destination = "cancelled" }
+            assertTrue(session.state.value.leaveRequested)
+            session.cancelLeave()
+            assertEquals("unfinished", session.state.value.document)
+            assertTrue(session.state.value.dirty)
+            session.requestLeave { destination = "first" }
+            session.requestLeave { destination = "second" }
+            session.discardAndLeave()
+            assertEquals("first", destination)
+            assertEquals(baseline, session.state.value.document)
+            assertFalse(session.state.value.dirty)
+            assertFalse(session.state.value.leaveRequested)
+            assertEquals(0, client.writes)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun saveAndLeavePublishesDraftBeforeNavigationWithoutActivating(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            session.edit(Json.encodeToString(ProfileDefinition.serializer(), client.definition.copy(displayName = "Saved")))
+            var navigated = false
+            session.requestLeave {
+                assertEquals("Saved", client.definition.displayName)
+                assertEquals(1, client.writes)
+                assertFalse(session.state.value.busy)
+                assertFalse(session.state.value.dirty)
+                assertEquals(session.state.value.document, session.state.value.savedDocument)
+                navigated = true
+            }
+            session.saveAndLeave()
+            assertTrue(navigated)
+            assertFalse(session.state.value.leaveRequested)
+            assertNull(client.submitted)
+            assertNull(session.state.value.preview)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun failedLeaveSaveRetainsDocumentAndConfirmation(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            var navigated = false
+            session.edit("invalid")
+            session.requestLeave { navigated = true }
+            session.saveAndLeave()
+            assertEquals(ProfileUiFailure.InvalidDocument, session.state.value.failure)
+            assertTrue(session.state.value.leaveRequested)
+            assertEquals(0, client.writes)
+            session.cancelLeave()
+            val document = Json.encodeToString(ProfileDefinition.serializer(), client.definition.copy(displayName = "Conflict"))
+            session.edit(document)
+            session.requestLeave { navigated = true }
+            client.revision++
+            session.saveAndLeave()
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            assertEquals(document, session.state.value.document)
+            assertTrue(session.state.value.dirty)
+            assertTrue(session.state.value.leaveRequested)
+            assertFalse(navigated)
+            assertEquals(0, client.writes)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun staleConfirmationCannotDiscardNewEditsAndWithdrawalNeverNavigates(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        session.refresh()
+        var navigated = false
+        session.edit("first")
+        session.requestLeave { navigated = true }
+        session.edit("newer")
+        assertFailsWith<IllegalStateException> { session.discardAndLeave() }
+        session.saveAndLeave()
+        assertEquals("newer", session.state.value.document)
+        assertTrue(session.state.value.dirty)
+        assertEquals(0, client.writes)
+        session.close()
+        assertFalse(navigated)
+        assertFailsWith<IllegalStateException> { session.requestLeave { navigated = true } }
+        session.saveAndLeave()
+        assertFalse(navigated)
+    }
+
+    @Test
     fun refreshPreservesUnsavedDocumentAndRefusesInterveningPublication(): Unit = runTest {
         val client = Client()
         val session = ProfileUiSession(client)

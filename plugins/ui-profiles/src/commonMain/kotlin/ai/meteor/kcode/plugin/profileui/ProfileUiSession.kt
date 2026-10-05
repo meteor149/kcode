@@ -34,6 +34,7 @@ data class ProfileUiState(
     val catalogue: ProfileCatalogue? = null,
     val target: ProfileTarget? = null,
     val document: String = "",
+    val savedDocument: String = "",
     val documentRevision: Long? = null,
     val dirty: Boolean = false,
     val busy: Boolean = false,
@@ -42,6 +43,7 @@ data class ProfileUiState(
     val modules: List<ProfileModuleSummary> = emptyList(),
     val command: ProfileCommandStatus? = null,
     val failure: ProfileUiFailure? = null,
+    val leaveRequested: Boolean = false,
 )
 
 /** Presentation owns queries/observers; the native host owns accepted composition commands. */
@@ -50,6 +52,8 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
     private val mutex = Mutex()
     private val json = Json { prettyPrint = true }
     private val mutableState = MutableStateFlow(ProfileUiState())
+    private data class PendingLeave(val target: ProfileTarget?, val revision: Long?, val document: String, val proceed: () -> Unit)
+    private var pendingLeave: PendingLeave? = null
     val state: StateFlow<ProfileUiState> = mutableState.asStateFlow()
 
     fun edit(document: String) {
@@ -69,7 +73,7 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
                 ?: (catalogue.activeProfileId ?: catalogue.selectedProfileId ?: catalogue.profiles.firstOrNull()?.id)
                     ?.let { id -> defaultTarget(catalogue, id) }
             if (target == null) mutableState.value = current.copy(catalogue = catalogue, target = null,
-                document = "", documentRevision = catalogue.revision, preview = null, history = emptyList())
+                document = "", savedDocument = "", documentRevision = catalogue.revision, preview = null, history = emptyList())
             else load(catalogue, target)
         }
     }
@@ -98,7 +102,10 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
     }
 
     suspend fun save() = operation {
-        val current = state.value
+        saveDocument(state.value)
+    }
+
+    private suspend fun saveDocument(current: ProfileUiState): Boolean {
         val definition = try {
             json.decodeFromString(ProfileDefinition.serializer(), current.document).also {
                 it.validate()
@@ -106,11 +113,60 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
             }
         } catch (error: IllegalArgumentException) {
             mutableState.value = current.copy(failure = ProfileUiFailure.InvalidDocument)
-            return@operation
+            return false
         }
         val next = client.writeDraft(ProfileDraftWrite(definition, requireNotNull(current.documentRevision)))
+        val document = encode(definition)
         mutableState.value = current.copy(catalogue = next, target = ProfileTarget(definition.id, ProfileSource.Draft),
-            document = encode(definition), documentRevision = next.revision, dirty = false, preview = null)
+            document = document, savedDocument = document, documentRevision = next.revision, dirty = false, preview = null)
+        return true
+    }
+
+    fun requestLeave(proceed: () -> Unit) {
+        owner.requireOpen()
+        val current = state.value
+        if (!current.dirty) { proceed(); return }
+        if (pendingLeave == null) pendingLeave = PendingLeave(current.target, current.documentRevision, current.document, proceed)
+        mutableState.value = current.copy(leaveRequested = true, failure = null)
+    }
+
+    fun cancelLeave() {
+        owner.requireOpen()
+        pendingLeave = null
+        mutableState.value = state.value.copy(leaveRequested = false)
+    }
+
+    fun discardAndLeave() {
+        owner.requireOpen()
+        val pending = pendingLeave ?: return
+        check(!state.value.busy) { "Profile editor is busy" }
+        requirePending(pending)
+        pendingLeave = null
+        mutableState.value = state.value.copy(document = state.value.savedDocument, dirty = false,
+            preview = null, leaveRequested = false, failure = null)
+        pending.proceed()
+    }
+
+    suspend fun saveAndLeave() {
+        var proceed: (() -> Unit)? = null
+        operation {
+            val pending = pendingLeave ?: return@operation
+            requirePending(pending)
+            if (saveDocument(state.value)) {
+                pendingLeave = null
+                mutableState.value = state.value.copy(leaveRequested = false)
+                proceed = pending.proceed
+            }
+        }
+        // Navigation is outside the owned query/lock, after durable draft publication.
+        proceed?.invoke()
+    }
+
+    private fun requirePending(pending: PendingLeave) {
+        val current = state.value
+        check(current.target == pending.target && current.documentRevision == pending.revision && current.document == pending.document) {
+            "Profile editor changed; request navigation again"
+        }
     }
 
     suspend fun preview() = operation {
@@ -151,8 +207,9 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
         definition.validate()
         val next = client.writeDraft(ProfileDraftWrite(definition, revision))
         // Publish the saved document before preview: a later query failure cannot hide a durable save.
+        val document = encode(definition)
         mutableState.value = current.copy(catalogue = next, target = ProfileTarget(definition.id, ProfileSource.Draft),
-            document = encode(definition), documentRevision = next.revision, dirty = false, preview = null)
+            document = document, savedDocument = document, documentRevision = next.revision, dirty = false, preview = null)
         load(next, ProfileTarget(definition.id, ProfileSource.Draft))
     }
 
@@ -195,15 +252,19 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
         // Refresh is explicit: successful activation may withdraw the submitting session.
     }
 
-    suspend fun close() { owner.close() }
+    suspend fun close() {
+        pendingLeave = null
+        owner.close()
+    }
 
     private suspend fun load(catalogue: ProfileCatalogue, target: ProfileTarget) {
         val preview = client.preview(target)
         val history = client.history(target.profileId)
         val modules = client.modules()
         check(preview.revision == catalogue.revision) { "Profile repository changed; reload" }
+        val document = encode(preview.definition)
         mutableState.value = state.value.copy(catalogue = catalogue, target = target,
-            document = encode(preview.definition), documentRevision = catalogue.revision, dirty = false,
+            document = document, savedDocument = document, documentRevision = catalogue.revision, dirty = false,
             preview = preview, history = history, modules = modules, failure = null)
     }
 
