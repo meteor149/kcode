@@ -16,7 +16,15 @@ to activation, not compilation.
 are independent of committed generations. Each committed JSON document atomically contains
 the definition, frozen bundle layers, verified package lock and local runtime composition. Publication uses a
 compare-and-set generation check, process serialization, a file lock and a synced temporary
-file followed by atomic replacement. A corrupt existing commit fails closed without rewrite.
+file followed by atomic replacement. Immutable generation documents are referenced by one
+`.profile-state.json` authority holding history and selection. A corrupt existing commit or
+authority fails closed without rewrite. Legacy commits/selection import once without modification.
+
+`ProfileGenerationRepository` adds consistent selected-generation/revision reads, published
+history and atomic `commitAndSelect` with generation and revision checks. Unpublished files
+cannot become recovery candidates. Removing a Profile withdraws its authority record while
+retaining unreachable metadata for separate reclamation; recreation starts a new history.
+Runtime switching still needs to coordinate staged activation with this atomic publisher.
 
 The package lock has no artifact paths or credentials; runtime snapshots retain local paths.
 Selection only references committed profiles, and deleting the selected profile is refused.

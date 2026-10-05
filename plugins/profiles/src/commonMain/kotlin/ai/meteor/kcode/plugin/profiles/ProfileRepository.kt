@@ -90,3 +90,18 @@ interface ProfileRepository {
     suspend fun select(id: String?)
     suspend fun remove(id: String)
 }
+
+/** A consistent authority read, including the selected generation rather than just its ID. */
+data class ProfileRepositoryState(
+    val revision: Long,
+    val selected: CommittedProfileGeneration?,
+)
+
+/** Historical storage and the atomic publisher used when switching runtime ownership. */
+interface ProfileGenerationRepository : ProfileRepository {
+    suspend fun state(): ProfileRepositoryState
+    suspend fun generations(id: String): List<Long>
+    suspend fun loadGeneration(id: String, generation: Long): CommittedProfileGeneration?
+    /** Compare both target generation and repository revision, then publish and select together. */
+    suspend fun commitAndSelect(value: CommittedProfileGeneration, expectedGeneration: Long?, expectedRevision: Long)
+}

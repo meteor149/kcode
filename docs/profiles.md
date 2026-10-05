@@ -23,14 +23,27 @@ omit default UI or leave consumers waiting for required providers.
 
 Desktop metadata lives in `.kcode/profiles` by default; Android uses
 `filesDir/cordis_profiles`. Each Profile directory contains editable `profile.json` and
-atomic `committed.json`. A root `selection.json` can reference a committed Profile.
+immutable `generations/<document-id>.json` files. Root `.profile-state.json` is the single
+authority for visible Profiles, generation history and current selection. Generation files
+are synced and staged before atomic replacement of that authority; unreferenced files are
+never adopted as successful commits.
 
 A format 2 committed document contains the definition, frozen bundle layers, verified
 package lock and local runtime snapshot. Publication uses generation compare-and-set,
 repository serialization, a file lock and a synced atomic file replacement. Format 1
-documents remain readable and upgrade on successful publication. The repository does not
-yet retain historical immutable generation directories or an atomic selection/generation
-pointer; runtime switching and recovery must address that remaining work.
+documents remain readable and upgrade on successful publication. Legacy `committed.json`
+and `selection.json` are imported once and remain read-only migration evidence. Existing
+authority corruption fails closed rather than falling back to those legacy documents.
+`ProfileGenerationRepository.state()` reads the selected generation and revision together;
+`commitAndSelect` compares both the target generation and authority revision before publishing
+the new generation and selection in one operation. Runtime switching must still coordinate
+this publisher with staged activation, failure recovery and stable host facades.
+
+History APIs expose only published documents. Removing an unselected Profile withdraws its
+record atomically; retained files cannot resurrect it on restart or recreation. Physical
+metadata reclamation is separate from that publication. Provider data and package caches
+are not removed. This protocol establishes process/restart consistency using atomic file
+replacement; tests do not simulate sudden device power loss or every filesystem's durability.
 
 Startup prefers committed intent to editable drafts and revalidates retained deployments.
 Changing a draft, bundle offer or distribution release does not silently upgrade a committed

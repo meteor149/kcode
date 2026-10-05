@@ -150,3 +150,20 @@ complete Kcode phase build passed 71 tests: 23 Profile compiler/repository/prepa
 tests and 8 Profile package transaction tests. Desktop compilation and Android APK assembly
 passed in the same build against Cordis commit `f08918d`. This does not establish Android
 device package loading, complete Profile editing, switching or recovery UI.
+
+## Immutable repository phase evidence
+
+The JVM repository now stages immutable generation documents and atomically publishes a
+single authority containing histories and current selection. Legacy committed/selection files
+are imported once without rewriting them. Consistent authority reads include the selected
+generation; joint commit/select compares both the repository revision and target generation.
+Logical deletion withdraws the record without deleting provider data or adopting old files on
+recreation. History includes published pointers only; staged/orphan files remain unreachable.
+
+Seven new tests cover immutable history, selection advancement, revision conflicts, concurrent
+switch publication, orphan/retry isolation, corrupt authority, deletion/recreation and legacy
+selection migration. The existing format-upgrade and corrupt-generation tests now inspect
+actual immutable files. Phase validation passed 78 tests: 30 Profile tests and the same 48
+desktop runtime/native/package tests. Android platform compilation passed against the same
+Cordis worktree. Runtime switching, recovery UI and Android device/power-loss behavior are
+not established by this repository implementation.
