@@ -1,6 +1,8 @@
 package ai.meteor.kcode.plugin.recovery
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommandHandle
@@ -155,6 +157,93 @@ class RecoverySessionTest {
 
     private fun encode(definition: ProfileDefinition) = Json.encodeToString(ProfileDefinition.serializer(), definition)
 
+    @Test
+    fun unreadableSelectedDefinitionRetainsCatalogueForTemplateRecovery() = runTest {
+        val client = Client().apply { draftFailure = "draft damaged" }
+        val session = RecoverySession(client)
+        session.refresh()
+        assertEquals(null, session.state.value.target)
+        assertNotNull(session.state.value.catalogue)
+        assertEquals("draft damaged", session.state.value.failure)
+        session.createFromTemplate(ProfileDefinition(id = "native"), "repair")
+        assertEquals(ProfileTarget("repair", ProfileSource.Draft), session.state.value.target)
+        assertEquals(1, client.writes)
+        assertEquals("broken", client.definition.id)
+    }
+
+    @Test
+    fun historicalActivationKeepsItsSourceAndNeverWritesAnImplicitDraft() = runTest {
+        val client = Client().apply { generation = 3 }
+        val session = RecoverySession(client)
+        session.refresh()
+        val target = ProfileTarget("broken", ProfileSource.History, 3)
+        session.select(target)
+        val document = session.state.value.document
+        session.edit("overwrite historical intent")
+        session.save()
+        assertEquals("history_readonly", session.state.value.failure)
+        assertEquals(document, session.state.value.document)
+        session.activate(saveFirst = true)
+        assertEquals(target, (client.command as ProfileCommand.Activate).request.target)
+        assertEquals(0, client.writes)
+        session.copySelected("copy")
+        assertEquals(target, client.cloned?.source)
+        assertEquals(ProfileSource.Draft, session.state.value.target?.source)
+        session.edit(encode(client.created.getValue("copy").copy(displayName = "Edited copy")))
+        session.save()
+        assertEquals("Edited copy", client.created.getValue("copy").displayName)
+    }
+
+    @Test
+    fun templateCopyPreservesTheOriginalAndUsesSeparateDataScopes() = runTest {
+        val client = Client()
+        val session = RecoverySession(client)
+        session.refresh()
+        val original = client.definition
+        val template = ProfileDefinition(id = "native", bundles = listOf(ProfileBundleReference("native.base", "1")),
+            dataScope = ProfileDataScope(settings = "legacy", history = "legacy"))
+        session.createFromTemplate(template, "repair")
+        val created = client.created.getValue("repair")
+        assertEquals(template.bundles, created.bundles)
+        assertEquals(ProfileDataScope(workspace = "profile"), created.dataScope)
+        assertEquals(original, client.definition)
+        assertTrue(client.lastWrite!!.createOnly)
+        assertEquals(ProfileTarget("repair", ProfileSource.Draft), session.state.value.target)
+        session.createFromTemplate(template, "repair")
+        assertNotNull(session.state.value.failure)
+        assertEquals(1, client.writes)
+        assertEquals(0, client.submissions)
+    }
+
+    @Test
+    fun dirtyEditorAndConflictingRevisionCannotCreateACopy() = runTest {
+        val client = Client()
+        val session = RecoverySession(client)
+        session.refresh()
+        session.edit("unfinished")
+        session.createFromTemplate(ProfileDefinition(id = "native"), "repair")
+        session.copySelected("copy")
+        assertEquals(0, client.writes)
+        assertEquals(null, client.cloned)
+        session.discard()
+        client.revision++
+        session.createFromTemplate(ProfileDefinition(id = "native"), "repair")
+        assertEquals(0, client.writes)
+        assertEquals("broken", session.state.value.target?.profileId)
+    }
+
+    @Test
+    fun unreadableHistoryDoesNotPreventRepairingAnAvailableDraft() = runTest {
+        val client = Client().apply { historyFailure = "history damaged" }
+        val session = RecoverySession(client)
+        session.refresh()
+        assertEquals(ProfileTarget("broken", ProfileSource.Draft), session.state.value.target)
+        assertEquals("history damaged", session.state.value.historyFailure)
+        session.edit(encode(client.definition.copy(displayName = "Repair")))
+        session.save()
+        assertEquals("Repair", client.definition.displayName)
+    }
+
     private class Client : ProfileManagementClient {
         override val state = MutableStateFlow(ProfileManagementState(ProfileManagementPhase.RecoveryRequired))
         override val commands = MutableStateFlow(emptyList<ProfileCommandStatus>())
@@ -167,21 +256,45 @@ class RecoverySessionTest {
         var command: ProfileCommand? = null
         var result = ProfileCommandPhase.Succeeded
         var gate: CompletableDeferred<ProfileCommandStatus>? = null
+        val created = linkedMapOf<String, ProfileDefinition>()
+        var cloned: ProfileCloneRequest? = null
+        var lastWrite: ProfileDraftWrite? = null
+        var historyFailure: String? = null
+        var draftFailure: String? = null
         override suspend fun catalogue() = ProfileCatalogue(revision, "broken", listOf(
             ProfileSummary("broken", "Broken", true, generation), ProfileSummary("other", "Other", true, null),
-        ))
-        override suspend fun draft(id: String) = if (id == "broken") definition else ProfileDefinition(id = id)
+        ) + created.values.map { ProfileSummary(it.id, it.displayName, true, null) })
+        override suspend fun draft(id: String): ProfileDefinition {
+            if (id == "broken") draftFailure?.let { error(it) }
+            return created[id] ?: if (id == "broken") definition else ProfileDefinition(id = id)
+        }
         override suspend fun writeDraft(write: ProfileDraftWrite): ProfileCatalogue {
             check(write.expectedRevision == revision) { "conflict" }
+            check(!write.createOnly || write.definition.id !in setOf("broken", "other") + created.keys) { "exists" }
             writes++
-            definition = write.definition
+            lastWrite = write
+            if (write.definition.id == "broken") definition = write.definition else created[write.definition.id] = write.definition
             revision++
             return catalogue()
         }
-        override suspend fun history(id: String) = listOf(ProfileCompositionState(ProfileDefinition(id = id, displayName = "Committed"), 3))
+        override suspend fun history(id: String): List<ProfileCompositionState> {
+            historyFailure?.let { error(it) }
+            return if (generation == null || id != "broken") emptyList()
+            else listOf(ProfileCompositionState(ProfileDefinition(id = id, displayName = "Committed"), 3))
+        }
         override suspend fun modules(): List<ProfileModuleSummary> = error("Recovery cannot depend on runtime modules")
         override suspend fun preview(target: ProfileTarget): ProfilePreview = error("Recovery cannot resolve broken modules")
-        override suspend fun clone(request: ProfileCloneRequest): ProfileCatalogue = error("unused")
+        override suspend fun clone(request: ProfileCloneRequest): ProfileCatalogue {
+            check(request.expectedRevision == revision) { "conflict" }
+            check(request.id !in setOf("broken", "other") + created.keys) { "exists" }
+            val source = if (request.source.source == ProfileSource.History)
+                history(request.source.profileId).single { it.generation == request.source.generation }.definition
+            else requireNotNull(draft(request.source.profileId))
+            created[request.id] = source.copy(id = request.id, displayName = request.displayName, dataScope = request.dataScope)
+            cloned = request
+            revision++
+            return catalogue()
+        }
         override suspend fun delete(id: String, expectedRevision: Long): ProfileCatalogue = error("unused")
         override fun submit(command: ProfileCommand): ProfileCommandHandle {
             submissions++

@@ -48,6 +48,14 @@ saved Profile choices and an editable JSON definition. Users can save/discard re
 saved intent, or save and activate. Committed selections are read from their exact generation;
 drafts do not require compiling the broken tree. The surface preserves dirty write revisions
 and never queries product modules. Ready roots retain their own renderer and theme.
+Recovery also exposes saved historical generations. Activating history appends a new generation
+from its frozen Bundle/package recipe, without an implicit draft write. Historical JSON is
+read-only in both management surfaces; clone it to a new draft before editing. Host-provided
+distribution templates can create a repair draft under a new ID. This create-only operation
+retains the original Profile/data and uses separate settings, history and workspace scopes.
+The draft is activated explicitly. A failed definition/template query does not hide other
+available catalogue/template choices. Templates are private native-host metadata; writes and
+clones still use the neutral management contract. No shared SDK contract changed in this phase.
 The host surface's recovery/edit/activation flow and English/Chinese defaults were verified
 in an actual Android window on a physical ARM64/API 36 device under SDK 71. This targeted
 case does not establish desktop rendering or every touch/keyboard route.

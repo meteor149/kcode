@@ -22,6 +22,9 @@ independent recovery entry points do not depend on this package.
 The native applications link `plugins/profile-recovery-ui` outside the product tree. It uses
 host-owned Profile metadata/commands and independent XML text defaults when product startup
 fails. Normal roots render directly; only recovery/transitions use the shared UI design defaults.
+Native distribution templates are detached host metadata, available without product services.
+Recovery creates separate repair drafts through the existing neutral client. Historical
+activation retains the frozen recipe; editing requires cloning history to a new draft.
 
 Package IDs identify available code. Entry IDs identify configured instances. Multiple
 instances may borrow one release export while retaining independent configuration, context,

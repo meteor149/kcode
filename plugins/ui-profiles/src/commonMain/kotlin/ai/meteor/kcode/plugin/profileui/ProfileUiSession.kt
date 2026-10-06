@@ -59,6 +59,7 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
     fun edit(document: String) {
         owner.requireOpen()
         check(!state.value.busy && state.value.target != null) { "Profile editor is not available" }
+        check(state.value.target?.source != ProfileSource.History) { "Clone historical intent before editing it" }
         mutableState.value = state.value.copy(document = document, dirty = true, preview = null, failure = null)
     }
 
@@ -106,6 +107,7 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
     }
 
     private suspend fun saveDocument(current: ProfileUiState): Boolean {
+        check(current.target?.source != ProfileSource.History) { "Clone historical intent before editing it" }
         val definition = try {
             json.decodeFromString(ProfileDefinition.serializer(), current.document).also {
                 it.validate()

@@ -30,6 +30,7 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_failed
 import ai.meteor.kcode.plugin.profileui.resources.profile_leave_question
 import ai.meteor.kcode.plugin.profileui.resources.profile_discard_leave
 import ai.meteor.kcode.plugin.profileui.resources.profile_history
+import ai.meteor.kcode.plugin.profileui.resources.profile_history_readonly
 import ai.meteor.kcode.plugin.profileui.resources.profile_host_busy
 import ai.meteor.kcode.plugin.profileui.resources.profile_host_starting
 import ai.meteor.kcode.plugin.profileui.resources.profile_id
@@ -161,9 +162,11 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
             ProfileTreeEditor(state, enabled,
                 onOperation = { target, revision, operation -> scope.launch { session.appendOperation(target, revision, operation) } },
                 onBundles = { target, revision, bundles -> scope.launch { session.reorderBundles(target, revision, bundles) } })
+            if (state.target!!.source == ProfileSource.History) Text(profileText(Res.string.profile_history_readonly))
             OutlinedTextField(state.document, { document ->
                 try { session.edit(document) } catch (error: IllegalStateException) { /* Withdrawn or busy callbacks cannot edit. */ }
             }, Modifier.fillMaxWidth().testTag("profile-definition"), enabled = enabled,
+                readOnly = state.target!!.source == ProfileSource.History,
                 minLines = 10, maxLines = 20, textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 label = { Text(profileText(Res.string.profile_editor)) })
             TextButton(enabled = enabled && state.dirty, onClick = { scope.launch { session.save() } }) {

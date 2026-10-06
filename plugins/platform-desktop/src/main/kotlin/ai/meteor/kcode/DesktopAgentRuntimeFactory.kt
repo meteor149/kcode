@@ -176,7 +176,11 @@ suspend fun createDesktopProfileHost(
         { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
-        canRecover = { startupReached }) {
+        canRecover = { startupReached }, templates = {
+            listOf(nativeProfileTemplate(nativeProfileBundles(
+                (catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList(),
+            ), profile.includeDefaults))
+        }) {
         facade(KcodePluginRuntime.create(configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow))))
     }
 }

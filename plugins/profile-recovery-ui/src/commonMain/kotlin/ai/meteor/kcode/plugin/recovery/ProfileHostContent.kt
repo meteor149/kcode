@@ -48,6 +48,7 @@ fun ProfileHostContent(host: KcodeProfileHost, options: ApplicationHostOptions, 
     val session = remember(host, client) { client?.let(::RecoverySession) }
     val scope = rememberCoroutineScope()
     var showDetails by remember(hostState.failure) { mutableStateOf(false) }
+    var newProfileId by remember(host) { mutableStateOf("") }
     val texts = remember(languageCode) {
         { key: String -> RecoveryResourceStrings[if (languageCode.startsWith("zh")) "${key}_zh" else key]
             ?: RecoveryResourceStrings[key] ?: key }
@@ -96,14 +97,39 @@ fun ProfileHostContent(host: KcodeProfileHost, options: ApplicationHostOptions, 
                             }
                         }
                         state.target?.let {
+                            state.history.sortedByDescending { it.generation }.forEach { generation ->
+                                val target = ProfileTarget(generation.definition.id, ProfileSource.History, generation.generation)
+                                OutlinedButton(onClick = { scope.launch { session.select(target) } }, enabled = !state.busy && !state.dirty) {
+                                    Text("${texts("history")} ${generation.generation}" +
+                                        if (state.target == target) " (${texts("selected")})" else "")
+                                }
+                            }
+                            state.historyFailure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            if (state.target?.source == ProfileSource.History) Text(texts("history_readonly"))
                             OutlinedTextField(state.document, session::edit, modifier = Modifier.fillMaxWidth().testTag("recovery-definition"),
-                                enabled = !state.busy, label = { Text(texts("document")) }, minLines = 8, maxLines = 16)
+                                enabled = !state.busy, readOnly = state.target?.source == ProfileSource.History,
+                                label = { Text(texts("document")) }, minLines = 8, maxLines = 16)
                             if (state.dirty) Text(texts("unsaved"))
-                            Button(onClick = { scope.launch { session.save() } }, enabled = !state.busy && state.dirty) { Text(texts("save")) }
+                            Button(onClick = { scope.launch { session.save() } }, enabled = !state.busy && state.dirty && state.target?.source != ProfileSource.History) { Text(texts("save")) }
                             Button(onClick = { scope.launch { session.activate() } }, enabled = !state.busy && !state.dirty) { Text(texts("activate")) }
                             Button(onClick = { scope.launch { session.activate(saveFirst = true) } }, enabled = !state.busy) { Text(texts("save_activate")) }
                             OutlinedButton(onClick = session::discard, enabled = !state.busy && state.dirty) { Text(texts("discard")) }
                         }
+                        Text(texts("copies"), style = MaterialTheme.typography.titleMedium)
+                        Text(texts("copy_explanation"))
+                        OutlinedTextField(newProfileId, { newProfileId = it }, modifier = Modifier.fillMaxWidth().testTag("recovery-copy-id"),
+                            enabled = !state.busy, singleLine = true, label = { Text(texts("new_id")) })
+                        if (state.target != null) {
+                            OutlinedButton(onClick = { scope.launch { session.copySelected(newProfileId) } },
+                                enabled = !state.busy && !state.dirty && newProfileId.isNotBlank()) { Text(texts("copy_selected")) }
+                        }
+                        host.profileTemplates.forEach { template ->
+                            OutlinedButton(onClick = { scope.launch { session.createFromTemplate(template, newProfileId) } },
+                                enabled = !state.busy && !state.dirty && state.catalogue != null && newProfileId.isNotBlank()) {
+                                Text("${texts("create_template")}: ${template.displayName}")
+                            }
+                        }
+                        host.profileTemplateFailure?.let { Text(it.toString(), color = MaterialTheme.colorScheme.error) }
                         if (state.busy) CircularProgressIndicator()
                         state.failure?.let { Text(texts(it), color = MaterialTheme.colorScheme.error) }
                     }

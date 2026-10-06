@@ -1,4 +1,6 @@
 <resources>
+    <string name="profile_history_readonly">History is read-only. Activate it directly, or clone it before editing.</string>
+    <string name="profile_history_readonly_zh">历史记录为只读。可以直接激活，或复制后编辑。</string>
     <string name="profile_title">Profiles</string>
     <string name="profile_description">Choose and edit your plugin composition</string>
     <string name="profile_back">Back</string>

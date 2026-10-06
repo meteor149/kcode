@@ -18,6 +18,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import java.nio.file.Files
@@ -36,6 +37,51 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class NativeProfileStartupRecoveryTest {
+    @Test
+    fun unavailableTemplateDoesNotWithdrawStartupRecoveryMetadata(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-template-metadata")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        repository.saveDraft(definition("broken"))
+        val commands = ProfileCommandGateway()
+        val host = KcodeProfileHost.start({ "broken" }, ProfileRuntimeFactory { error("unused preparation") },
+            ProfileManagement(repository, { emptyList() }, { error("unused preparation") }), commands,
+            templates = { error("template unavailable") }) { error("initial preparation failed") }
+        try {
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertTrue(host.profileTemplates.isEmpty())
+            assertEquals("template unavailable", host.profileTemplateFailure?.message)
+            assertEquals(listOf("broken"), commands.catalogue().profiles.map { it.id })
+        } finally { host.close(); home.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun nativeTemplateCreatesASeparateRepairWithoutReplacingFailedIntent(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-template-recovery")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        val broken = definition("broken", "missing.module")
+        repository.saveDraft(broken)
+        val host = createDesktopProfileHost(homeDirectory = home, profileId = "broken")
+        try {
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            val template = host.profileTemplates.single()
+            assertEquals(setOf("kcode.base", "kcode.agent", "kcode.default-ui"), template.bundles.map { it.id }.toSet())
+            val repair = template.copy(id = "repair", displayName = "Repair", dataScope = ProfileDataScope(workspace = "profile"))
+            val client = assertNotNull(host.profileCommands)
+            val catalogue = client.catalogue()
+            val saved = client.writeDraft(ProfileDraftWrite(repair, catalogue.revision, createOnly = true))
+            assertEquals(broken, repository.loadDraft("broken"))
+            assertEquals(null, repository.selected())
+            val result = client.submit(ProfileCommand.Activate(ProfileActivationRequest(
+                ProfileTarget("repair", ProfileSource.Draft), saved.revision,
+            ))).await()
+            assertEquals(ProfileCommandPhase.Succeeded, result.phase)
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            assertEquals(repair, repository.loadCommitted("repair")!!.definition)
+            assertEquals(broken, repository.loadDraft("broken"))
+            assertEquals("repair", repository.selected())
+        } finally { host.close(); home.toFile().deleteRecursively() }
+    }
+
     @Test
     fun cancellationAfterInitialCreationClosesOwnerAndUnboundGateway(): Unit = runBlocking {
         val home = Files.createTempDirectory("kcode-startup-publication-cancellation")

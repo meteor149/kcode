@@ -39,6 +39,27 @@ import kotlin.test.assertTrue
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProfileUiSessionTest {
     @Test
+    fun rawHistoricalEditorRequiresACloneAndActivationKeepsHistoricalTarget(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val target = ProfileTarget("original", ProfileSource.History, 5)
+            session.select(target)
+            val document = session.state.value.document
+            assertFailsWith<IllegalStateException> { session.edit("historical overwrite") }
+            session.save()
+            assertEquals(0, client.writes)
+            assertEquals(document, session.state.value.document)
+            session.activate()
+            assertEquals(target, client.submitted?.request?.target)
+            session.clone("copy", "Copy")
+            assertEquals(target, client.cloned?.source)
+            assertEquals(ProfileSource.Draft, session.state.value.target?.source)
+        } finally { session.close() }
+    }
+
+    @Test
     fun busyLeaveSaveCannotBeDismissedBeforeItsDurableResult(): Unit = runTest {
         val client = Client()
         val session = ProfileUiSession(client)

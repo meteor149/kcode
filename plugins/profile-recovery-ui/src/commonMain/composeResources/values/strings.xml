@@ -1,4 +1,18 @@
 <resources>
+    <string name="history">History</string>
+    <string name="history_zh">历史</string>
+    <string name="history_readonly">History is read-only. Activate it directly, or copy it to a draft before editing.</string>
+    <string name="history_readonly_zh">历史记录为只读。可以直接激活，或复制为草稿后编辑。</string>
+    <string name="copies">Create a repair copy</string>
+    <string name="copies_zh">创建修复副本</string>
+    <string name="copy_explanation">Use a new Profile ID. The original Profile and its data stay available. New copies use separate data scopes.</string>
+    <string name="copy_explanation_zh">请使用新的 Profile ID。原 Profile 和数据会保留，新副本使用独立的数据作用域。</string>
+    <string name="new_id">New Profile ID</string>
+    <string name="new_id_zh">新 Profile ID</string>
+    <string name="copy_selected">Copy selection to draft</string>
+    <string name="copy_selected_zh">将所选组合复制为草稿</string>
+    <string name="create_template">Create from template</string>
+    <string name="create_template_zh">从模板创建</string>
     <string name="details">Show or hide error details</string>
     <string name="details_zh">显示或隐藏错误详情</string>
     <string name="selected">Selected</string>

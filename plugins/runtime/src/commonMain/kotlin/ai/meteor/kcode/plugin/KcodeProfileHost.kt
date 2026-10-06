@@ -6,6 +6,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
@@ -47,6 +48,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 
 /** Preparation verifies locked metadata/code; create allocates a fresh, unpublished runtime. */
 class PreparedProfileRuntime(
@@ -77,6 +79,7 @@ class KcodeProfileHost(
     private val commandGateway: ProfileCommandGateway? = null,
     initialFailure: Throwable? = null,
     private val overlayAvailable: Boolean = initial?.conversationOverlayController != null,
+    private val templateProvider: () -> List<ProfileDefinition> = { emptyList() },
 ) : AgentRuntimeOwner, ApplicationContent {
     init { require(initial != null || initialFailure != null) { "A Profile host needs a runtime or startup failure" } }
     private class HostCall(val host: KcodeProfileHost) : AbstractCoroutineContextElement(Key) {
@@ -98,6 +101,22 @@ class KcodeProfileHost(
         initialFailure,
     ))
     private var startupRetirement: AgentRuntimeOwner? = null
+    private val templateSnapshot by lazy {
+        try {
+            val definitions = templateProvider().map {
+                Json.decodeFromString(ProfileDefinition.serializer(), Json.encodeToString(ProfileDefinition.serializer(), it))
+                    .also(ProfileDefinition::validate)
+            }
+            require(definitions.map { it.id }.distinct().size == definitions.size) { "Duplicate Profile template IDs" }
+            definitions to null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            emptyList<ProfileDefinition>() to error
+        }
+    }
+    val profileTemplates: List<ProfileDefinition> get() = templateSnapshot.first
+    val profileTemplateFailure: Exception? get() = templateSnapshot.second
     val state: StateFlow<ProfileHostState> = mutableState.asStateFlow()
     val profileCommands: ProfileManagementClient? get() = commandGateway
     private var foreground = true
@@ -532,6 +551,7 @@ class KcodeProfileHost(
             commands: ProfileCommandGateway,
             overlayAvailable: Boolean = false,
             canRecover: () -> Boolean = { true },
+            templates: () -> List<ProfileDefinition> = { emptyList() },
             createInitial: suspend () -> KcodeAgentRuntime,
         ): KcodeProfileHost {
             val initial = try { createInitial() }
@@ -541,7 +561,7 @@ class KcodeProfileHost(
                     throw error
                 }
                 return KcodeProfileHost(null, initialProfileId(), factory, management, commands,
-                    initialFailure = error, overlayAvailable = overlayAvailable).also { host ->
+                    initialFailure = error, overlayAvailable = overlayAvailable, templateProvider = templates).also { host ->
                     host.startupRetirement = (error as? RuntimeStartupRetirementException)?.retirement
                     commands.bind(host)
                 }
@@ -555,7 +575,7 @@ class KcodeProfileHost(
                 throw cancelled
             }
             return KcodeProfileHost(initial, initialProfileId(), factory, management, commands,
-                overlayAvailable = overlayAvailable).also(commands::bind)
+                overlayAvailable = overlayAvailable, templateProvider = templates).also(commands::bind)
         }
     }
 }

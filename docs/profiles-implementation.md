@@ -1,5 +1,41 @@
 # Profile implementation
 
+## Historical and template recovery phase
+
+Recovery now lists generations for the selected Profile and can activate a historical target
+directly. Historical JSON is read-only in both recovery and default settings, including the
+raw editor/save boundary. Users can copy the selected generation into a new draft to edit it;
+the existing clone contract retains its frozen recipe. Save-and-activate only writes when
+there are actual edits, so a clean historical selection cannot silently become a latest-base
+draft before activation.
+
+Native hosts expose detached distribution templates outside the product tree. Recovery uses
+create-only publication under a new ID and separate settings/history/workspace scopes, retaining
+the original failed intent and its data. Template lookup failures retain metadata management.
+An unreadable selected definition still publishes its catalogue so other choices/templates
+remain accessible. An unavailable history list does not prevent editing an available draft.
+The templates use the configured native composition; they do not inject default product
+providers into alternative roots. No exported SDK contract changed; Plugin API remains 71.
+
+Concentrated final validation passed 46 local tests: 13 recovery-session tests, 23 default
+Profile UI tests, 4 Profile management tests and 6 native startup recovery tests. Desktop
+compilation, Android application assembly and native instrumentation APK assembly passed.
+An initial instrumentation compilation error in a positional fixture constructor was corrected
+before device acceptance; it was not counted as successful validation.
+
+Five selected cases passed on a physical ARM64/API 36 device (`OK (5 tests)`, completion -1).
+The historical case starts from a broken generation 2 and activates generation 1's frozen
+Bundle through the actual recovery UI, verifies generation 3 retains that Bundle, preserves
+generation 2 and creates no draft. The template case creates an isolated repair draft from
+all three shipped layers, preserves the original broken draft, activates it and renders the
+private default product. The existing JSON-repair/alternative-root, private default APK loading
+and private Profile settings cases also passed. Screenshots were inspected.
+
+Verified external Bundle import, credential-safe portable export, corrupt-authority and
+pre-catalogue/package-staging recovery remain outstanding, along with desktop rendering and
+the complete execution-admission/resource-ownership audit. These targeted tests do not prove
+full touch/keyboard behavior, root/Shizuku authorization or overall Profile completion.
+
 ## Native recovery surface phase
 
 Both shipped applications now use the suspending Profile-host factories and host-linked

@@ -2,9 +2,12 @@ package ai.meteor.kcode.plugin.recovery
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
+import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
 import ai.meteor.kcode.plugin.api.profiles.ProfileCommandPhase
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
@@ -25,6 +28,8 @@ internal data class RecoveryState(
     val revision: Long? = null,
     val busy: Boolean = false,
     val failure: String? = null,
+    val history: List<ProfileCompositionState> = emptyList(),
+    val historyFailure: String? = null,
 ) {
     val dirty: Boolean get() = document != savedDocument
 }
@@ -37,7 +42,7 @@ internal class RecoverySession(private val client: ProfileManagementClient) {
     val state = mutableState.asStateFlow()
 
     fun edit(document: String) {
-        if (!state.value.busy && state.value.target != null) {
+        if (!state.value.busy && state.value.target != null && state.value.target?.source != ProfileSource.History) {
             mutableState.value = state.value.copy(document = document, failure = null)
         }
     }
@@ -48,6 +53,8 @@ internal class RecoverySession(private val client: ProfileManagementClient) {
 
     suspend fun refresh() = operation {
         val catalogue = client.catalogue()
+        // A broken definition must not hide other saved choices or host templates.
+        mutableState.value = state.value.copy(catalogue = catalogue)
         if (state.value.dirty) {
             // Updating catalogue metadata cannot authorize overwriting intervening edits.
             mutableState.value = state.value.copy(catalogue = catalogue)
@@ -57,36 +64,63 @@ internal class RecoverySession(private val client: ProfileManagementClient) {
                     ?.let { ProfileTarget(it.id, if (it.generation == null) ProfileSource.Draft else ProfileSource.Committed) }
                 ?: catalogue.profiles.firstOrNull()
                     ?.let { ProfileTarget(it.id, if (it.generation == null) ProfileSource.Draft else ProfileSource.Committed) }
-            if (target == null) mutableState.value = state.value.copy(catalogue = catalogue, target = null)
+            if (target == null) mutableState.value = RecoveryState(catalogue = catalogue, revision = catalogue.revision, busy = true)
             else load(catalogue, target)
         }
     }
 
     suspend fun select(target: ProfileTarget) = operation {
         check(!state.value.dirty) { "unsaved" }
-        load(client.catalogue(), target)
+        val catalogue = client.catalogue()
+        mutableState.value = state.value.copy(catalogue = catalogue)
+        load(catalogue, target)
     }
 
     private suspend fun load(catalogue: ProfileCatalogue, target: ProfileTarget) {
         target.validate()
+        var historyFailure: String? = null
+        val history = try { client.history(target.profileId) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            if (target.source != ProfileSource.Draft) throw error
+            historyFailure = error.message ?: error.toString()
+            emptyList()
+        }
         val definition = when (target.source) {
             ProfileSource.Draft -> requireNotNull(client.draft(target.profileId)) { "missing" }
             ProfileSource.Committed -> {
                 val generation = requireNotNull(catalogue.profiles.single { it.id == target.profileId }.generation) { "missing" }
-                client.history(target.profileId).single { it.generation == generation }.definition
+                history.single { it.generation == generation }.definition
             }
-            ProfileSource.History -> client.history(target.profileId).single { it.generation == target.generation }.definition
+            ProfileSource.History -> history.single { it.generation == target.generation }.definition
         }
         check(client.catalogue().revision == catalogue.revision) { "changed" }
         val document = json.encodeToString(ProfileDefinition.serializer(), definition)
         mutableState.value = state.value.copy(catalogue = catalogue, target = target, document = document,
-            savedDocument = document, revision = catalogue.revision)
+            savedDocument = document, revision = catalogue.revision, history = history, historyFailure = historyFailure)
+    }
+
+    suspend fun createFromTemplate(template: ProfileDefinition, id: String) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val definition = template.copy(id = id, displayName = id, dataScope = ProfileDataScope(workspace = "profile"))
+        definition.validate()
+        val catalogue = client.writeDraft(ProfileDraftWrite(definition, requireNotNull(state.value.catalogue).revision, createOnly = true))
+        load(catalogue, ProfileTarget(id, ProfileSource.Draft))
+    }
+
+    suspend fun copySelected(id: String) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val current = state.value
+        val catalogue = client.clone(ProfileCloneRequest(requireNotNull(current.target), id,
+            requireNotNull(current.revision)))
+        load(catalogue, ProfileTarget(id, ProfileSource.Draft))
     }
 
     suspend fun save() = operation { saveDocument() }
 
     private suspend fun saveDocument() {
         val current = state.value
+        check(current.target?.source != ProfileSource.History) { "history_readonly" }
         val definition = json.decodeFromString(ProfileDefinition.serializer(), current.document)
         definition.validate()
         require(definition.id == current.target?.profileId) { "identity" }
@@ -97,7 +131,7 @@ internal class RecoverySession(private val client: ProfileManagementClient) {
     }
 
     suspend fun activate(saveFirst: Boolean = false) = operation {
-        if (saveFirst) saveDocument() else check(!state.value.dirty) { "unsaved" }
+        if (saveFirst && state.value.dirty) saveDocument() else check(!state.value.dirty) { "unsaved" }
         val current = state.value
         val handle = client.submit(ProfileCommand.Activate(ProfileActivationRequest(
             requireNotNull(current.target), requireNotNull(current.revision),
