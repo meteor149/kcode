@@ -1,7 +1,6 @@
 import java.security.MessageDigest
 import org.gradle.api.DefaultTask
 import org.gradle.api.Project
-import org.gradle.api.artifacts.type.ArtifactTypeDefinition
 import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
@@ -40,13 +39,6 @@ plugins {
 subprojects {
     pluginManager.withPlugin("com.android.library") {
         pluginManager.apply("io.github.meteor149.cordis.packager")
-        // Release lint also selects complete Cordis AARs. Build their producers before
-        // AGP resolves the runtime artifacts while generating its lint model.
-        tasks.matching { it.name == "generateReleaseLintModel" }.configureEach {
-            dependsOn(project.configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
-                attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "android-exploded-aar")
-            }.files)
-        }
     }
 }
 
