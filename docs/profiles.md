@@ -399,3 +399,19 @@ Repair creates a random revision epoch to reject old revision handles; revisions
 tokens and must not be treated as a global chronological ordering across repairs. Ordinary
 mutations increment the current epoch. The native recovery contracts remain implementation
 APIs rather than exported plugin SDK contracts.
+
+
+## Product-internal execution admission
+
+SDK 75 adds the neutral `KcodeExecution` coordination boundary. Each native product runtime
+owns its implementation. The standard agent provider and conversation generation runner enter
+it, including calls from inside the plugin tree that do not pass through a host facade.
+Composition mutation pauses it atomically with checking active operations; mutation rejects
+active product work. Host switching closes it before preparing a target. Explicit cancellation
+joins admitted work and cleanup; preparation failure reopens the retained runtime. Retirement
+permanently closes stale admission handles. Metadata reads remain available during preparation.
+
+Koog continuations and in-process subagents run under the admitted structured operation.
+Detached autonomous providers must use the shared boundary themselves. Candidate/startup
+publication, command execution before generation and additional detached producers remain
+separate audit/acceptance work; do not infer complete background coordination from these tests.

@@ -145,6 +145,7 @@ class KcodeProfileHost(
     private suspend fun outsideCall() {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
+        (current?.owner as? KcodePluginRuntime)?.requireOutsideExecution()
         val context = currentCoroutineContext()
         check(context[HostCall]?.host !== this && context[Transition]?.host !== this) {
             "A Profile callback cannot switch or close its own host"
@@ -459,8 +460,14 @@ class KcodeProfileHost(
             var previousReleased = false
             var published = false
             var recoveryResumed = false
+            val previousRuntime = current
+            var executionPaused = false
             try {
                 withContext(Transition(this)) {
+                    (previousRuntime?.owner as? KcodePluginRuntime)?.let { owner ->
+                        owner.pauseProductExecution(cancelActive)
+                        executionPaused = true
+                    }
                     if (cancelActive) withContext(NonCancellable) {
                         val jobs = admission.withLock { calls.keys.toList() }
                         jobs.forEach { it.cancel() }
@@ -551,6 +558,11 @@ class KcodeProfileHost(
                 }
                 throw error
             } finally {
+                if (executionPaused && current === previousRuntime && mutableState.value.phase == ProfileHostPhase.Ready) {
+                    withContext(NonCancellable) {
+                        (previousRuntime?.owner as? KcodePluginRuntime)?.resumeProductExecution()
+                    }
+                }
                 if (!recoveryResumed) withContext(NonCancellable) { recovery?.activation?.session?.discardPreparedSwitch() }
             }
             withContext(NonCancellable) { checkNotNull(target).activation.session.currentCompositionState() }

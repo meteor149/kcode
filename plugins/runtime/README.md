@@ -65,3 +65,6 @@ exposes the client for independent recovery presentation. Host closure cancels/j
 before releasing the product owner. Notifications and cancellation callbacks run outside locks.
 Command-local publication evidence preserves successful results when cancellation interrupts
 the return path after the generation and application view have committed.
+
+
+SDK 75 publishes root-context `KcodeExecution` coordination. Composition mutations pause admission and reject active product work; native Profile switching can cancel and join it. Runtime retirement and failed startup close captured admission references before releasing product resources. This is lifecycle infrastructure, not a product task or agent provider.

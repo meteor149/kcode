@@ -81,3 +81,12 @@ valid compositions.
 
 Reserved Harness contracts do not imply implemented capabilities. A service must only be
 published when its provider implements that contract; placeholder providers are unsupported.
+
+
+The runtime publishes `KcodeExecution` in the root Context as lifecycle coordination,
+independent of product service realms. SDK 75 shares only its admission contract; the
+controller remains runtime-private. Agent calls, generation scopes and scheduled dispatch
+enter it before executing work. Composition mutation closes admission while checking active
+operations, whole-Profile cancellation joins their cleanup, and startup failure/retirement
+close stale handles before product resources are released. Autonomous providers must join
+this boundary explicitly; it does not create a scheduler or implement reserved Harness APIs.

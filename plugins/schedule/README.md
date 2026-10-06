@@ -47,3 +47,6 @@ The release-owned schemas under "src/profile-export" declare portable configurat
 Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
 unless the corresponding schema explicitly permits them. Machine bindings and persisted
 credentials are outside these configuration declarations.
+
+
+Schedule dispatch captures root-context `KcodeExecution` before creating a pending standalone conversation. Closed admission returns false, leaving the due task pending. Each dispatch is a supervised child: Profile cancellation joins its cleanup without permanently cancelling a scheduler retained after failed preparation. Provider withdrawal still cancels the parent loop.

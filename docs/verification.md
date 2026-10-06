@@ -138,3 +138,36 @@ host offers confirmation and cancellation, retains damaged-file evidence and bus
 and allocates the product only after a separate activation. This evidence does not establish
 Desktop native dialogs, broad default management navigation, Shizuku/root authorization or
 all autonomous/background execution admission paths. These remain separate acceptance work.
+
+
+### Product execution admission (SDK 75, 2026-10-06)
+
+The SDK/runtime/agent/conversation/schedule phase passed 44 SDK tests, five boundary tests,
+19 agent-loop tests, 16 conversation-execution tests and 12 schedule tests. The baseline
+ABI rebuild and selected native host/package tests passed in
+`profile-execution-admission-validation.log`. Expanded lifecycle checks exposed two old
+expectations that allowed composition mutation during generation; they now assert rejection
+until work is explicitly cancelled and cleanup finishes. Nine corrected/expanded actual-JAR tests,
+Profile cancellation, private schedule rejection/retry, generation lifecycle and failed-startup
+retirement passed and are recorded in `profile-execution-admission-final-validation.log`.
+
+Physical Android instrumentation passed due-task rejection/retry and private-APK generation
+foreground-policy lifecycle (`OK (2 tests)`, code -1,
+`profile-execution-admission-device-validation.log`), then the separately selected private-APK
+schedule cancellation/cleanup case (`OK (1 test)`, code -1,
+`profile-execution-admission-cancellation-device.log`). The first device selection used a
+nonexistent name for the cancellation case; only the separate one-test run establishes it.
+Foreground policy tests use owned host fixtures and do not prove OS background authorization.
+
+The shared export prefix covers `KcodeExecution`/`ExecutionAdmission`; implementations stay
+runtime-private. Native kernel ownership blocks direct product work during preparation,
+joins cancellation, restores retained admission after failure and retires stale handles.
+The evidence does not prove full startup/candidate publication admission, all pre-generation
+command paths, arbitrary detached providers, Desktop native dialogs or complete management
+navigation. These remain required work before the full Profile goal can be declared complete.
+
+Final root-context binding and early startup-retirement cleanup were rebuilt for both hosts
+and the instrumentation APK in `profile-execution-admission-final-validation.log`. The final
+APK repeated only the affected schedule preparation/retry and cancellation paths: `OK (2 tests)`
+and code -1 in `profile-execution-admission-final-device.log`. The earlier foreground-policy
+case remains separate fixture evidence; no UI/dialog acceptance is inferred from it.

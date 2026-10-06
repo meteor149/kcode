@@ -37,6 +37,7 @@ import org.cordis.ServiceKey
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeAgents
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.UnavailableScheduledTasks
@@ -196,6 +197,7 @@ class KcodePluginRuntime private constructor(
     private val closeCompletion = CompletableDeferred<Unit>()
     private val lock = Mutex()
     private val turns = mutableMapOf<Job, Int>()
+    private val execution = context.require(KcodeExecution.Key).admission as ProductExecutionAdmission
     private var closed = false
     private var recoveryFailure: ProfileRuntimeRecoveryException? = null
 
@@ -268,7 +270,7 @@ class KcodePluginRuntime private constructor(
         }
     }
 
-    private suspend fun activateProfile(activation: ProfileActivation, builtinModules: List<KcodePluginMount>) = lock.withLock {
+    private suspend fun activateProfile(activation: ProfileActivation, builtinModules: List<KcodePluginMount>) = compositionLock {
         check(profileStartupOpen && !closed && activeProfile == null && turns.isEmpty()) { "Profile startup requires a fresh declarative runtime" }
         profileStartupOpen = false
         val resolved = activation.resolved
@@ -389,7 +391,7 @@ class KcodePluginRuntime private constructor(
             ChatGenerationRunner.requireOutsideCall()
             val serializer = ListSerializer(ProfileOperation.serializer())
             val operations = Json.decodeFromString(serializer, Json.encodeToString(serializer, edit.operations))
-            return lock.withLock {
+            return compositionLock {
                 requireOperational()
                 check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
                 val activation = checkNotNull(activeProfile) { "This runtime does not use Profiles" }
@@ -526,9 +528,9 @@ class KcodePluginRuntime private constructor(
     ): Boolean {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
-        return lock.withLock {
+        return compositionLock {
             requireOperational()
-            val activation = activeProfile ?: return@withLock false
+            val activation = activeProfile ?: return@compositionLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             val previous = activation.resolved
             val imported = imports?.let {
@@ -706,11 +708,11 @@ class KcodePluginRuntime private constructor(
     private suspend fun trySetProfileEnabled(changes: Map<String, Boolean>): Boolean {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
-        return lock.withLock {
+        return compositionLock {
             requireOperational()
-            val activation = activeProfile ?: return@withLock false
+            val activation = activeProfile ?: return@compositionLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
-            if (changes.isEmpty()) return@withLock true
+            if (changes.isEmpty()) return@compositionLock true
             val previous = activation.resolved
             val definition = previous.definition.copy(patches = previous.definition.patches + changes.map { (id, enabled) ->
                 if (enabled) ProfileOperation.Enable(id) else ProfileOperation.Disable(id)
@@ -834,7 +836,7 @@ class KcodePluginRuntime private constructor(
     ): ProfileCompositionState {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
-        return lock.withLock {
+        return compositionLock {
             requireOperational()
             val activation = checkNotNull(activeProfile) { "Runtime has no active Profile" }
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
@@ -871,9 +873,9 @@ class KcodePluginRuntime private constructor(
     private suspend fun tryReplaceProfileModule(packageId: String, replacement: KcodePluginMount): Boolean {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
-        return lock.withLock {
+        return compositionLock {
             requireOperational()
-            val activation = activeProfile ?: return@withLock false
+            val activation = activeProfile ?: return@compositionLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             replaceProfileModuleLocked(activation, packageId, replacement)
             true
@@ -955,7 +957,19 @@ class KcodePluginRuntime private constructor(
 
     private fun dynamic(): DynamicPluginController = checkNotNull(external) { "this host has no dynamic artifact loader" }
 
-    private suspend fun <T> useAgent(block: suspend (ChatService) -> T): T {
+    internal suspend fun pauseProductExecution(cancelActive: Boolean) = execution.pause(cancelActive)
+
+    internal suspend fun requireOutsideExecution() = execution.requireOutsideCall()
+
+    internal suspend fun resumeProductExecution() = execution.resume()
+
+    private suspend fun <T> compositionLock(block: suspend () -> T): T = lock.withLock {
+        execution.pause(cancelActive = false)
+        try { block() }
+        finally { withContext(NonCancellable) { execution.resume() } }
+    }
+
+    private suspend fun <T> useAgent(block: suspend (ChatService) -> T): T = execution.run {
         val job = checkNotNull(currentCoroutineContext()[Job])
         val service = lock.withLock {
             requireOperational()
@@ -963,7 +977,7 @@ class KcodePluginRuntime private constructor(
             context.require(KcodeAgents.Key).chatService.also { turns[job] = (turns[job] ?: 0) + 1 }
         }
         try {
-            return block(service)
+            block(service)
         } finally {
             withContext(NonCancellable) {
                 lock.withLock {
@@ -1020,7 +1034,7 @@ class KcodePluginRuntime private constructor(
     private suspend fun mutate(prepare: suspend () -> Unit = {}, block: suspend () -> Unit) {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
-        lock.withLock {
+        compositionLock {
             requireOperational()
             check(activeProfile == null) { "Declarative Profile changes require a Profile transaction" }
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
@@ -1263,6 +1277,7 @@ class KcodePluginRuntime private constructor(
     override suspend fun close() {
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
+        execution.requireOutsideCall()
         val callerContext = currentCoroutineContext()
         check(callerContext[ClosingRuntime]?.runtime !== this) { "runtime cleanup cannot close its own runtime" }
         val currentJob = callerContext[Job]
@@ -1285,6 +1300,7 @@ class KcodePluginRuntime private constructor(
         }
         withContext(NonCancellable + ClosingRuntime(this)) {
             try {
+                execution.retire()
                 plan.turns.forEach { it.cancel() }
                 plan.turns.forEach { it.join() }
                 var failure: Throwable? = null
@@ -1452,12 +1468,17 @@ class KcodePluginRuntime private constructor(
             val bootstrap = mutableListOf<Fiber<*>>()
             val records = linkedMapOf<String, ManagedPlugin>()
             var external: DynamicPluginController? = null
+            var startupExecution: ProductExecutionAdmission? = null
             try {
                 bootstrap += context.plugin(PluginInventoryServicePlugin, Unit).await()
                 val inventory = context.require(KcodePluginInventory.Key)
                 inventory.publish(builtinDescriptor("core.plugin-inventory", "pluginInventory"))
                 bootstrap += context.plugin(LoaderPlugin, LoaderConfig()).await()
                 inventory.publish(builtinDescriptor("core.loader", "loader"))
+                val execution = ProductExecutionAdmission()
+                startupExecution = execution
+                context.effect("product execution admission") { collect { execution.retire() } }
+                KcodeExecution(context.root, execution)
                 mounts.forEach { (id, mount) ->
                     val record = ManagedPlugin(mount, id !in config.profile.disabled)
                     records[id] = record
@@ -1486,6 +1507,7 @@ class KcodePluginRuntime private constructor(
                 val entries = context[Loader.Key]?.store?.values?.toList().orEmpty()
                 val owner = AgentRuntimeOwner {
                     releaseStartupResources(
+                        { startupExecution?.retire() },
                         { retireProfileEntries(entries) },
                         { external?.close() },
                         { context.fiber.dispose() },

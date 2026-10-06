@@ -10,6 +10,7 @@ import ai.meteor.kcode.localization.AppLanguage
 import ai.meteor.kcode.localization.LocalizedText
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.plugin.api.KcodeAgents
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.KcodeConversationExecution
 import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.plugin.api.KcodeGoals
@@ -35,6 +36,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
@@ -90,6 +95,7 @@ object ScheduleDispatchPlugin : Plugin<Unit> {
         val llm = ctx.require(KcodeLlm.Key)
         val chat = ctx.require(KcodeAgents.Key).chatService
         val generation = ctx.require(KcodeGeneration.Key).runner
+        val admission = ctx.root[KcodeExecution.Key]?.admission
 
         suspend fun text(committed: StoredAppSettings, key: LocalizedText, vararg arguments: Any): String {
             val catalog = localization()?.catalog
@@ -176,7 +182,24 @@ object ScheduleDispatchPlugin : Plugin<Unit> {
                     conversations.load()
                     if (!conversations.isLoaded) delay(5_000)
                 }
-                coordinator.run { task -> owner.run { dispatch(task) } }
+                coordinator.run { task ->
+                    try {
+                        // Cancelling a due operation must not retire a retained scheduler loop.
+                        supervisorScope {
+                            async {
+                                owner.run {
+                                    if (admission == null) dispatch(task)
+                                    else admission.run { dispatch(task) }
+                                }
+                            }.await()
+                        }
+                    } catch (cancelled: CancellationException) {
+                        // Withdrawal still cancels this parent. A rejected/cancelled child leaves
+                        // the due task pending, including when Profile preparation later fails.
+                        currentCoroutineContext().ensureActive()
+                        false
+                    }
+                }
             }
         }
     }

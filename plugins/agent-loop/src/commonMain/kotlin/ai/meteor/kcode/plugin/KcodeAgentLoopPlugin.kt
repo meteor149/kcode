@@ -17,6 +17,8 @@ import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.plugin.api.AgentTurnFinished
 import ai.meteor.kcode.plugin.api.AgentTurnStarted
 import ai.meteor.kcode.plugin.api.KcodeAgentEvents
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.KcodeAgents
 import ai.meteor.kcode.plugin.api.KcodeConversationOverlays
 import ai.meteor.kcode.plugin.api.KcodeInteraction
@@ -80,6 +82,7 @@ object KoogAgentLoopPlugin : Plugin<Unit> {
                     conversationOverlayProvider = { overlays()?.current() },
                 ),
                 owner = owner,
+                admission = ctx.root[KcodeExecution.Key]?.admission,
             ),
         )
     }
@@ -88,9 +91,14 @@ object KoogAgentLoopPlugin : Plugin<Unit> {
 internal class OwnedAgentChatService(
     private val delegate: ChatService,
     private val owner: PluginOperationOwner,
+    private val admission: ExecutionAdmission? = null,
 ) : ChatService {
+    private suspend fun <T> execute(block: suspend () -> T): T = owner.run {
+        if (admission == null) block() else admission.run(block)
+    }
+
     override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String =
-        owner.run { delegate.reply(configuration, history, prompt) }
+        execute { delegate.reply(configuration, history, prompt) }
 
     override suspend fun replyStreaming(
         configuration: ModelConfiguration,
@@ -102,7 +110,7 @@ internal class OwnedAgentChatService(
         onToolUse: suspend (ToolUseEvent) -> Unit,
         onSubAgent: suspend (SubAgentEvent) -> Unit,
         onDelta: suspend (String) -> Unit,
-    ): String = owner.run {
+    ): String = execute {
         delegate.replyStreaming(
             configuration, history, prompt, goalSession, scheduledTaskSession,
             scheduledTaskCompletionSession, onToolUse, onSubAgent, onDelta,

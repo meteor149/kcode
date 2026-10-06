@@ -160,3 +160,31 @@ Develop coherent phases, run affected checks at their boundary, and commit conci
 Commit messages. Final shared changes require shared tests plus Desktop compilation and Android
 assembly. Keep both root READMEs aligned and record entry points/configuration in module READMEs.
 Link English topic guides through the [documentation index](README.md).
+
+
+## Product execution admission (SDK 75)
+
+Native runtime coordination publishes `KcodeExecution` independently of the selected product.
+It is a shared SDK identity covered by `PluginHostApiPackages`, not a scheduler, model provider
+or reserved Harness service. Providers that launch autonomous execution must enter
+`KcodeExecution.admission.run` before allocating execution resources and remain inside it
+until their owned child work and cleanup have settled. Never retain work outside that scope
+or shadow this coordination service with a product implementation.
+
+The shipped agent provider, generation runner and schedule dispatch capture this boundary
+from `ctx.root` at allocation, independently of product service realms. Direct
+plugin calls to the agent service and scheduled/history generation tasks therefore participate
+in runtime composition checks, independently of the native host facade. Koog continuations
+and in-process subagents remain structured children of the admitted agent operation. Providers
+used outside a managed runtime retain their own allocation/operation ownership contracts.
+
+Composition updates pause admission while validating, replacing and publishing. Active work
+requires finishing first. Whole-runtime Profile switching can explicitly cancel active work;
+cancellation joins its cleanup before target preparation/allocation proceeds. Retiring a
+runtime permanently closes its boundary, so stale references cannot reopen execution.
+Startup/candidate publication and other autonomous command/provider routes require their own
+acceptance coverage; this contract does not make arbitrary detached plugin work owned.
+
+Schedule rejection/cancellation returns false before accepting a due task. Dispatch runs in a
+supervised child, so cancelling it does not permanently stop a scheduler retained after failed
+Profile preparation. Provider withdrawal cancels the parent and continues to join all cleanup.

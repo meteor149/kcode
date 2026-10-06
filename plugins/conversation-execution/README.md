@@ -69,3 +69,6 @@ The release-owned schemas under "src/profile-export" declare portable configurat
 Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
 unless the corresponding schema explicitly permits them. Machine bindings and persisted
 credentials are outside these configuration declarations.
+
+
+The generation provider captures root-context `KcodeExecution`. A denied launch cancels without running the body or requesting background execution allowance. Admission and active-task accounting include structured child work and cleanup; finish or explicitly cancel/join work before composition changes.

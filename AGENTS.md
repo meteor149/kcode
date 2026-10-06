@@ -19,7 +19,7 @@ Keep shared code in `commonMain` and platform implementations in the narrowest s
 - Own asynchronous operations explicitly, using `PluginOperationOwner` where appropriate. Withdrawal cancels and joins owned work before releasing resources. Distinguish borrowed from owned resources, clean up partial allocations, and attempt all releases even when one fails. Callbacks must not unload their own provider or close their runtime.
 - Install, replace, enable, disable, and uninstall through `AgentPluginManager`; do not bypass composition persistence through the Loader. Finish or cancel active agent turns before changing the plugin composition. Failed preparation or manifest publication must restore the committed composition.
 - External desktop JARs and Android APK/dex packages share only exported SDK/framework identities from `PluginHostApiPackages`; implementations and private dependencies remain independently loaded. External resources come from their verified deployment graph, never a host APK fallback.
-- `CurrentPluginApiVersion` in `AgentPluginManager.kt` is the ABI authority (currently 72). Public ABI changes require reviewing shared exports, versioning, package tests, and documentation; a matching version alone does not prove compiler or binary compatibility.
+- `CurrentPluginApiVersion` in `AgentPluginManager.kt` is the ABI authority (currently 75). Public ABI changes require reviewing shared exports, versioning, package tests, and documentation; a matching version alone does not prove compiler or binary compatibility.
 - Harness APIs marked reserved in [the reserved API guide](docs/harness-reserved-api.md) have no providers. Do not publish placeholder services that claim unsupported capabilities.
 
 ## Build and Test Commands

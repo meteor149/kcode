@@ -27,7 +27,7 @@ import org.cordis.plugin
 
 class GenerationCompositionTest {
     @Test
-    fun actualJarOwnsAndJoinsGenerationAcrossDisableRestoreAndUninstall(): Unit = runBlocking {
+    fun actualJarRequiresGenerationCleanupBeforeDisableRestoreAndUninstall(): Unit = runBlocking {
         val directory = Files.createTempDirectory("generation-owned-jar").toFile()
         val artifact = File(directory, "generation.jar")
         File(GenerationProviderPlugin::class.java.protectionDomain.codeSource.location.toURI()).copyTo(artifact)
@@ -70,11 +70,14 @@ class GenerationCompositionTest {
                 }
             }
             assertEquals(1, original.activeTasks.value)
-            val withdrawal = async { runtime.pluginManager.setEnabled("provider.generation", false) }
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("provider.generation", false) }
+            val cancellation = async { original.cancelAll(); response.join() }
             withTimeout(5_000) { cleanupEntered.await() }
-            assertFalse(withdrawal.isCompleted)
+            assertFalse(cancellation.isCompleted)
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("provider.generation", false) }
             releaseCleanup.complete(Unit)
-            withTimeout(5_000) { withdrawal.await(); response.join() }
+            withTimeout(5_000) { cancellation.await() }
+            runtime.pluginManager.setEnabled("provider.generation", false)
             assertTrue(response.isCancelled)
             assertEquals(0, original.activeTasks.value)
             assertFailsWith<IllegalStateException> { original.launch { error("retired task admitted") } }

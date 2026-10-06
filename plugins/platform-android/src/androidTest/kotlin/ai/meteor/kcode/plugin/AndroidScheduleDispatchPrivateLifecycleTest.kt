@@ -1,5 +1,6 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.KcodeAgentRuntime
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.GoalSession
 import ai.meteor.kcode.chat.ScheduledTaskCompletionSession
@@ -51,6 +52,78 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AndroidScheduleDispatchPrivateLifecycleTest {
+    @Test(timeout = 60000)
+    fun actualApkRejectsDueWorkDuringPreparationAndRetainedLoopRetriesAfterFailure(): Unit = runBlocking {
+        val queue = Channel<Pair<ScheduledTask, CompletableDeferred<Boolean>>>(Channel.UNLIMITED)
+        val coordinator = object : ScheduledTaskCoordinator {
+            override fun sessionFor(conversationId: Long, title: String): ScheduledTaskSession? = null
+            override fun notifyChanged() = Unit
+            override suspend fun run(onDue: suspend (ScheduledTask) -> Boolean) {
+                for ((task, accepted) in queue) accepted.complete(onDue(task))
+            }
+        }
+        var replies = 0
+        val chat = object : ChatService {
+            override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = error("Streaming expected")
+            override suspend fun replyStreaming(
+                configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String,
+                goalSession: GoalSession?, scheduledTaskSession: ScheduledTaskSession?,
+                scheduledTaskCompletionSession: ScheduledTaskCompletionSession?,
+                onToolUse: suspend (ToolUseEvent) -> Unit, onSubAgent: suspend (SubAgentEvent) -> Unit,
+                onDelta: suspend (String) -> Unit,
+            ): String {
+                replies++
+                requireNotNull(scheduledTaskCompletionSession).complete("result")
+                return "process"
+            }
+        }
+        val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "private-schedule-profile-admission-${System.nanoTime()}").apply { mkdirs() }
+        lateinit var services: Context
+        val runtime = runtime(directory, coordinator, chat) { services = it }
+        val preparing = CompletableDeferred<Unit>()
+        val finishPreparation = CompletableDeferred<Unit>()
+        val host = KcodeProfileHost(KcodeAgentRuntime(chatService = runtime.chatService, owner = runtime),
+            "native", ProfileRuntimeFactory {
+                preparing.complete(Unit)
+                finishPreparation.await()
+                throw IllegalArgumentException("Rejected preparation")
+            })
+        val ui = services.require(KcodeSessions.Key).factory.create(CoroutineScope(coroutineContext))
+        try {
+            ui.load()
+            val provider = services.require(KcodeLlm.Key).catalog().providers.first()
+            services.require(KcodeSettings.Key).store.save(services.require(KcodeModelSettings.Key).policy.update(
+                StoredAppSettings(), ModelConfiguration(provider.provider, provider.models.first().id, "fixture", 0.4),
+            ))
+            runtime.pluginManager.replace(importSpec(directory))
+            suspend fun trigger(): Boolean {
+                val accepted = CompletableDeferred<Boolean>()
+                queue.send(task("retained") to accepted)
+                return withTimeout(5_000) { accepted.await() }
+            }
+            val switching = async {
+                assertFailsWith<IllegalArgumentException> { host.switchTo("rejected") }
+            }
+            withTimeout(5_000) { preparing.await() }
+            assertFalse(trigger())
+            assertEquals(0, replies)
+            assertTrue(services.require(ai.meteor.kcode.plugin.api.KcodeHistory.Key).repository.loadAll().isEmpty())
+            finishPreparation.complete(Unit)
+            switching.await()
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            assertTrue(trigger())
+            withTimeout(5_000) { while (ui.floatingConversations.size != 1) delay(10) }
+            assertEquals(1, replies)
+        } finally {
+            finishPreparation.complete(Unit)
+            ui.close()
+            host.close()
+            queue.close()
+            directory.walkBottomUp().forEach { it.setWritable(true); it.delete() }
+        }
+    }
+
+
     @Test(timeout = 60000)
     fun actualApkWithdrawalJoinsHeadlessLoopRejectsStaleCallbackAndRecoversOnce(): Unit = runBlocking {
         val entered = CompletableDeferred<Unit>()
@@ -205,13 +278,21 @@ class AndroidScheduleDispatchPrivateLifecycleTest {
             queue.send(task("cancelled") to accepted)
             assertTrue(withTimeout(5_000) { accepted.await() })
             withTimeout(5_000) { entered.await() }
-            val withdrawing = async { runtime.pluginManager.setEnabled(DispatchId, false) }
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled(DispatchId, false) }
+            val host = KcodeProfileHost(KcodeAgentRuntime(chatService = runtime.chatService, owner = runtime),
+                "native", ProfileRuntimeFactory { throw IllegalArgumentException("Rejected preparation") })
+            val cancelling = async {
+                assertFailsWith<IllegalArgumentException> { host.switchTo("rejected", cancelActive = true) }
+            }
             withTimeout(5_000) { cleaning.await() }
-            assertFalse(withdrawing.isCompleted)
+            assertFalse(cancelling.isCompleted)
             release.complete(Unit)
-            withTimeout(5_000) { withdrawing.await() }
+            withTimeout(5_000) { cancelling.await() }
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            runtime.pluginManager.setEnabled(DispatchId, false)
             assertTrue(ui.floatingConversations.isEmpty())
             assertTrue(services.require(ai.meteor.kcode.plugin.api.KcodeHistory.Key).repository.loadAll().none { it.title == "cancelled" })
+            host.close()
         } finally {
             release.complete(Unit)
             ui.close()
