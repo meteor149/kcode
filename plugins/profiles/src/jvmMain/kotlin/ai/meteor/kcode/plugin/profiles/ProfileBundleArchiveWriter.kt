@@ -34,6 +34,25 @@ class ProfileBundleArchiveWriter {
         // Freeze caller collections before the first suspension. Layers need not compile in isolation.
         val bytes = Json.encodeToString(ProfileBundle.serializer(), bundle).toByteArray(Charsets.UTF_8)
         require(bundle.formatVersion == 1 && bytes.size <= ProfileBundleDefinitionByteLimit) { "Invalid/oversized Bundle definition" }
+        return ProfileDataArchiveWriter().pack(bytes, bundle.id, bundle.version, "bundle.json",
+            ProfileBundleArchiveRuntime, ProfileBundleArchiveExtension, code, targets, output)
+    }
+}
+
+/** Shared transport writer; callers own definition semantics and export authorization. */
+internal class ProfileDataArchiveWriter {
+    suspend fun pack(
+        bytes: ByteArray,
+        id: String,
+        version: String,
+        entry: String,
+        runtime: String,
+        extension: String,
+        code: List<ProfileBundleArchiveInput>,
+        targets: List<PackageTarget>,
+        output: File,
+    ): String {
+        require(bytes.size <= ProfileBundleDefinitionByteLimit) { "Profile exchange document is too large" }
         val frozenTargets = Json.decodeFromString(ListSerializer(PackageTarget.serializer()),
             Json.encodeToString(ListSerializer(PackageTarget.serializer()), targets))
         val inputs = code.map { it.copy() }
@@ -47,7 +66,7 @@ class ProfileBundleArchiveWriter {
             try {
                 interruptibleBundleIo {
                     val archives = PluginPackageArchive(limits)
-                    val definition = File(payload, "bundle.json").apply { writeBytes(bytes) }
+                    val definition = File(payload, entry).apply { writeBytes(bytes) }
                     var totalBytes = bytes.size.toLong()
                     val releases = inputs.map { input ->
                         operation.ensureActive()
@@ -77,13 +96,13 @@ class ProfileBundleArchiveWriter {
                     }.sortedBy { it.first.id }
                     require(releases.map { it.first.id }.distinct().size == releases.size) { "Conflicting code package identities" }
                     val manifest = PluginPackageManifest(
-                        id = bundle.id,
-                        version = bundle.version,
+                        id = id,
+                        version = version,
                         dependencies = releases.map { PackageDependency(it.first.id, it.first.version) },
                         variants = listOf(PackageVariant("data", frozenTargets,
-                            PackageRuntime(ProfileBundleArchiveRuntime, "bundle.json", "1"), "bundle.json")),
-                        files = listOf(PackageFile("bundle.json", definition.length(), packageFileSha256(definition))) + releases.map { it.second },
-                        extensions = JsonObject(mapOf(ProfileBundleArchiveExtension to Json.encodeToJsonElement(
+                            PackageRuntime(runtime, entry, "1"), entry)),
+                        files = listOf(PackageFile(entry, definition.length(), packageFileSha256(definition))) + releases.map { it.second },
+                        extensions = JsonObject(mapOf(extension to Json.encodeToJsonElement(
                             ProfileBundleArchiveMetadata.serializer(), ProfileBundleArchiveMetadata(packages = releases.map {
                                 ProfileBundleArchiveCode(it.first.id, it.second.path)
                             }),

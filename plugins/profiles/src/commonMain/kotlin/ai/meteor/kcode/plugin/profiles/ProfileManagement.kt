@@ -117,7 +117,21 @@ class ProfileManagement private constructor(
         target: ProfileTarget,
         review: ProfileExportReview? = null,
         expectedRevision: Long? = null,
-    ): String {
+    ): String = withPortableExport(target, review, expectedRevision) { text, _ -> text }
+
+    /** Native archive exporters cannot supply approvals; they receive the exact reviewed generation. */
+    internal suspend fun <T> preparePortableExport(
+        target: ProfileTarget,
+        expectedRevision: Long,
+        consume: suspend (String, CommittedProfileGeneration) -> T,
+    ): T = withPortableExport(target, null, expectedRevision, consume)
+
+    private suspend fun <T> withPortableExport(
+        target: ProfileTarget,
+        review: ProfileExportReview?,
+        expectedRevision: Long?,
+        consume: suspend (String, CommittedProfileGeneration) -> T,
+    ): T {
         require(target.source != ProfileSource.Draft) { "Activate a draft before exporting its verified package recipe" }
         val revision = repository.state().revision
         require(expectedRevision == null || expectedRevision == revision) { "Profile repository changed; refresh before exporting" }
@@ -125,7 +139,9 @@ class ProfileManagement private constructor(
         val selected = review ?: exportReviews?.create(source) ?: exportReview
         val text = ProfilePortableExporter(selected).export(source)
         check(repository.state().revision == revision) { "Profile repository changed; refresh before exporting" }
-        return text
+        val result = consume(text, source)
+        check(repository.state().revision == revision) { "Profile repository changed; refresh before exporting" }
+        return result
     }
 
     suspend fun remove(id: String, expectedRevision: Long): ProfileCatalogue {

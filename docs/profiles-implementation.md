@@ -1122,3 +1122,28 @@ and app integration, corrupt authority repair, failure before catalogue construc
 bundled-package staging, verified Bundle import, credential-safe export, autonomous-work
 admission audit, device evidence and full platform acceptance remain outstanding.
 The overall goal remains active.
+
+## Committed Profile archive backend
+
+`ProfileArchiveExchange` now exports host-reviewed committed/historical generations with frozen
+ordered Bundle layers and exact code archives. Import verifies the container and native code
+before rebuilding the target variant/ABI lock. Code IDs, versions, digests and dependencies
+remain fixed. It returns isolated portable intent without draft publication or product allocation.
+Pure JSON exchange keeps strict source variant/ABI checks. The shared data writer serves both
+Bundle and complete Profile containers. Plugin API remains 73; complete archive SDK commands
+and native picker actions are not yet wired.
+
+Concentrated validation passed 71 Profile desktop tests and one actual native JAR archive test,
+with zero failures, errors or skips. Both applications compiled/assembled and the Android
+instrumentation APK assembled. An additional native JAR check repacked a valid outer container
+with false source code-version declarations and confirmed refusal. Physical Android execution
+of the actual Desktop-exported two-Bundle archive passed one test (`OK (1 test)`, instrumentation
+code -1): exact code identities were retained, a distinct Android variant was verified, draft
+publication remained separate, source/outer files were removed, and the host started the real
+APK and exported frozen intent. Logs: `profile-archive-validation.log`,
+`profile-archive-native-identity-validation.log`, `profile-archive-android-validation.log` and
+`profile-archive-device-validation.log` (local ignored evidence, not distributed artifacts).
+
+This proves the native backend and this cross-host transfer. Complete archive management/UI
+commands, selected-file OS picker acceptance, additional feature export schemas, early startup
+recovery and the full execution-admission audit remain outstanding. The overall goal remains active.

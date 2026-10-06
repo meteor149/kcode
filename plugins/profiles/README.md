@@ -1,5 +1,11 @@
 # Profiles
 
+`ProfileArchiveExchange` exports reviewed committed/historical intent with exact code archives
+and prepares imports using the target host's verified native variant. Ordered frozen Bundles
+and user operations survive transfer. Preparation publishes no metadata and allocates no
+product providers. This backend is not yet connected to SDK commands/file UI; API remains 73.
+See [committed archives](../../docs/profile-archives.md).
+
 `ProfileBundleArchiveWriter` and the Desktop `packProfileBundle` Gradle task generate
 Bundle containers from definitions, declared targets and verified code archives. Temporary
 code snapshots are bounded and input ordering does not change deterministic code metadata.

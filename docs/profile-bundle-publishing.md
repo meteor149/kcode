@@ -107,5 +107,5 @@ Real Desktop JAR and physical Android APK cases use the writer to publish archiv
 through Profile management, remove input/outer deployments, restart from frozen intent and
 native caches, and export through verified feature policies. These establish the publishing
 API/native import boundary. They do not establish selected-file acceptance in an OS picker.
-Self-contained committed Profile archive export and cross-platform exact-lock adaptation also
-remain outstanding.
+Self-contained committed Profile export and verified target-host lock rebuilding now have a
+separate [archive backend](profile-archives.md); its SDK/file UI connection remains outstanding.

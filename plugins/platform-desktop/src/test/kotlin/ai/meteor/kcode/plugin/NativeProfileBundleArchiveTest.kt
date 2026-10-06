@@ -7,6 +7,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
+import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
@@ -21,6 +22,9 @@ import ai.meteor.kcode.plugin.profiles.ProfileBundleArchive
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveCode
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveWriter
+import ai.meteor.kcode.plugin.profiles.ProfileArchiveExchange
+import ai.meteor.kcode.plugin.profiles.ProfileManagement
+import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveExtension
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveMetadata
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveRuntime
@@ -163,6 +167,57 @@ class NativeProfileBundleArchiveTest {
                         ProfilePortableExport(ProfileTarget("imported"), catalogue.revision)))
                     assertEquals(listOf(bundle, overlay), exported.bundles)
                     assertEquals(listOf("feature.localization"), exported.lock.packages.map { it.id })
+                    if (it == 1) {
+                        val resolver = NativePluginPackageResolver(packages, host)
+                        val management = ProfileManagement(repository, { emptyList() },
+                            ProfilePackageExportReviews(resolver::profileExportSchema)) { error("Export cannot activate") }
+                        val fixture = File("build/profile-archive-fixture/desktop.kprofile").absoluteFile
+                        val beforeExport = repository.state()
+                        val generation = requireNotNull(repository.loadCommitted("imported")).generation
+                        val digest = ProfileArchiveExchange(packages, host, resolver).export(management,
+                            ProfileTarget("imported", ProfileSource.History, generation), beforeExport.revision, fixture)
+                        assertEquals(beforeExport, repository.state())
+                        File(fixture.parentFile, "desktop.sha256").writeText(digest)
+                        val receiver = File(home, "receiver")
+                        val receiverPackages = File(receiver, "plugins")
+                        val prepared = ProfileArchiveExchange(receiverPackages, host,
+                            NativePluginPackageResolver(receiverPackages, host))
+                            .prepare(ProfileBundleArchiveInput(fixture, digest), "copy", "Copy")
+                        assertEquals(listOf(bundle, overlay), prepared.bundles)
+                        assertEquals(exported.definition.patches, prepared.definition.patches)
+                        assertEquals(exported.lock, prepared.lock)
+                        // A valid outer digest must not authorize a false identity for actual embedded code.
+                        val alteredSource = PluginPackageArchive().deploy(fixture, digest, File(home, "altered-source"))
+                        val alteredDefinition = File(alteredSource.directory, "payload/profile.json")
+                        alteredDefinition.writeText(Json.encodeToString(exported.copy(lock = exported.lock.copy(
+                            packages = exported.lock.packages.map { locked -> locked.copy(version = "0.0.0") },
+                        ))))
+                        val alteredHash = packageFileSha256(alteredDefinition)
+                        val alteredArchive = File(home, "false-code-identity.kprofile")
+                        val alteredDigest = PluginPackageArchive().pack(alteredSource.manifest.copy(
+                            id = "profile.$alteredHash",
+                            dependencies = alteredSource.manifest.dependencies.map { dependency -> dependency.copy(version = "0.0.0") },
+                            files = alteredSource.manifest.files.map { record ->
+                                if (record.path == "profile.json") record.copy(size = alteredDefinition.length(), sha256 = alteredHash) else record
+                            },
+                        ), File(alteredSource.directory, "payload"), alteredArchive)
+                        assertFailsWith<IllegalArgumentException> {
+                            ProfileArchiveExchange(receiverPackages, host, NativePluginPackageResolver(receiverPackages, host))
+                                .prepare(ProfileBundleArchiveInput(alteredArchive, alteredDigest), "false")
+                        }
+                        val receiverRepository = FileProfileRepository(File(receiver, "profiles"))
+                        ProfileManagement(receiverRepository, { emptyList() }) { error("Import cannot activate") }
+                            .importPortable(Json.encodeToString(prepared), "copy", "Copy", receiverRepository.state().revision)
+                        assertNull(receiverRepository.loadCommitted("copy"))
+                        assertTrue(File(receiverPackages, "profile-archives").deleteRecursively())
+                        val copied = createDesktopProfileHost(homeDirectory = receiver.toPath(), profileId = "copy")
+                        try {
+                            copied.state.value.failure?.let { failure -> throw failure }
+                            assertEquals(ProfileHostPhase.Ready, copied.state.value.phase)
+                            val copiedPreview = assertNotNull(copied.profileCommands).preview(ProfileTarget("copy"))
+                            assertEquals(preview.entries, copiedPreview.entries)
+                        } finally { copied.close() }
+                    }
                 } finally { runtime.close() }
             }
         } finally { home.deleteRecursively() }

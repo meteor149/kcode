@@ -7,7 +7,7 @@ SDK 73 exposes `ProfileManagementClient.importBundles(ProfileBundleImport(...))`
 the host and the owned Cordis bridge. The optional Profile screen has a separate Bundle
 archive action; its JSON import/export actions retain their document format. A shipping
 archive builder is available through [publishing tooling](profile-bundle-publishing.md);
-self-contained committed Profile archive export remains outstanding.
+self-contained committed Profile exchange has a separate [native backend](profile-archives.md).
 
 ## Format
 
@@ -100,8 +100,8 @@ does not download missing releases or recover them from host application resourc
 
 Portable JSON export retains frozen Bundle/code intent and applies the generation's verified
 feature export rules. It does not embed code archives. A prepared lock is native-host specific;
-cross-platform exact-lock adaptation and a self-contained exported archive are not implemented
-by this preparation API.
+cross-platform lock adaptation and self-contained export belong to the separate committed
+Profile archive backend, not this Bundle preparation API.
 
 ## Verification
 

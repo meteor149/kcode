@@ -9,5 +9,7 @@
   embedded native code, ordered preparation and current exchange limits.
 - [Publishing Profile Bundles](profile-bundle-publishing.md): writer API, Gradle command,
   author inputs, deterministic output and native import boundaries.
+- [Committed Profile archives](profile-archives.md): frozen layers, exact embedded code,
+  reviewed export and verified target-host deployment locks.
 - [Profile implementation](profiles-implementation.md): ownership, implementation phases,
   verification evidence and remaining work.
