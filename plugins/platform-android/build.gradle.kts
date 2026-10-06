@@ -47,6 +47,11 @@ tasks.matching { it.name == "mergeDebugAndroidTestAssets" }.configureEach {
     dependsOn(stageBundledTestPackages)
 }
 
+// AGP lint tasks read generated main and test assets as well as merged assets.
+tasks.matching { it.name.contains("lint", ignoreCase = true) }.configureEach {
+    dependsOn(":stageBundledPlugins", stageNativeExecutionTestApk, stageBundledTestPackages)
+}
+
 kotlin {
     jvmToolchain(21)
     compilerOptions {
