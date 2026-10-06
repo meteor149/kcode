@@ -33,6 +33,7 @@ java {
 
 dependencies {
     implementation(project(":plugins:api"))
+    implementation(project(":plugins:profile-recovery-ui"))
     implementation(project(":plugins:platform-desktop"))
     implementation(compose.desktop.currentOs)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")

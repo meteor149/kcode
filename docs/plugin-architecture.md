@@ -19,6 +19,10 @@ KcodeProfiles management service. It owns presentation sessions and resource def
 accepted composition commands remain host-owned across withdrawal. Alternative roots and
 independent recovery entry points do not depend on this package.
 
+The native applications link `plugins/profile-recovery-ui` outside the product tree. It uses
+host-owned Profile metadata/commands and independent XML text defaults when product startup
+fails. Normal roots render directly; only recovery/transitions use the shared UI design defaults.
+
 Package IDs identify available code. Entry IDs identify configured instances. Multiple
 instances may borrow one release export while retaining independent configuration, context,
 effects and disposers. Group entries preserve parent contexts and service isolation. Package

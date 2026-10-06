@@ -212,9 +212,12 @@ internal class DesktopDynamicPluginController(
         }
     }
 
-    override suspend fun uninstall(id: String) {
+    override suspend fun uninstall(id: String) = uninstallOwned(id, allowRetiredEntry = false)
+
+    private suspend fun uninstallOwned(id: String, allowRetiredEntry: Boolean) {
         require(id in specs) { "plugin '$id' is not installed" }
-        loader.remove(entryId(id))
+        // Runtime closure may already have retired every tracked entry before releasing code.
+        if (!allowRetiredEntry || loader.store.containsKey(entryId(id))) loader.remove(entryId(id))
         modules.release(id)
         modules.unregister(id)
         configuredModules.forget(modules.moduleUrl(id))
@@ -277,7 +280,7 @@ internal class DesktopDynamicPluginController(
         }
         specs.keys.toList().asReversed().forEach { id ->
             try {
-                uninstall(id)
+                uninstallOwned(id, allowRetiredEntry = true)
             } catch (error: Throwable) {
                 if (failure == null) failure = error else failure.addSuppressed(error)
             }

@@ -5,7 +5,7 @@ import android.content.IntentFilter
 import android.content.Intent
 import android.content.Context
 import android.content.BroadcastReceiver
-import ai.meteor.kcode.createAndroidKoogChatRuntime
+import ai.meteor.kcode.plugin.recovery.ProfileHostContent
 import ai.meteor.kcode.plugin.api.AndroidPermissionRequestBroker
 import ai.meteor.kcode.plugin.api.AndroidConfirmationDialogHost
 import android.graphics.Color
@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
             var pendingRuntime: KcodeAgentRuntime? = null
             var adopted = false
             try {
-                val runtime = createAndroidKoogChatRuntime(
+                val host = createAndroidProfileHost(
                     profileId = intent?.getStringExtra("profile"),
                     activity = this@MainActivity,
                     settingsBackedShell = true,
@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
                     settingsBackedInteraction = true,
                     confirmationDialogs = confirmationDialogs,
                 )
+                val runtime = host.runtime
                 pendingRuntime = runtime
                 currentCoroutineContext().ensureActive()
                 runtime.conversationOverlayController?.setHostForeground(
@@ -91,11 +92,12 @@ class MainActivity : ComponentActivity() {
                 adopted = true
                 ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
                 setContent {
-                    checkNotNull(agentRuntime.applicationContent).Render(
+                    ProfileHostContent(host,
                         ApplicationHostOptions(
                             shellSettingsAvailable = true,
                             conversationSettingsControlsAvailable = true,
                         ),
+                        resources.configuration.locales[0].language,
                     )
                 }
             } finally {

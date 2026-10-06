@@ -22,8 +22,13 @@ and FileProvider components. Core's legacy `android.support` binder/parcelizer c
 already use the Android host namespace; their corresponding Core/Parcelable types must
 retain the same host identity.
 
-This shared boundary is Plugin API 70; older
+This shared boundary is Plugin API 71; older
 external packages must be rebuilt against its generated SDK ABI.
+
+API 71 adds `KcodeDefaultDesignTokens` in the existing shared `ai.meteor.kcode.ui.design`
+boundary. The reusable UI library now owns these defaults; both the default theme and the
+independent native recovery surface consume them. Package exports retain the same shared
+namespace, and externally loaded packages require the regenerated API 71 fingerprint.
 
 API 65 exports portable Profile definitions, entries, bundle declarations and operations under
 `ai.meteor.kcode.plugin.api.profiles`. `AgentPluginManager.currentProfile` reads committed intent;

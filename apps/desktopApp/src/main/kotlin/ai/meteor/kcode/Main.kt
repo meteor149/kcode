@@ -1,5 +1,9 @@
 package ai.meteor.kcode
 
+import ai.meteor.kcode.plugin.recovery.ProfileHostContent
+import java.util.Locale
+import kotlinx.coroutines.runBlocking
+
 import androidx.compose.runtime.DisposableEffect
 import java.util.concurrent.atomic.AtomicReference
 import java.awt.Frame
@@ -24,7 +28,8 @@ fun main(args: Array<String>) {
         else -> error("Usage: kcode [--profile <id>]")
     }
     val applicationWindow = AtomicReference<Frame?>()
-    val runtime = createDesktopKoogChatRuntime(applicationWindow = applicationWindow::get, profileId = profileId)
+    val host = runBlocking { createDesktopProfileHost(applicationWindow = applicationWindow::get, profileId = profileId) }
+    val runtime = host.runtime
     application {
         val retirementScope = rememberCoroutineScope()
         val closing = remember { mutableStateOf(false) }
@@ -61,10 +66,11 @@ fun main(args: Array<String>) {
                 applicationWindow.set(window)
                 onDispose { applicationWindow.compareAndSet(window, null) }
             }
-            checkNotNull(runtime.applicationContent).Render(
+            ProfileHostContent(host,
                 ApplicationHostOptions(
                     conversationSettingsControlsAvailable = true,
                 ),
+                Locale.getDefault().language,
             )
         }
     }

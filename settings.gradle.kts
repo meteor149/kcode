@@ -108,3 +108,4 @@ include(":plugins:default-ui-api")
 include(":plugins:ui-profiles")
 
 include(":libraries:ui")
+include(":plugins:profile-recovery-ui")

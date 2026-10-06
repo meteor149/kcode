@@ -29,8 +29,8 @@ and overlay leases must finish first, or the caller must request `cancelActive =
 and join them. Target preflight precedes old-runtime withdrawal; failed allocation/publication
 reconstructs the old locked generation without rewriting history. Failed old closure or failed
 restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's admitted current
-runtime rather than a retained old owner. Each allocation receives fresh host inputs. Recovery UI
-remains pending. Native hosts also expose explicit activation through the SDK plugin manager.
+runtime rather than a retained old owner. Each allocation receives fresh host inputs.
+Native hosts also expose explicit activation through the SDK plugin manager.
 
 The suspending Profile-host factories retain host-owned management in RecoveryRequired when
 initial Profile preparation or product allocation fails after native catalogue construction.
@@ -42,8 +42,16 @@ Invalid native module-factory configuration remains a construction error.
 
 The compatibility createDesktopKoogChatRuntime/createAndroidKoogChatRuntime functions still
 require successful initial startup: they close a failed host and rethrow its startup failure.
-The shipped applications currently use those functions. Interactive startup recovery awaits
-their integration with an independent recovery UI. Failure before catalogue construction,
+The shipped applications use the suspending Profile-host factories and the host-linked
+`profile-recovery-ui` surface. Startup failures after catalogue construction show their cause,
+saved Profile choices and an editable JSON definition. Users can save/discard repairs, activate
+saved intent, or save and activate. Committed selections are read from their exact generation;
+drafts do not require compiling the broken tree. The surface preserves dirty write revisions
+and never queries product modules. Ready roots retain their own renderer and theme.
+The host surface's recovery/edit/activation flow and English/Chinese defaults were verified
+in an actual Android window on a physical ARM64/API 36 device under SDK 71. This targeted
+case does not establish desktop rendering or every touch/keyboard route.
+Failure before catalogue construction,
 bundled-package staging failure and repair of corrupt repository authority remain outstanding.
 
 In `RecoveryRequired`, host-owned catalogue/draft/clone/delete/preview/history commands remain

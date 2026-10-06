@@ -69,6 +69,7 @@ kotlin {
 
 dependencies {
     implementation(project(":plugins:api"))
+    implementation(project(":plugins:profile-recovery-ui"))
     implementation(project(":plugins:platform-android"))
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")

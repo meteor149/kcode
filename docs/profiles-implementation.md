@@ -1,5 +1,41 @@
 # Profile implementation
 
+## Native recovery surface phase
+
+Both shipped applications now use the suspending Profile-host factories and host-linked
+`profile-recovery-ui`. Ready hosts retain their own renderer/theme. Recovery shows the cause
+and optional full diagnostics, saved committed/draft choices, a JSON editor, save/discard,
+saved activation and save-and-activate. Its neutral session reads definitions without module
+resolution; it preserves dirty write revisions and rejects invalid JSON or changed identity.
+Accepted activation remains host-owned across UI transitions and observer cancellation.
+
+The reusable UI library now owns `KcodeDefaultDesignTokens`; the default theme aliases the
+same values. The independent recovery surface uses `KcodeTheme` with standard Material roles
+and private English/Chinese XML defaults. This adds a shared UI symbol within the existing
+exports and changes Plugin API to 71. Native package generation rebuilt the SDK/framework
+fingerprint and all shipped packages.
+
+Concentrated validation passed 56 local tests: 8 recovery-session cases, 43 SDK cases,
+4 native startup recovery cases and 1 real-JAR default UI case. Desktop compilation, Android
+application assembly and native Android test APK assembly passed.
+
+On a physical ARM64/API 36 device, all three selected instrumentation cases passed (runner
+reported `OK (3 tests)` and completion code -1): startup recovery through invalid JSON and
+successful repaired activation into an alternative rendered root; private default UI APK
+loading; and shipped private Profile settings rendering with unsaved-edit confirmation.
+Recovery text switched between English and Chinese, and screenshots were inspected.
+
+The first device run exposed a missing static Profile UI fixture dependency. After repairing
+the fixture, the real APK case exposed duplicate entry removal during runtime closure.
+Both native controllers now allow already-retired entries only in their close path, while
+ordinary uninstall remains strict and code release continues. The real-JAR case and all
+three device cases passed after that fix. These failures were not counted as passing evidence.
+
+This phase does not repair corrupt repository authority or pre-catalogue/package-staging
+failures. Template restoration, historical selection in recovery UI, verified external Bundle
+import and credential-safe portable export remain outstanding. It does not establish desktop
+rendering, complete touch/keyboard behavior or full Profile completion.
+
 ## Target and ownership
 
 Profiles compose an empty plugin tree using ordered bundle layers, profile operations,
