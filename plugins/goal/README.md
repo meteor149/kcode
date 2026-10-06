@@ -43,3 +43,11 @@ The release-owned schemas under "src/profile-export" declare portable configurat
 Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
 unless the corresponding schema explicitly permits them. Machine bindings and persisted
 credentials are outside these configuration declarations.
+
+
+Goal decoration actions and automatic restoration capture root `KcodeExecution` when hosted
+in a managed runtime. Admission precedes running-response cancellation, session allocation,
+resume flags and status persistence. Cancellation joins the admitted operation's cleanup.
+Rejected or cancelled response preparation retains resume intent; only accepted restoration
+clears it. Bare Cordis contexts retain the existing provider-owned lifecycle without requiring
+a product runtime service. No SDK ABI changes in this phase.

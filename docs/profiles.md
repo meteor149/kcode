@@ -421,3 +421,9 @@ the previous frozen generation. Failed candidates retire their captured admissio
 SDK 76 makes response preparation suspending and admits command/send/setup/regeneration
 work before allocating conversations, reserving IDs or writing history. Additional detached
 producers remain separate audit/acceptance work; do not infer complete background coordination from these tests.
+
+
+Goal button work and automatic restoration also enter root execution admission before
+changing resume intent, cancelling a response or allocating Goal sessions. A refused response
+does not consume automatic restoration intent. Their owned operations remain admitted through
+cancellation cleanup. This extends the preparation boundary without another SDK ABI change.

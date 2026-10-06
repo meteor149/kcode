@@ -9,6 +9,8 @@ import ai.meteor.kcode.history.ThreadGoalStatus
 import ai.meteor.kcode.localization.UiText
 import ai.meteor.kcode.localization.text
 import ai.meteor.kcode.plugin.api.KcodeConversationExecution
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.KcodeGoals
 import ai.meteor.kcode.plugin.api.KcodeLocalization
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
@@ -54,7 +56,8 @@ object GoalDecorationPlugin : Plugin<Unit> {
     override val name = "kcode-ui-goal-decoration"
     override val inject = dependencies(KcodeUiSlots.Key, KcodeGoals.Key, KcodeConversationExecution.Key, KcodeLocalization.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
-        val actions = GoalUiActions(ctx.require(KcodeGoals.Key).sessions, ctx.require(KcodeConversationExecution.Key).executor)
+        val actions = GoalUiActions(ctx.require(KcodeGoals.Key).sessions, ctx.require(KcodeConversationExecution.Key).executor,
+            ctx.root[KcodeExecution.Key]?.admission)
         effect.collect(Disposable { actions.close() })
         effect.collect(ctx.require(KcodeUiSlots.Key).registerConversationDecoration(
             ConversationDecoration("goal", 100, GoalDecorationPresenter(actions)),
@@ -69,57 +72,77 @@ object GoalRestorationEffectPlugin : Plugin<Unit> {
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         val sessions = ctx.require(KcodeGoals.Key).sessions
         val execution = ctx.require(KcodeConversationExecution.Key).executor
+        val admission = ctx.root[KcodeExecution.Key]?.admission
         val owner = PluginOperationOwner(name)
         effect.collect { owner.close() }
         effect.collect(ctx.require(KcodeUiSlots.Key).registerConversationEffect(
             ConversationPageEffect("goal.restore", 100, UiRenderer { request ->
                 LaunchedEffect(request.conversation, request.configuration) {
-                    owner.runIfOpen { restoreGoal(request, sessions, execution) }
+                    owner.runIfOpen { restoreGoal(request, sessions, execution, admission) }
                 }
             }),
         ))
     }
 }
 
-private suspend fun restoreGoal(request: ConversationPageContext, sessions: GoalSessionFactory, execution: ConversationExecution) {
+internal suspend fun restoreGoal(
+    request: ConversationPageContext,
+    sessions: GoalSessionFactory,
+    execution: ConversationExecution,
+    admission: ExecutionAdmission? = null,
+) = admitted(admission) {
+    restoreAdmittedGoal(request, sessions, execution)
+}
+
+private suspend fun <T> admitted(admission: ExecutionAdmission?, block: suspend () -> T): T =
+    if (admission == null) block() else admission.run(block)
+
+private suspend fun restoreAdmittedGoal(request: ConversationPageContext, sessions: GoalSessionFactory, execution: ConversationExecution) {
     val target = request.conversation ?: return
     val configuration = request.configuration ?: return
     val goal = target.goal ?: return
     if (!target.shouldResumeGoal || target.isGenerating || goal.status != ThreadGoalStatus.Active) return
     val session = sessions.create(target) ?: return
     val prompt = session.continuationPrompt() ?: return
-    target.shouldResumeGoal = false
-    execution.startResponse(target, ConversationResponseRequest(
+    val accepted = execution.startResponse(target, ConversationResponseRequest(
         prompt = prompt,
         goalSession = session,
         scheduledTaskSession = request.scheduledTaskCoordinator.sessionFor(target.id, target.title),
     ), configuration, request.service, request.generationRunner, request.failureMessages, request.followBottom)
+    if (accepted) target.shouldResumeGoal = false
 }
 
-internal class GoalUiActions(private val sessions: GoalSessionFactory, private val execution: ConversationExecution) {
+internal class GoalUiActions(
+    private val sessions: GoalSessionFactory,
+    private val execution: ConversationExecution,
+    private val admission: ExecutionAdmission? = null,
+) {
     private data class Ownership(val live: Boolean = true, val jobs: Set<Job> = emptySet())
     private val ownership = MutableStateFlow(Ownership())
     fun dispatch(parent: CoroutineScope, request: ConversationPageContext, action: ThreadGoalStatus?) {
         if (!ownership.value.live) return
         val target = request.conversation ?: return
-        val running = target.runningJob
         if (action == ThreadGoalStatus.Active && target.isGenerating) return
-        if (action != ThreadGoalStatus.Active) {
-            target.shouldResumeGoal = false
-            running?.cancel()
-        }
         val operation = parent.launch(start = CoroutineStart.LAZY) {
             try {
-                running?.join()
-                val session = sessions.create(target) ?: return@launch
-                when (action) {
-                    null -> if (target.goal != null) session.clearGoal()
-                    ThreadGoalStatus.Active -> {
-                        session.setStatusFromUser(ThreadGoalStatus.Active)
-                        target.shouldResumeGoal = true
-                        restoreGoal(request, sessions, execution)
+                admitted(admission) {
+                    val running = target.runningJob
+                    if (action == ThreadGoalStatus.Active && target.isGenerating) return@admitted
+                    if (action != ThreadGoalStatus.Active) {
+                        target.shouldResumeGoal = false
+                        running?.cancel()
                     }
-                    else -> if (target.goal?.status != action) session.setStatusFromUser(action)
+                    running?.join()
+                    val session = sessions.create(target) ?: return@admitted
+                    when (action) {
+                        null -> if (target.goal != null) session.clearGoal()
+                        ThreadGoalStatus.Active -> {
+                            session.setStatusFromUser(ThreadGoalStatus.Active)
+                            target.shouldResumeGoal = true
+                            restoreAdmittedGoal(request, sessions, execution)
+                        }
+                        else -> if (target.goal?.status != action) session.setStatusFromUser(action)
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

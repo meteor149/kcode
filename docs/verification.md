@@ -226,3 +226,24 @@ reports `OK (3 tests)` and instrumentation code -1. No real model request or OS 
 permission claim follows from these fixtures. Additional detached producers/feature preparation,
 Desktop native dialogs and full management navigation still require acceptance before declaring
 the overall Profile goal complete. External consumers/providers must rebuild for ABI 76.
+
+
+## Goal preparation admission
+
+Goal UI actions and restoration now capture root execution admission before response
+cancellation, resume-state mutation, session allocation and history-backed status changes.
+Automatic restoration clears its resume marker only after a response request is accepted.
+`profile-goal-admission-final-validation.log` passed 18 Goal tests, the actual-JAR
+Goal/Schedule identity/lifecycle case, desktop compilation and Android assembly. An initial
+test compile used a nonexistent enum value; the final test iterates the actual Goal statuses.
+`profile-goal-admission-cleanup-validation.log` passed the final 18-test suite after extending
+the cleanup case: admission stays held while NonCancellable history cleanup is suspended,
+withdrawal waits, and stale button callbacks remain quiet. Production source did not change
+between these successful runs. SDK ABI remains 76.
+
+Closed-admission tests prove that every status/clear action preserves the running response,
+resume marker and goal state, and that restoration allocates no session. Refused/cancelled
+response tests preserve resume intent until acceptance. These are shared behavioral tests;
+the JAR case establishes private Goal/Schedule loading, not actual button gestures or rendering.
+Android application assembly is build evidence, not new device acceptance of this UI path.
+Desktop native management/file dialogs and broader producer acceptance remain outstanding.
