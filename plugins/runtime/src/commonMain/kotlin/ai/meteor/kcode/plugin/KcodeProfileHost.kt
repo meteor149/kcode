@@ -10,6 +10,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.AgentConversationOverlayController
@@ -309,6 +310,10 @@ class KcodeProfileHost(
 
     suspend fun importPortableProfile(request: ProfilePortableImport): ProfileCatalogue = metadata {
         it.importPortable(request.document, request.id, request.displayName, request.expectedRevision).withActive()
+    }
+
+    suspend fun importProfileBundles(request: ProfileBundleImport): ProfileCatalogue = metadata {
+        it.importBundles(request).withActive()
     }
 
     suspend fun exportPortableProfile(request: ProfilePortableExport): String = metadata {

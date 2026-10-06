@@ -53,6 +53,7 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_tree
 import ai.meteor.kcode.plugin.profileui.resources.profile_unsaved
 import ai.meteor.kcode.plugin.profileui.resources.profile_verified
 import ai.meteor.kcode.plugin.profileui.resources.profile_import_file
+import ai.meteor.kcode.plugin.profileui.resources.profile_import_bundles
 import ai.meteor.kcode.plugin.profileui.resources.profile_export_file
 import ai.meteor.kcode.plugin.profileui.resources.profile_imported
 import ai.meteor.kcode.plugin.profileui.resources.profile_exported
@@ -96,6 +97,7 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
     val scope = rememberCoroutineScope()
     val documents = rememberProfileDocumentFiles()
     val importTitle = profileText(Res.string.profile_import_file)
+    val bundleImportTitle = profileText(Res.string.profile_import_bundles)
     val exportTitle = profileText(Res.string.profile_export_file)
     var id by remember(session) { mutableStateOf("") }
     var name by remember(session) { mutableStateOf("") }
@@ -162,6 +164,10 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
             TextButton(enabled = enabled && !state.dirty && id.isNotBlank(), modifier = Modifier.testTag("profile-import-file"),
                 onClick = { scope.launch { session.importFile(documents, id, name.ifBlank { id }, importTitle) } }) {
                 Text(importTitle)
+            }
+            TextButton(enabled = enabled && !state.dirty && id.isNotBlank(), modifier = Modifier.testTag("profile-import-bundles"),
+                onClick = { scope.launch { session.importBundles(documents, id, name.ifBlank { id }, bundleImportTitle) } }) {
+                Text(bundleImportTitle)
             }
             TextButton(enabled = enabled && !state.dirty && state.target != null && state.target?.source != ProfileSource.Draft,
                 modifier = Modifier.testTag("profile-export-file"),

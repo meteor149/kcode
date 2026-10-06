@@ -1,5 +1,52 @@
 # Profile implementation
 
+## Native Bundle import command phase
+
+SDK 73 adds `ProfileBundleArchiveReference`, `ProfileBundleImport` and
+`ProfileManagementClient.importBundles`. The shared API export namespace already covers
+these identities; native package SDK/ABI metadata was regenerated and real private JAR
+loading/package integration passed. The host prepares ordered native archives and creates
+an isolated draft through the existing portable import publisher. Revision and create-only
+checks run before staging and at publication; cancellation is checked before publication.
+Input archive addresses are ephemeral and do not enter the portable document. The command
+is available through the host gateway and the owned product-tree bridge in Ready/Recovery.
+Bridge withdrawal joins admitted imports and retained clients reject later calls.
+
+The optional native settings package adds a separate localized Bundle archive action.
+Desktop uses multiple-file selection and Android uses OpenMultipleDocuments. Both stream
+the picker-returned inputs into temporary files, compute SHA-256 and retain the files until
+the import returns. Selection is limited to sixteen archives and 512 MiB combined; cleanup
+runs on success, error and cancellation. UI import captures revision before selection,
+rejects dirty/busy editors, leaves preview empty and never submits activation. Android read,
+write and Bundle requests share a busy guard and keep cancelled slots until OS completion.
+Blocking document-provider I/O can delay withdrawal until it responds.
+
+Concentrated local verification passed 121 cases: 65 Profiles, 30 Profile UI and 26 native
+Desktop cases (15 package integration, 9 gateway, one default private UI and one actual
+Bundle JAR case). The Bundle case now imports via the Cordis bridge, preserves the active
+bootstrap Profile, rejects a stale revision and rejects the retained bridge after closure.
+It then restarts/exports frozen intent after deleting source archives and Bundle deployments.
+The metadata case covers preflight conflict, concurrent publication conflict and cancellation.
+UI cases cover order, pre-picker revision, cancellation and withdrawal; file staging verifies
+bytes/order, bounded reads and cleanup after consumer failure. Both applications and the
+instrumentation APK built successfully. A first bridge fixture used an unknown override ID;
+changing its capture to the existing replaceable UI module corrected the fixture, and the
+final concentrated Desktop package/gateway checks passed.
+
+Physical ARM64/API 36 validation passed seven cases with `OK (7 tests)` and
+`INSTRUMENTATION_CODE: -1`. The actual Bundle APK case imports through the SDK host client,
+keeps the bootstrap Profile active and restarts from frozen metadata/code cache. The private
+Profile settings case opens/cancels both the JSON and Bundle system pickers, confirms unchanged
+catalogue/current generation, then exercises edit/save/discard and language behavior. Verified
+schema export, private default UI loading and three recovery cases also passed under API 73.
+This proves native command behavior and picker cancellation, not selected-file acceptance or
+a complete binary import/export round trip. Desktop native dialog rendering remains unverified.
+
+Full native picker acceptance round trips, a shipping Bundle builder, self-contained archive
+export and cross-platform portable-lock adaptation remain open. Other feature export schemas,
+pre-catalogue/corrupt-authority recovery and the execution/resource ownership audit also remain
+outstanding. This phase does not establish completion of the overall Profile objective.
+
 ## External Bundle preparation phase
 
 `ProfileBundleArchive` implements pure-data Cordis archives with the

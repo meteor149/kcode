@@ -22,6 +22,13 @@ Profile data cannot contain Kotlin implementation objects, callbacks or arbitrar
 
 ## Portable Profile configuration
 
+SDK 73 adds `ProfileManagementClient.importBundles(ProfileBundleImport(archives, newId,
+expectedRevision, displayName))`. Each `ProfileBundleArchiveReference` contains a temporary
+local path and its SHA-256, retained by the caller until the call returns. Native hosts
+verify/stage the ordered archive stack and publish a create-only isolated draft. This
+operation is owned by the management bridge and remains separate from activation. Input
+locators are never portable data. See [Bundle archives](profile-bundle-archives.md).
+
 A feature may declare `src/profile-export/<package-id>.json`. The native build includes it
 in that release's `ai.meteor.kcode.profile-export` manifest extension. External publishers
 can emit the same extension directly. The host verifies the selected locked archive, native

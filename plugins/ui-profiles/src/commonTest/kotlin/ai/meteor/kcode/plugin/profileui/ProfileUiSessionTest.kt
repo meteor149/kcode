@@ -18,6 +18,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSummary
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileSummary
@@ -40,6 +42,47 @@ import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProfileUiSessionTest {
+    @Test
+    fun bundleImportPreservesOrderAndRevisionAndDoesNotActivate(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val previews = client.previewCalls
+            val files = Files()
+            session.importBundles(files, "copy", "Copy", "Bundles")
+            assertEquals(ProfileBundleImport(files.bundles, "copy", 1, "Copy"), client.bundleImported)
+            assertEquals(ProfileTarget("copy", ProfileSource.Draft), session.state.value.target)
+            assertNull(session.state.value.preview)
+            assertEquals(previews, client.previewCalls)
+            assertNull(client.submitted)
+            files.onRead = { client.revision++ }
+            val document = session.state.value.document
+            session.importBundles(files, "conflict", "Conflict", "Bundles")
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            assertEquals(document, session.state.value.document)
+            assertEquals("copy", client.bundleImported!!.id)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun bundlePickerCancellationAndWithdrawalLeaveNoCommand(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        session.refresh()
+        val before = session.state.value
+        val files = Files().apply { bundles = emptyList() }
+        session.importBundles(files, "copy", "Copy", "Bundles")
+        assertEquals(before, session.state.value)
+        files.bundles = listOf(ProfileBundleArchiveReference("a", "a".repeat(64)))
+        files.gate = CompletableDeferred()
+        val import = async { session.importBundles(files, "copy", "Copy", "Bundles") }
+        runCurrent()
+        session.close()
+        assertFailsWith<CancellationException> { import.await() }
+        assertTrue(files.finished)
+        assertNull(client.bundleImported)
+    }
     @Test
     fun fileImportCreatesAnUnpreparedDraftAndCapturesRevisionBeforeSelection(): Unit = runTest {
         val client = Client()
@@ -135,6 +178,17 @@ class ProfileUiSessionTest {
     }
 
     private class Files : ProfileDocumentFiles {
+        var bundles = listOf(ProfileBundleArchiveReference("first", "a".repeat(64)),
+            ProfileBundleArchiveReference("second", "b".repeat(64)))
+        override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
+            try {
+                gate?.await()
+                onRead()
+                if (bundles.isEmpty()) return false
+                consume(bundles)
+                return true
+            } finally { finished = true }
+        }
         var document: String? = "portable"
         var reads = 0
         var writes = 0
@@ -536,6 +590,7 @@ class ProfileUiSessionTest {
         var previewCalls = 0
         var failExport = false
         var imported: ProfilePortableImport? = null
+        var bundleImported: ProfileBundleImport? = null
         var exported: ProfilePortableExport? = null
         var queryGate: CompletableDeferred<Unit>? = null
         var queryStarted: CompletableDeferred<Unit>? = null
@@ -583,6 +638,13 @@ class ProfileUiSessionTest {
         override suspend fun importPortable(request: ProfilePortableImport): ProfileCatalogue {
             check(request.expectedRevision == revision)
             imported = request
+            definition = ProfileDefinition(id = request.id, displayName = request.displayName)
+            revision++
+            return catalogue()
+        }
+        override suspend fun importBundles(request: ProfileBundleImport): ProfileCatalogue {
+            check(request.expectedRevision == revision)
+            bundleImported = request
             definition = ProfileDefinition(id = request.id, displayName = request.displayName)
             revision++
             return catalogue()

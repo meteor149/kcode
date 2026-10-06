@@ -1,5 +1,10 @@
 # Plugin SDK
 
+Plugin API 73 adds ordered native Bundle imports to `ProfileManagementClient`. Requests
+carry temporary archive locators/digests and a catalogue revision; hosts verify code and
+create isolated drafts without activation. Locators remain caller-owned until return and
+are not persisted in portable definitions. See [Bundle archives](../../docs/profile-bundle-archives.md).
+
 This module defines the types that the native host and independently loaded plugins
 share. It consolidates the former `shared` contracts with Cordis service keys,
 extension events, host bridges, and the reserved Harness APIs.

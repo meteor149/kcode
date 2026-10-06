@@ -1,6 +1,8 @@
 package ai.meteor.kcode.plugin.profiles
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
@@ -15,6 +17,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
 import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -33,6 +37,7 @@ class ProfileManagement private constructor(
     private val prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     private val exportReview: ProfileExportReview,
     private val exportReviews: ProfileExportReviewFactory? = null,
+    private val bundlePrepare: (suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument)? = null,
 ) {
     constructor(
         repository: ProfileGenerationRepository,
@@ -53,6 +58,14 @@ class ProfileManagement private constructor(
         exportReviews: ProfileExportReviewFactory,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews)
+
+    constructor(
+        repository: ProfileGenerationRepository,
+        bundles: () -> List<ProfileBundle>,
+        exportReviews: ProfileExportReviewFactory,
+        bundlePrepare: suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument,
+        prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews, bundlePrepare)
 
     suspend fun catalogue(): ProfileCatalogue = repository.catalogue()
     suspend fun draft(id: String): ProfileDefinition? = repository.loadDraft(id)
@@ -81,6 +94,23 @@ class ProfileManagement private constructor(
         )
         repository.writeDraft(ProfileDraftDocument(definition, imported = imported), expectedRevision, createOnly = true)
         return catalogue()
+    }
+
+    suspend fun importBundles(request: ProfileBundleImport): ProfileCatalogue {
+        val archives = request.archives.map { it.copy() }
+        ProfileDefinition(id = request.id, displayName = request.displayName).validate()
+        require(archives.isNotEmpty() && archives.size <= 16) { "Select between one and sixteen Bundle archives" }
+        require(archives.all { it.archivePath.isNotBlank() && it.sha256.matches(Regex("[a-f0-9]{64}")) }) { "Invalid Bundle input" }
+        val before = catalogue()
+        require(before.revision == request.expectedRevision) { "Profile repository changed; refresh" }
+        require(before.profiles.none { it.id == request.id }) { "Profile already exists" }
+        val prepared = checkNotNull(bundlePrepare) { "Bundle archive preparation is unavailable" }(
+            archives, request.id, request.displayName,
+        ).also { it.validate() }
+        currentCoroutineContext().ensureActive()
+        // Publication performs a second revision/create-only check after potentially slow I/O.
+        return importPortable(Json.encodeToString(PortableProfileDocument.serializer(), prepared),
+            request.id, request.displayName, request.expectedRevision)
     }
 
     suspend fun exportPortable(

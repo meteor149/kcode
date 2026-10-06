@@ -2,6 +2,9 @@ package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.createAndroidProfileHost
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
@@ -16,7 +19,6 @@ import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveCode
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveExtension
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveMetadata
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveRuntime
-import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.plugin.profiles.ProfilePortableExporter
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import android.app.Activity
@@ -86,8 +88,26 @@ class AndroidProfileBundleArchiveTest {
                 artifactVerifier = androidPackageVerifier(isolated))).prepare(archive, digest, "imported")
             assertNull(repository.loadDraft("imported"))
             assertEquals(listOf("feature.localization"), imported.lock.packages.map { it.id })
-            val management = ProfileManagement(repository, { emptyList() }) { error("Bundle import cannot activate") }
-            management.importPortable(Json.encodeToString(imported), "imported", "Imported", repository.state().revision)
+            repository.saveDraft(ProfileDefinition(id = "bootstrap"))
+            val bootstrap = withContext(Dispatchers.Main.immediate) {
+                val activity = object : Activity() {
+                    init { attachBaseContext(isolated) }
+                    override fun getApplicationContext(): android.content.Context = isolated
+                    override fun getFilesDir() = directory
+                    override fun getAssets() = context.assets
+                    override fun getResources() = context.resources
+                }
+                createAndroidProfileHost(activity, profileId = "bootstrap", toolCallApprover = ToolCallApprover { true })
+            }
+            try {
+                bootstrap.state.value.failure?.let { throw it }
+                val client = assertNotNull(bootstrap.profileCommands)
+                val result = client.importBundles(ProfileBundleImport(listOf(
+                    ProfileBundleArchiveReference(archive.absolutePath, digest),
+                ), "imported", client.catalogue().revision, "Imported"))
+                assertEquals("bootstrap", result.activeProfileId)
+                assertEquals("bootstrap", bootstrap.state.value.profileId)
+            } finally { bootstrap.close() }
             assertNull(repository.loadCommitted("imported"))
             assertTrue(archive.delete())
             assertTrue(source.deleteRecursively())

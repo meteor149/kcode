@@ -4,7 +4,8 @@ Native `ProfileBundleArchive` prepares independent data archives and ordered Bun
 using Cordis container verification and the native package resolver. It returns frozen
 portable metadata without mounting code or publishing a draft. Imported drafts locate code
 by locked digest in the verified cache. See the [archive guide](../../docs/profile-bundle-archives.md)
-for the format, publication boundary and pending binary command/UI integration.
+for the format and publication boundary. SDK 73 `importBundles` checks revision before
+preparation and at create-only draft publication; native hosts supply the verifier.
 
 Host export review receives `ProfileExportValue` with module/package identity, instance identity,
 configuration codec, source location, field and original JSON value. `ProfileExportPolicies`

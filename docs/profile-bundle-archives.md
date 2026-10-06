@@ -3,9 +3,10 @@
 `ProfileBundleArchive` prepares ordered external Bundle archives without mounting a plugin.
 It is a native implementation API in `plugins/profiles`, shared by Desktop and Android.
 The extension `.kbundle` is a distribution convention; validation uses contents and SHA-256.
-SDK 72 does not yet expose binary Bundle import, and the Profile screen's JSON file picker
-does not accept these archives. Native command/UI wiring and a shipping archive builder
-remain outstanding.
+SDK 73 exposes `ProfileManagementClient.importBundles(ProfileBundleImport(...))` through
+the host and the owned Cordis bridge. The optional Profile screen has a separate Bundle
+archive action; its JSON import/export actions retain their document format. A shipping
+archive builder and self-contained archive export remain outstanding.
 
 ## Format
 
@@ -64,6 +65,26 @@ Later Bundle layers may configure instances inserted by earlier layers. All inpu
 one code release, and the resulting lock retains only code needed by the resolved composition
 and its dependency closure. There is no fake Bundle plugin or Bundle entry in that code lock.
 
+## Native import command and file selection
+
+`ProfileBundleImport` carries an ordered list of `ProfileBundleArchiveReference` values
+(temporary local archive path and SHA-256), a new Profile ID/name and the expected catalogue
+revision. These local addresses are input locators only and never enter portable documents.
+Callers retain input files until import returns. Requests accept one to sixteen archives.
+The host checks revision and create-only identity before staging and again at publication.
+A conflict after staging can leave cache content, but publishes no draft. The command is
+available in Ready and RecoveryRequired and never activates the imported Profile. Bridge
+withdrawal cancels/joins admitted metadata operations and rejects stale clients.
+
+The native action captures revision before opening the picker. Desktop uses a multiple-file
+AWT dialog; Android uses `OpenMultipleDocuments`. Picker-returned order becomes Bundle
+order and can be edited later in the draft. Files stream into owned temporary archives while
+computing hashes, with a 512 MiB limit across the complete selection. The command receives
+only staged paths. Temporary files are removed after success, rejection or cancellation.
+Android keeps cancelled request slots until the OS callback returns, preventing an old
+callback from completing a new selection. Provider I/O may delay cancellation until the
+provider responds. Picker cancellation changes no metadata; dirty editors must save/discard.
+
 ## Restart and exchange limits
 
 For a first imported draft, native preparation locates required releases by locked SHA-256
@@ -86,9 +107,10 @@ by this preparation API.
 The real Desktop JAR case prepares two ordered Bundles sharing Localization code, observes
 the second layer's dictionary configuration, imports the frozen document, deletes input and
 outer Bundle files, starts twice and exports through the host's verified feature schema.
+It imports through the native host SDK client without changing the active bootstrap Profile.
 It also rejects an incorrect outer digest, mismatched code version, unknown metadata version
 and duplicate Bundle references without publishing a Profile.
 
 The real Android APK case prepares/imports a single Bundle and starts twice after removing
-the source archive and outer Bundle deployment. These are native host API tests, not evidence
-of a completed user-facing binary archive import/export flow.
+the source archive and outer Bundle deployment. Native host API tests alone do not prove an
+OS picker acceptance round trip or self-contained binary archive export.

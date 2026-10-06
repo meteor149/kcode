@@ -2,6 +2,12 @@ package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.createDesktopProfileHost
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
+import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
+import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
@@ -17,7 +23,6 @@ import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveExtension
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveMetadata
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveRuntime
-import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.plugin.profiles.ProfilePortableExporter
 import java.io.File
 import java.nio.file.Files
@@ -33,6 +38,8 @@ import org.cordis.packages.PackageVariant
 import org.cordis.packages.PluginPackageArchive
 import org.cordis.packages.PluginPackageManifest
 import org.cordis.packages.packageFileSha256
+import org.cordis.dependencies
+import org.cordis.plugin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -107,8 +114,34 @@ class NativeProfileBundleArchiveTest {
             assertEquals(listOf(bundle, overlay), imported.bundles)
             assertEquals(listOf("feature.localization"), imported.lock.packages.map { it.id })
             assertNull(repository.loadDraft("imported"))
-            val management = ProfileManagement(repository, { emptyList() }) { error("Bundle import cannot activate") }
-            management.importPortable(Json.encodeToString(imported), "imported", "Imported", before.revision)
+            lateinit var bridgeClient: ProfileManagementClient
+            val capture = kcodePlugin(PluginDescriptor("provider.ui.compose", "test", "test", emptySet()),
+                plugin<Unit>(inject = dependencies(KcodeProfiles.Key)) { context, _ ->
+                    bridgeClient = context.require(KcodeProfiles.Key).client
+                }, Unit)
+            repository.saveDraft(ProfileDefinition(id = "bootstrap", patches = listOf(
+                ProfileOperation.Insert(listOf(ProfileEntry("capture", "provider.ui.compose"))),
+            )))
+            val bootstrap = createDesktopProfileHost(homeDirectory = home.toPath(), profileId = "bootstrap",
+                profile = KcodePluginProfile(overrides = listOf(capture)))
+            try {
+                bootstrap.state.value.failure?.let { throw it }
+                val client = bridgeClient
+                val revision = client.catalogue().revision
+                val result = client.importBundles(ProfileBundleImport(inputs.map {
+                    ProfileBundleArchiveReference(it.archive.absolutePath, it.sha256)
+                }, "imported", revision, "Imported"))
+                assertEquals("bootstrap", result.activeProfileId)
+                assertEquals("bootstrap", bootstrap.state.value.profileId)
+                assertFailsWith<IllegalArgumentException> {
+                    client.importBundles(ProfileBundleImport(listOf(ProfileBundleArchiveReference("missing", "a".repeat(64))),
+                        "stale", revision))
+                }
+                assertEquals(result.revision, client.catalogue().revision)
+            } finally { bootstrap.close() }
+            assertFailsWith<IllegalStateException> {
+                bridgeClient.importBundles(ProfileBundleImport(emptyList(), "stale", repository.state().revision))
+            }
             assertNull(repository.loadCommitted("imported"))
             assertTrue(archive.delete())
             assertTrue(overlayArchive.delete())

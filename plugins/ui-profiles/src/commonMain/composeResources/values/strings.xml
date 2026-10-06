@@ -163,4 +163,6 @@
     <string name="profile_save_leave_zh">保存草稿并离开</string>
     <string name="profile_discard_leave_zh">放弃修改并离开</string>
     <string name="profile_continue_editing_zh">继续编辑</string>
+    <string name="profile_import_bundles">Import Bundle archives</string>
+    <string name="profile_import_bundles_zh">导入 Bundle 归档</string>
 </resources>

@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin.profileui
 
 import android.net.Uri
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -17,12 +18,17 @@ import kotlinx.coroutines.withContext
 private class DocumentRequests {
     var read: CompletableDeferred<Uri?>? = null
     var write: CompletableDeferred<Uri?>? = null
+    var bundles: CompletableDeferred<List<Uri>>? = null
 }
 
 @Composable
 internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles {
     val resolver = LocalContext.current.applicationContext.contentResolver
     val requests = remember { DocumentRequests() }
+    val bundles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        requests.bundles?.complete(uris)
+        requests.bundles = null
+    }
     val read = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         requests.read?.complete(uri)
         requests.read = null
@@ -35,15 +41,32 @@ internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles {
         onDispose {
             requests.read?.cancel()
             requests.write?.cancel()
+            requests.bundles?.cancel()
             requests.read = null
             requests.write = null
+            requests.bundles = null
         }
     }
-    return remember(resolver, read, write) {
+    return remember(resolver, read, write, bundles) {
         object : ProfileDocumentFiles {
+            override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
+                val uris = withContext(Dispatchers.Main.immediate) {
+                    check(requests.read == null && requests.write == null && requests.bundles == null) { "Document picker is busy" }
+                    val pending = CompletableDeferred<List<Uri>>()
+                    requests.bundles = pending
+                    try { bundles.launch(arrayOf("*/*")) } catch (failure: Exception) {
+                        if (requests.bundles === pending) requests.bundles = null
+                        throw failure
+                    }
+                    try { pending.await() } finally { pending.cancel() }
+                }
+                if (uris.isEmpty()) return false
+                stageProfileBundles(uris.map { uri -> { requireNotNull(resolver.openInputStream(uri)) } }, consume = consume)
+                return true
+            }
             override suspend fun read(title: String): String? {
                 val uri = withContext(Dispatchers.Main.immediate) {
-                    check(requests.read == null && requests.write == null) { "Document picker is busy" }
+                    check(requests.read == null && requests.write == null && requests.bundles == null) { "Document picker is busy" }
                     val pending = CompletableDeferred<Uri?>()
                     requests.read = pending
                     try {
@@ -69,7 +92,7 @@ internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles {
                 val bytes = document.toByteArray(Charsets.UTF_8)
                 require(bytes.size <= ProfileDocumentByteLimit) { "Profile document is too large" }
                 val uri = withContext(Dispatchers.Main.immediate) {
-                    check(requests.read == null && requests.write == null) { "Document picker is busy" }
+                    check(requests.read == null && requests.write == null && requests.bundles == null) { "Document picker is busy" }
                     val pending = CompletableDeferred<Uri?>()
                     requests.write = pending
                     try {

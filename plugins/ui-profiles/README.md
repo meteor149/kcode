@@ -1,5 +1,12 @@
 # Profile management UI
 
+The Bundle archive action uses SDK 73 `importBundles`, captures revision before native
+multi-file selection and creates an isolated draft without activation. Picker order is
+the initial Bundle order. Inputs are streamed into owned temporary files (up to sixteen
+archives and 512 MiB total), then removed after the command completes or fails. Dirty
+editors and duplicate file actions are rejected. Android cancelled slots remain reserved
+until the OS callback returns. See [Bundle archives](../../docs/profile-bundle-archives.md).
+
 `DefaultProfileUiPlugin` is the optional `provider.ui.settings.profiles` package entry.
 Its child contributes a `profiles` settings section when both `KcodeProfiles` and
 `KcodeUiSlots` are available. Missing services suspend that child without imposing

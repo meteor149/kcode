@@ -20,6 +20,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,6 +130,22 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
         val document = client.exportPortable(ProfilePortableExport(target, requireNotNull(current.documentRevision)))
         if (files.write(title, "${target.profileId}.kcode-profile.json", document)) {
             mutableState.value = state.value.copy(exchange = ProfileExchangeResult.Exported)
+        }
+    }
+
+    internal suspend fun importBundles(files: ProfileDocumentFiles, id: String, displayName: String, title: String) = fileOperation {
+        val current = state.value
+        check(!current.dirty) { "Unsaved Profile edits" }
+        ProfileDefinition(id = id, displayName = displayName).validate()
+        val revision = requireNotNull(current.catalogue).revision
+        files.readBundles(title) { archives ->
+            val next = client.importBundles(ProfileBundleImport(archives, id, revision, displayName))
+            val definition = requireNotNull(client.draft(id)) { "Imported draft is unavailable" }
+            check(client.catalogue().revision == next.revision) { "Profile repository changed; refresh" }
+            val text = encode(definition)
+            mutableState.value = state.value.copy(catalogue = next, target = ProfileTarget(id, ProfileSource.Draft),
+                document = text, savedDocument = text, documentRevision = next.revision, dirty = false,
+                preview = null, history = emptyList(), exchange = ProfileExchangeResult.Imported)
         }
     }
 

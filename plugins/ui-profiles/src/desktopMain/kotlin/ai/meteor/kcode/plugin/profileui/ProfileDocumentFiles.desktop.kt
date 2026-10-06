@@ -2,6 +2,7 @@ package ai.meteor.kcode.plugin.profileui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import java.awt.EventQueue
 import java.awt.FileDialog
 import java.awt.Frame
@@ -23,6 +24,12 @@ import kotlin.coroutines.resumeWithException
 @Composable
 internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles = remember {
     object : ProfileDocumentFiles {
+        override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
+            val paths = chooseMany(title)
+            if (paths.isEmpty()) return false
+            stageProfileBundles(paths.map { path -> { Files.newInputStream(path) } }, consume = consume)
+            return true
+        }
         override suspend fun read(title: String): String? {
             val path = choose(title, FileDialog.LOAD) ?: return null
             return withContext(Dispatchers.IO) {
@@ -52,6 +59,27 @@ internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles = remem
                     true
                 } finally { Files.deleteIfExists(temporary) }
             }
+        }
+    }
+}
+
+private suspend fun chooseMany(title: String): List<Path> = suspendCancellableCoroutine { continuation ->
+    var dialog: FileDialog? = null
+    continuation.invokeOnCancellation { EventQueue.invokeLater { dialog?.dispose() } }
+    EventQueue.invokeLater {
+        if (!continuation.isActive) return@invokeLater
+        try {
+            val owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow as? Frame
+            val picker = FileDialog(owner, title, FileDialog.LOAD)
+            dialog = picker
+            picker.isMultipleMode = true
+            try {
+                picker.isVisible = true
+                val result = picker.files.map { it.toPath().toAbsolutePath() }
+                if (continuation.isActive) continuation.resume(result)
+            } finally { picker.dispose() }
+        } catch (failure: Exception) {
+            if (continuation.isActive) continuation.resumeWithException(failure)
         }
     }
 }

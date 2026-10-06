@@ -150,7 +150,7 @@ Profiles support positioned insertion, ordering and movement between groups or t
 
 Shipped Bundle layers declare their module membership explicitly. ID prefixes do not select a layer, and additional available modules require explicit Profile selection.
 
-Native Bundle preparation accepts ordered external data archives with verified embedded code and freezes their intent for import. Imported drafts resolve code by locked digest from the native cache. Binary command/picker integration remains pending; see [Bundle archives](docs/profile-bundle-archives.md).
+SDK 73 imports ordered external Bundle archives with verified embedded code into isolated drafts. The native picker stages inputs and captures the catalogue revision; import does not activate. Imported drafts resolve locked code from the native cache. See [Bundle archives](docs/profile-bundle-archives.md).
 
 SDK 72 exposes revision-checked portable Profile import/export through the neutral management client. Import creates an isolated draft with frozen Bundle/package intent; activation remains explicit. The optional Profile screen uses native file pickers for import/export. Export reviews committed/historical configuration against the generation's verified package metadata. Goal, Web Search and Localization declare portable configuration rules; other unreviewed values remain denied.
 

@@ -150,7 +150,7 @@ Profile 支持指定位置插入、排序，以及在分组和根节点之间移
 
 发行 Bundle 显式声明模块成员，插件 ID 前缀不决定所属层；额外可用模块需要通过 Profile 显式选择。
 
-原生 Bundle 准备接口支持有序的外部数据归档，验证内嵌代码并冻结导入意图。导入草稿按锁定摘要从原生缓存解析代码。二进制命令及文件选择器接入仍待完成，格式见 [Bundle 归档指南](docs/profile-bundle-archives.md)。
+SDK 73 将有序的外部 Bundle 归档及已验证的内嵌代码导入独立草稿。原生选择器暂存输入并捕获目录 revision；导入不自动激活。导入草稿按锁定摘要从原生缓存解析代码。格式见 [Bundle 归档指南](docs/profile-bundle-archives.md)。
 
 SDK 72 通过中立管理客户端提供带 revision 校验的可携带 Profile 导入导出。导入创建独立草稿并保留冻结的 Bundle 与包意图，激活仍须显式执行。可选 Profile 界面通过原生文件选择器导入导出。导出按对应世代的已验证包元数据审查已提交或历史配置。Goal、Web Search 和 Localization 已声明可携带配置规则，其他未经审查的配置值仍被拒绝。
 

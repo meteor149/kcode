@@ -154,6 +154,21 @@ class AndroidProfileUiRenderingTest {
             }
             assertEquals(beforePicker, client.catalogue())
             assertEquals(active, host.pluginManager.currentProfile())
+            click("Import Bundle archives")
+            assertTrue(kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                while (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString()?.contains("documentsui") != true) delay(50)
+                true
+            } == true, "Bundle document picker did not open")
+            assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+            withTimeout(15_000) {
+                while (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString()?.contains("documentsui") == true) delay(50)
+                while (!withContext(Dispatchers.Main.immediate) {
+                    nodes().any { it.config.getOrNull(SemanticsProperties.TestTag) == "profile-import-bundles" &&
+                        it.config.getOrNull(SemanticsProperties.Disabled) == null }
+                }) delay(50)
+            }
+            assertEquals(beforePicker, client.catalogue())
+            assertEquals(active, host.pluginManager.currentProfile())
             scrollEditor()
             setDocument("invalid definition")
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)

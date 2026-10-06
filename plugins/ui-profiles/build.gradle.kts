@@ -51,6 +51,9 @@ kotlin {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
     }
     sourceSets {
+        val jvmMain by creating { dependsOn(commonMain.get()) }
+        getByName("desktopMain").dependsOn(jvmMain)
+        androidMain.get().dependsOn(jvmMain)
         commonMain { kotlin.srcDir(profileTextOutput) }
         commonMain.dependencies {
             api(project(":plugins:api"))

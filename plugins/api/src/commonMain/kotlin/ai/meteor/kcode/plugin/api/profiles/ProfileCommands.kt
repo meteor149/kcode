@@ -60,6 +60,9 @@ interface ProfileManagementClient {
     /** Metadata-only publication; activation requires a separate explicit command. */
     suspend fun importPortable(request: ProfilePortableImport): ProfileCatalogue =
         error("This client does not support portable Profile import")
+    /** Verifies native code but does not mount it; activation remains explicit. */
+    suspend fun importBundles(request: ProfileBundleImport): ProfileCatalogue =
+        error("This client does not support Bundle archives")
     /** Host feature policies review opaque configuration; callers cannot bypass that review. */
     suspend fun exportPortable(request: ProfilePortableExport): String =
         error("This client does not support portable Profile export")

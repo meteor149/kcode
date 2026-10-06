@@ -47,6 +47,17 @@ data class ProfilePortableImport(
     val displayName: String = id,
 )
 
+/** Temporary local input; callers retain the archive until import returns. Never persisted. */
+data class ProfileBundleArchiveReference(val archivePath: String, val sha256: String)
+
+/** Ordered Bundle archives are verified/staged, then published as a new isolated draft. */
+data class ProfileBundleImport(
+    val archives: List<ProfileBundleArchiveReference>,
+    val id: String,
+    val expectedRevision: Long,
+    val displayName: String = id,
+)
+
 /** Only committed or historical recipes have verified package locks suitable for export. */
 data class ProfilePortableExport(val target: ProfileTarget, val expectedRevision: Long)
 
