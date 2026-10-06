@@ -1,6 +1,8 @@
 package ai.meteor.kcode.plugin.profiles
 
 import ai.meteor.kcode.plugin.api.PluginCompositionSnapshot
+import ai.meteor.kcode.plugin.DynamicPluginSpec
+import ai.meteor.kcode.plugin.api.StoredDynamicPlugin
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
@@ -16,6 +18,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProfilePortableExportTest {
+    @Test
+    fun rawLocalDescriptorsCannotClaimAPortableVerifiedRecipe() {
+        val bundle = ProfileBundle(id = "base", version = "1", patches = emptyList())
+        val raw = DynamicPluginSpec("legacy", "1", "fixture.Legacy", "machine.jar", "a".repeat(64))
+        val generation = source(bundle).copy(composition = PluginCompositionSnapshot(
+            external = listOf(StoredDynamicPlugin.from(raw)),
+        ))
+        assertFailsWith<IllegalArgumentException> { ProfilePortableExporter().export(generation) }
+    }
+
     @Test
     fun defaultPolicyRejectsOverriddenBundleSecretsWithoutPrintingTheirValues() {
         val bundle = ProfileBundle(id = "base", version = "1", patches = listOf(

@@ -44,6 +44,9 @@ class ProfilePortableExporter(
 ) {
     fun export(source: CommittedProfileGeneration): String {
         source.validate(restoring = true)
+        require(source.composition.external.all { it.packageInstallation != null }) {
+            "Legacy local plugin descriptors require verified package archives before export"
+        }
         val definition = source.definition.copy(
             patches = operations(source.definition.patches, "profile"),
             dataScope = ProfileDataScope(workspace = "profile"),

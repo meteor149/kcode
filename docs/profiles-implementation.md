@@ -1,5 +1,34 @@
 # Profile implementation
 
+## Imported frozen draft phase
+
+Host-side management can now import a portable document into a create-only, revision-checked
+draft with independent data scopes. Import is metadata-only and does not prepare code or alter
+selection. Draft envelope format 2 retains imported frozen bundles/locks through management
+edits, repository saves, cloning and reopening. The decoder retains format 1 support; newly
+published draft documents use format 2, and format 1 cannot carry an imported recipe.
+
+Preview, startup from an uncommitted imported draft and explicit activation use those frozen
+bundles even if the installed catalogue changes or no longer contains them. Required imported
+packages cannot resolve to a same-name builtin. Archive changes reject before resolution;
+after native resolver verification, versions, variants, ABI and dependency identities must
+match the imported lock. Removed packages need not remain installed; explicitly added packages
+use normal verified offers. Successful local publication becomes the new authoritative base.
+Committed/historical host-side export is revision checked and rejects legacy local descriptors
+that cannot provide verified portable archive identities. API remains 71; these implementation
+classes are outside the shared SDK export set.
+
+Final concentrated verification passed 50 Profiles desktop tests and 6 native startup recovery
+tests, plus Android Profiles compilation. New cases cover metadata-only/CAS import, editing and
+cloning, repository reopening, catalogue-independent startup, preview and staged publication,
+raw descriptor export rejection, draft envelope upgrade and imported lock mismatch rejection.
+Package resolution is exercised with test resolvers here; this does not prove real JAR/APK
+portable exchange. Native startup recovery tests run against the existing desktop integration.
+
+Neutral client import/export commands, feature-schema export policies, native file UI, verified
+external Bundle import and real archive exchange remain outstanding. Corrupt-authority recovery,
+desktop rendering and the complete execution-admission/resource-ownership audit remain open.
+
 ## Portable export boundary phase
 
 The host-side Profiles implementation now includes `ProfilePortableExporter` and a versioned

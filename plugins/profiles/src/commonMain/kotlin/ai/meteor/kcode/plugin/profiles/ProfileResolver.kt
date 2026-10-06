@@ -38,7 +38,12 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         machineOverrides: List<ProfileOperation> = emptyList(),
         launchOverrides: List<ProfileOperation> = emptyList(),
         builtinOverrides: Set<String> = emptySet(),
+        expectedLock: ProfileLock? = null,
     ): ResolvedProfile {
+        expectedLock?.validate()
+        val locked = expectedLock?.packages.orEmpty().associateBy { it.id }
+        // An imported external identity cannot silently become a host builtin with the same name.
+        val availableBuiltins = builtinModules - locked.keys
         val composition = ProfileCompiler().compile(definition, bundles, machineOverrides, launchOverrides).requireValid()
         val referenced = mutableSetOf<String>()
         fun visit(entries: List<EntryOptions>) {
@@ -48,7 +53,7 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
                     require(entry.name == "core.group" || entry.name == "cordis:group") { "Profile groups use core.group" }
                     val children = entry.config as List<*>
                     visit(children.map { it as EntryOptions })
-                } else if (entry.name !in builtinModules || previous.any { it.id == entry.name } && entry.name !in builtinOverrides) referenced += entry.name
+                } else if (entry.name !in availableBuiltins || previous.any { it.id == entry.name } && entry.name !in builtinOverrides) referenced += entry.name
             }
         }
         visit(composition.entries)
@@ -63,6 +68,11 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         }
         referenced.forEach(::collect)
         val requests = requested.mapNotNull { id ->
+            locked[id]?.let { release ->
+                offers[id]?.let { offer ->
+                    require(offer.release.sha256 == release.archiveSha256) { "Imported package archive differs from its lock: '$id'" }
+                }
+            }
             offers[id]?.release?.copy(enabled = true)?.also { require(it.sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "Invalid profile package digest" } }
                 ?: run {
                     require(id in existing) { "No package release available for '$id'" }
@@ -88,7 +98,14 @@ class ProfileResolver(private val packages: PluginPackageResolver) {
         val snapshot = PluginCompositionSnapshot(external = resolved.map(StoredDynamicPlugin::from)).also { it.validate() }
         val ordered = snapshot.orderedExternal().map { available.getValue(it.id) }
         ordered.forEach { if (it.packageInstallation != null) packages.verify(it) else it.validatePluginApi() }
-        return ResolvedProfile(definition, composition, ordered, profileLock(snapshot),
+        val resolvedLock = profileLock(snapshot)
+        val releases = resolvedLock.packages.associateBy { it.id }
+        required.forEach { id ->
+            locked[id]?.let { release ->
+                require(releases[id] == release) { "Imported package identity differs from its lock: '$id'" }
+            }
+        }
+        return ResolvedProfile(definition, composition, ordered, resolvedLock,
             bundles.filter { bundle -> definition.bundles.any { it.id == bundle.id } }, machineOverrides, launchOverrides)
     }
 }

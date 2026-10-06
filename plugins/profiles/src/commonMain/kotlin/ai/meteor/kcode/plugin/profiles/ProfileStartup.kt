@@ -45,7 +45,10 @@ suspend fun prepareNativeProfileActivation(
             intent.base?.composition ?: ai.meteor.kcode.plugin.api.PluginCompositionSnapshot(), profileIntentBundles(intent, bundles)), false)
     val committed = intent?.base ?: repository.loadCommitted(prepared.definition.id)
         ?: (repository as? ProfileGenerationRepository)?.loadDraftDocument(prepared.definition.id)?.base
-    val frozenBundles = if (intent != null) profileIntentBundles(intent, bundles) else committed?.bundles?.takeIf { it.isNotEmpty() } ?: bundles
+    val imported = if (committed == null) intent?.imported
+        ?: (repository as? ProfileGenerationRepository)?.loadDraftDocument(prepared.definition.id)?.imported else null
+    val frozenBundles = if (intent != null) profileIntentBundles(intent, bundles)
+        else profileIntentBundles(ProfileIntent(prepared.definition, committed, imported), bundles)
     val snapshot = prepared.session.load()
     val previous = snapshot.external.map { it.toSpec() }
     // Restart an existing generation from its lock. Newly introduced distro offers do not upgrade it.
@@ -57,6 +60,7 @@ suspend fun prepareNativeProfileActivation(
     val resolved = ProfileResolver(resolver).resolve(
         prepared.definition, frozenBundles, effectiveOffers, builtinModules, previous,
         machineOverrides(prepared.definition, frozenBundles), launchOverrides, builtinOverrides,
+        expectedLock = imported?.lock,
     )
     return ProfileActivation(resolved, prepared.session, machineOverrides)
 }

@@ -5,7 +5,11 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 
-data class ProfileIntent(val definition: ProfileDefinition, val base: CommittedProfileGeneration?)
+data class ProfileIntent(
+    val definition: ProfileDefinition,
+    val base: CommittedProfileGeneration?,
+    val imported: PortableProfileDocument? = null,
+)
 
 suspend fun loadProfileIntent(repository: ProfileGenerationRepository, target: ProfileTarget): ProfileIntent {
     target.validate()
@@ -13,7 +17,10 @@ suspend fun loadProfileIntent(repository: ProfileGenerationRepository, target: P
         ProfileSource.Committed -> requireNotNull(repository.loadCommitted(target.profileId)) { "Profile has no committed generation" }
             .let { ProfileIntent(it.definition, it) }
         ProfileSource.Draft -> requireNotNull(repository.loadDraftDocument(target.profileId)) { "Profile has no draft" }
-            .let { ProfileIntent(it.definition, it.base ?: repository.loadCommitted(target.profileId)) }
+            .let {
+                val base = it.base ?: repository.loadCommitted(target.profileId)
+                ProfileIntent(it.definition, base, it.imported.takeIf { base == null })
+            }
         ProfileSource.History -> requireNotNull(repository.loadGeneration(target.profileId, checkNotNull(target.generation))) { "Historical generation is missing" }
             .let { ProfileIntent(it.definition, it) }
     }
@@ -22,6 +29,7 @@ suspend fun loadProfileIntent(repository: ProfileGenerationRepository, target: P
 fun profileIntentBundles(intent: ProfileIntent, catalogue: List<ProfileBundle>): List<ProfileBundle> =
     intent.definition.bundles.map { reference ->
         intent.base?.bundles?.firstOrNull { it.id == reference.id && it.version == reference.version }
+            ?: intent.imported?.bundles?.firstOrNull { it.id == reference.id && it.version == reference.version }
             ?: requireNotNull(catalogue.firstOrNull { it.id == reference.id && it.version == reference.version }) {
                 "Missing Profile bundle '${reference.id}@${reference.version}'"
             }

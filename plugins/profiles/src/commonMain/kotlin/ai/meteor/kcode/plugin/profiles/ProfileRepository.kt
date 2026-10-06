@@ -119,11 +119,16 @@ interface ProfileGenerationRepository : ProfileRepository {
 data class ProfileDraftDocument(
     val definition: ProfileDefinition,
     val base: CommittedProfileGeneration? = null,
-    val formatVersion: Int = 1,
+    val formatVersion: Int = 2,
+    /** Portable frozen recipe retained until a local committed generation becomes authoritative. */
+    val imported: PortableProfileDocument? = null,
 ) {
     fun validate() {
-        require(formatVersion == 1) { "Unsupported Profile draft format" }
+        require(formatVersion == 1 || formatVersion == 2) { "Unsupported Profile draft format" }
+        require(formatVersion == 2 || imported == null) { "Imported recipes require Profile draft format 2" }
         definition.validate()
         base?.validate(restoring = true)
+        imported?.validate()
+        require(base == null || imported == null) { "Draft cannot have both local and imported bases" }
     }
 }

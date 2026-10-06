@@ -12,6 +12,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileOrigin
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -37,15 +39,35 @@ class ProfileManagement(
         val detached = Json.decodeFromString(ProfileDefinition.serializer(), Json.encodeToString(ProfileDefinition.serializer(), write.definition))
         detached.validate()
         val base = repository.loadCommitted(detached.id) ?: repository.loadDraftDocument(detached.id)?.base
-        repository.writeDraft(ProfileDraftDocument(detached, base), write.expectedRevision, write.createOnly)
+        val imported = repository.loadDraftDocument(detached.id)?.imported.takeIf { base == null }
+        repository.writeDraft(ProfileDraftDocument(detached, base, imported = imported), write.expectedRevision, write.createOnly)
         return catalogue()
     }
 
     suspend fun clone(request: ProfileCloneRequest): ProfileCatalogue {
         val intent = loadProfileIntent(repository, request.source)
         val definition = intent.definition.copy(id = request.id, displayName = request.displayName, dataScope = request.dataScope)
-        repository.writeDraft(ProfileDraftDocument(definition, intent.base), request.expectedRevision, createOnly = true)
+        repository.writeDraft(ProfileDraftDocument(definition, intent.base, imported = intent.imported), request.expectedRevision, createOnly = true)
         return catalogue()
+    }
+
+    /** Creates metadata only; code is verified by ordinary explicit preview/activation preparation. */
+    suspend fun importPortable(text: String, id: String, displayName: String, expectedRevision: Long): ProfileCatalogue {
+        val imported = ProfilePortableExporter.decode(text)
+        val definition = imported.definition.copy(
+            id = id, displayName = displayName, dataScope = ProfileDataScope(workspace = "profile"),
+        )
+        repository.writeDraft(ProfileDraftDocument(definition, imported = imported), expectedRevision, createOnly = true)
+        return catalogue()
+    }
+
+    suspend fun exportPortable(target: ProfileTarget, review: ProfileExportReview = ProfileExportReview { _, _, _ -> null }): String {
+        require(target.source != ProfileSource.Draft) { "Activate a draft before exporting its verified package recipe" }
+        val revision = repository.state().revision
+        val source = requireNotNull(loadProfileIntent(repository, target).base)
+        val text = ProfilePortableExporter(review).export(source)
+        check(repository.state().revision == revision) { "Profile repository changed; refresh before exporting" }
+        return text
     }
 
     suspend fun remove(id: String, expectedRevision: Long): ProfileCatalogue {

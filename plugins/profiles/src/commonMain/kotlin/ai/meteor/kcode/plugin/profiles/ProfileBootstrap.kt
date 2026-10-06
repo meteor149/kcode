@@ -42,8 +42,9 @@ suspend fun prepareProfileBootstrap(
         // A previous migration may have saved its draft and then failed activation.
         // Keep legacy installation state until the first generation actually commits.
         val legacy = if (id == template.id) legacyStore?.load() else null
-        val base = (repository as? ProfileGenerationRepository)?.loadDraftDocument(id)?.base
-        val frozen = base?.let { profileIntentBundles(ProfileIntent(draft, it), bundles) } ?: bundles
+        val document = (repository as? ProfileGenerationRepository)?.loadDraftDocument(id)
+        val base = document?.base
+        val frozen = profileIntentBundles(ProfileIntent(draft, base, document?.imported), bundles)
         return PreparedProfileBootstrap(
             draft, session(draft, legacy ?: base?.composition ?: PluginCompositionSnapshot(), frozen),
             migrating = legacy != null,

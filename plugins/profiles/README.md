@@ -70,8 +70,18 @@ entries and values hidden by later overrides. The default policy denies these va
 guessing whether a key contains a credential. Feature-schema reviews may supply portable values;
 the host must vet those reviews. Rejection messages never include rejected configuration values.
 Decode validates format, bundle completeness, lock structure and composition without loading code.
-It does not prove package authenticity or authorize installation/activation. Management commands,
-feature review policies, file dialogs and imported-draft publication still need integration.
+It does not prove package authenticity or authorize installation/activation. Host-side
+`ProfileManagement.importPortable` publishes a create-only, revision-checked draft with independent
+data scopes and its frozen exchange recipe; import never calls package preparation. Draft format 2
+retains that recipe through editing, cloning and repository reopening. Format 1 remains readable;
+new draft publication upgrades the envelope. A local committed generation replaces the imported
+base after successful activation. Ordinary preview/startup/activation verifies required imported
+archive hashes and complete version/variant/ABI/dependency identities, and cannot substitute a
+same-name builtin. Edited intent may add new packages through ordinary verified offers or remove
+unused locked packages. Frozen Bundle contents survive installed catalogue changes. Host-side
+export accepts committed/historical targets and rejects unverified legacy local descriptors.
+Neutral SDK commands, feature review policies, file dialogs and real package exchange acceptance
+still need integration; these host-side methods are not yet exposed by the management client.
 
 `ProfileResolver` collects only referenced package releases and their dependency archive
 hints. The existing native package resolver verifies the actual graph, platform variant and
