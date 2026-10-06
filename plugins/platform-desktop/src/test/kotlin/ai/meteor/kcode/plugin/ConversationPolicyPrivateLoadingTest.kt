@@ -1,5 +1,14 @@
 package ai.meteor.kcode.plugin
 
+import ai.meteor.kcode.KcodeAgentRuntime
+import ai.meteor.kcode.chat.ChatFailureMessages
+import ai.meteor.kcode.chat.ChatGenerationRunner
+import ai.meteor.kcode.chat.ConversationResponseRequest
+import ai.meteor.kcode.chat.UnavailableGoalSessions
+import ai.meteor.kcode.localization.AppLanguage
+import ai.meteor.kcode.model.ModelConfiguration
+import ai.meteor.kcode.model.ModelProvider
+import ai.meteor.kcode.plugin.api.KcodeGeneration
 import ai.meteor.kcode.chat.ChatService
 import ai.meteor.kcode.chat.ConversationExecution
 import ai.meteor.kcode.chat.ConversationSessionFactory
@@ -13,8 +22,13 @@ import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
 import java.security.MessageDigest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
@@ -40,12 +54,14 @@ class ConversationPolicyPrivateLoadingTest {
         lateinit var factory: ConversationSessionFactory
         lateinit var execution: ConversationExecution
         lateinit var chat: ChatService
+        lateinit var generation: ChatGenerationRunner
         val capture = kcodePlugin(
             PluginDescriptor("test.policy", "test", "test", emptySet()),
-            plugin<Unit>(name = "capture-private-policy", inject = dependencies(KcodeSessions.Key, KcodeConversationExecution.Key, KcodeAgents.Key)) { ctx, _ ->
+            plugin<Unit>(name = "capture-private-policy", inject = dependencies(KcodeSessions.Key, KcodeConversationExecution.Key, KcodeAgents.Key, KcodeGeneration.Key)) { ctx, _ ->
                 factory = ctx.require(KcodeSessions.Key).factory
                 execution = ctx.require(KcodeConversationExecution.Key).executor
                 chat = ctx.require(KcodeAgents.Key).chatService
+                generation = ctx.require(KcodeGeneration.Key).runner
             },
             Unit,
         )
@@ -56,6 +72,14 @@ class ConversationPolicyPrivateLoadingTest {
                 DesktopDynamicPluginController(ctx, loader, inventory, directory)
             },
         ))
+        val preparing = CompletableDeferred<Unit>()
+        val finishPreparation = CompletableDeferred<Unit>()
+        val host = KcodeProfileHost(KcodeAgentRuntime(chatService = runtime.chatService, owner = runtime),
+            "native", ProfileRuntimeFactory {
+                preparing.complete(Unit)
+                finishPreparation.await()
+                throw IllegalArgumentException("Rejected preparation")
+            })
         try {
             for ((id, entry) in listOf(
                 "provider.sessions.history" to SessionHistoryProviderPlugin::class.java,
@@ -126,6 +150,33 @@ class ConversationPolicyPrivateLoadingTest {
                 assertFailsWith<ClassNotFoundException> {
                     Class.forName("ai.meteor.kcode.model.ChatModelsKt", false, chat.javaClass.classLoader)
                 }
+                val committedTranscript = conversation.messages.toList()
+                conversation.executionFailure = "previous"
+                val switching = async { assertFailsWith<IllegalArgumentException> { host.switchTo("rejected") } }
+                withTimeout(5_000) { preparing.await() }
+                try {
+                    val requestScope = CoroutineScope(coroutineContext)
+                    val failureMessages = ChatFailureMessages("setup", "connection")
+                    execution.sendMessage("setup", null, conversation, { error("Denied allocation") }, chat,
+                        generation, UnavailableGoalSessions, requestScope, failureMessages, AppLanguage.English,
+                        onUserMessageAdded = { _, _ -> error("Denied feedback") }, followBottom = {})
+                    execution.sendMessage("new", null, null, { error("Denied new conversation") }, chat,
+                        generation, UnavailableGoalSessions, requestScope, failureMessages, AppLanguage.English,
+                        onUserMessageAdded = { _, _ -> error("Denied feedback") }, followBottom = {})
+                    assertFailsWith<CancellationException> {
+                        execution.startResponse(conversation, ConversationResponseRequest("denied", userMessage = "input"),
+                            ModelConfiguration(ModelProvider.DeepSeek, "test", "", 0.4), chat, generation, failureMessages)
+                    }
+                    assertEquals(committedTranscript, conversation.messages.toList())
+                    assertEquals("previous", conversation.executionFailure)
+                    assertFalse(conversation.isGenerating)
+                    assertEquals(0, generation.activeTasks.value)
+                    assertEquals(52L, conversation.reserveMessageIds())
+                } finally {
+                    finishPreparation.complete(Unit)
+                    switching.await()
+                }
+                assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
                 val previous = factory
                 runtime.pluginManager.setEnabled("provider.sessions.history", false)
                 assertFailsWith<IllegalStateException> { session.ensureConversation("stale") }
@@ -136,7 +187,8 @@ class ConversationPolicyPrivateLoadingTest {
                 session.close()
             }
         } finally {
-            runtime.close()
+            finishPreparation.complete(Unit)
+            host.close()
             directory.walkBottomUp().forEach { it.setWritable(true); it.delete() }
         }
     }

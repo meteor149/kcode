@@ -72,3 +72,14 @@ credentials are outside these configuration declarations.
 
 
 The generation provider captures root-context `KcodeExecution`. A denied launch cancels without running the body or requesting background execution allowance. Admission and active-task accounting include structured child work and cleanup; finish or explicitly cancel/join work before composition changes.
+
+
+With SDK 76 the executor captures root `KcodeExecution` before allocating a conversation,
+reserving IDs, clearing failures, resolving command snapshots or writing history. Send and
+regenerate requests use provider-owned scopes; command/history cleanup remains admitted until
+it settles. `startResponse` is suspending and rejects closed admission before preparation.
+Generation handoff enters the same boundary even for a caller-supplied runner. A launch rejected
+before its body clears prepared flags and empty assistant projections. Responses retain the
+runner's independent lifetime when the requesting page withdraws; provider withdrawal and
+Profile cancellation still cancel and join them. Setup feedback does not start generation or
+request its background allowance.

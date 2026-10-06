@@ -90,3 +90,10 @@ enter it before executing work. Composition mutation closes admission while chec
 operations, whole-Profile cancellation joins their cleanup, and startup failure/retirement
 close stale handles before product resources are released. Autonomous providers must join
 this boundary explicitly; it does not create a scheduler or implement reserved Harness APIs.
+
+
+SDK 76 admits conversation request preparation in the runtime boundary. Commands remain
+admitted through their owned asynchronous history operations, while model responses transfer
+to the independently owned generation scope. Suspend `startResponse` before allocating IDs
+or modifying response state; ordinary sends, setup feedback and regeneration use the same
+coordination. Shared chat contracts retain their exported identity; the executor stays private.

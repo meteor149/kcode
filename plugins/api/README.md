@@ -283,3 +283,10 @@ and live in independent `plugins/llm/*` modules. Rebuild external packages for A
 
 API 63 also makes `KcodeLlm` an abstract SDK service. Registry state and client lifetime
 wrappers live privately in `llm-core` and close with their owning provider.
+
+
+API 76 makes `ConversationExecution.startResponse` suspending so runtime execution admission
+can precede message-ID allocation, generation flags and response preparation. Rebuild external
+consumers/providers against ABI 76. Existing exported chat/SDK namespaces cover this contract;
+no new implementation package is shared. The default executor also admits send, command
+feedback, setup feedback and regeneration before their state/persistence side effects.

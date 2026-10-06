@@ -188,3 +188,10 @@ acceptance coverage; this contract does not make arbitrary detached plugin work 
 Schedule rejection/cancellation returns false before accepting a due task. Dispatch runs in a
 supervised child, so cancelling it does not permanently stop a scheduler retained after failed
 Profile preparation. Provider withdrawal cancels the parent and continues to join all cleanup.
+
+
+SDK 76 changes `ConversationExecution.startResponse` to a suspending request boundary.
+Consumers must call it from owned suspending work and rebuild native packages. The standard
+executor admits command/send/setup/regeneration preparation before state or persistence effects.
+Do not substitute a read-only `isOpen` check: admission must own the work through its asynchronous
+cleanup. A response handed to the generation provider retains that provider's independent scope.

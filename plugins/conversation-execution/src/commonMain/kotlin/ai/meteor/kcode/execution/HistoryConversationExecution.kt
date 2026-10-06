@@ -1,5 +1,6 @@
 package ai.meteor.kcode.execution
 
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
 import ai.meteor.kcode.chat.ChatFailureMessages
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.ChatService
@@ -34,12 +35,13 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private fun executeSendMessage(
+private suspend fun executeSendMessage(
     prompt: String,
     configuration: ModelConfiguration?,
     conversation: ConversationState?,
@@ -63,7 +65,7 @@ private fun executeSendMessage(
     val command = commands.resolve(cleanPrompt)
     if (command != null) {
         if (conversation?.isGenerating == true && !command.allowedDuringGeneration) return
-        scope.launch {
+        run {
             var commandTarget = conversation
             var requestOpen = true
             fun requireRequestOpen() = check(requestOpen) { "Command execution request is no longer active" }
@@ -197,7 +199,7 @@ private suspend fun persistMessage(
     )
 }
 
-private fun executeStartResponse(
+private suspend fun executeStartResponse(
     target: ConversationState,
     request: ConversationResponseRequest,
     configuration: ModelConfiguration?,
@@ -219,7 +221,7 @@ private fun executeStartResponse(
     val assistantId = userMessage?.let { it.id + 1L } ?: nextMessageId(target)
     target.isGenerating = true
     target.isAwaitingFirstToken = true
-    launchStreamingResponse(
+    val job = launchStreamingResponse(
         target = target,
         assistantId = assistantId,
         configuration = activeConfiguration,
@@ -246,10 +248,12 @@ private fun executeStartResponse(
         },
         onResponseFinished = onResponseFinished,
     )
+    currentCoroutineContext().ensureActive()
+    if (job.isCancelled) return false
     return true
 }
 
-private fun executeRegenerateMessage(
+private suspend fun executeRegenerateMessage(
     answer: ChatMessage,
     configuration: ModelConfiguration?,
     conversation: ConversationState?,
@@ -304,7 +308,7 @@ private fun executeRegenerateMessage(
     )
 }
 
-private fun appendSetupRequiredMessages(
+private suspend fun appendSetupRequiredMessages(
     target: ConversationState,
     userMessage: ChatMessage,
     setupMessage: String,
@@ -345,6 +349,7 @@ private fun appendSetupRequiredMessages(
         }
     }
     job.start()
+    job.awaitOwned()
 }
 
 private fun prepareStreamingResponse(target: ConversationState, assistantId: Long) {
@@ -371,8 +376,10 @@ private fun launchStreamingResponse(
     followBottom: (ConversationState) -> Unit,
     beforeRequest: suspend () -> Unit,
     onResponseFinished: suspend (completed: Boolean) -> Unit = {},
-) {
+): Job {
+    var started = false
     val job = generationRunner.launch {
+        started = true
         var responseFinished = false
         var requestPrepared = false
         var modelFinished = false
@@ -472,6 +479,22 @@ private fun launchStreamingResponse(
         }
     }
     target.runningJob = job.takeUnless { it.isCompleted }
+    job.invokeOnCompletion {
+        // Admission or runner cancellation can reject the body before its finally starts.
+        if (!started && (target.runningJob === job || target.runningJob == null)) {
+            target.messages.removeAll { it.id == assistantId && it.role == MessageRole.Assistant && it.content.isEmpty() }
+            target.isGenerating = false
+            target.isAwaitingFirstToken = false
+            target.runningJob = null
+        }
+    }
+    return job
+}
+
+/** Setup feedback stays owned by its admitted request through cancellation cleanup. */
+private suspend fun Job.awaitOwned() {
+    try { join() }
+    finally { withContext(NonCancellable) { if (!isCompleted) cancelAndJoin() } }
 }
 
 private fun safeFailureDetail(
@@ -587,6 +610,7 @@ private suspend fun ConversationState.persistOrRemovePartialMessage(
 internal class HistoryConversationExecution(
     private val historyRepository: ConversationHistoryRepository,
     private val messageCodec: ChatMessageCodec,
+    private val admission: ExecutionAdmission? = null,
     private val commandSnapshot: () -> ConversationCommandSnapshot = { ConversationCommandSnapshot() },
 ) : ConversationExecution {
     private var closed = false
@@ -596,6 +620,16 @@ internal class HistoryConversationExecution(
     private fun ownedScope(parent: CoroutineScope): CoroutineScope = scopes.getOrPut(parent) {
         CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
     }
+    private suspend fun <T> admitted(block: suspend () -> T): T =
+        if (admission == null) block() else admission.run(block)
+
+    private fun coordinated(runner: ChatGenerationRunner): ChatGenerationRunner =
+        if (admission == null) runner else object : ChatGenerationRunner by runner {
+            override fun launch(block: suspend CoroutineScope.() -> Unit): Job = runner.launch {
+                admitted { block() }
+            }
+        }
+
     private fun track(conversation: ConversationState?) { if (conversation != null) conversations += conversation }
     suspend fun close() {
         closed = true
@@ -624,28 +658,34 @@ internal class HistoryConversationExecution(
         followBottom: (ConversationState) -> Unit,
     ) {
         requireOpen()
-        track(conversation)
-        executeSendMessage(
-            prompt = prompt,
-            configuration = configuration,
-            conversation = conversation,
-            onSendToNew = { prompt -> onSendToNew(prompt).also(::track) },
-            service = service,
-            generationRunner = generationRunner,
-            goalSessionFactory = goalSessionFactory,
-            scope = ownedScope(scope),
-            failureMessages = failureMessages,
-            language = language,
-            commands = commandSnapshot(),
-            scheduledTaskSessionFor = scheduledTaskSessionFor,
-            onUserMessageAdded = onUserMessageAdded,
-            followBottom = followBottom,
-            historyRepository = historyRepository,
-            messageCodec = messageCodec,
-        )
+        val requestScope = ownedScope(scope)
+        requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            admitted {
+                requireOpen()
+                track(conversation)
+                executeSendMessage(
+                    prompt = prompt,
+                    configuration = configuration,
+                    conversation = conversation,
+                    onSendToNew = { prompt -> onSendToNew(prompt).also(::track) },
+                    service = service,
+                    generationRunner = coordinated(generationRunner),
+                    goalSessionFactory = goalSessionFactory,
+                    scope = requestScope,
+                    failureMessages = failureMessages,
+                    language = language,
+                    commands = commandSnapshot(),
+                    scheduledTaskSessionFor = scheduledTaskSessionFor,
+                    onUserMessageAdded = onUserMessageAdded,
+                    followBottom = followBottom,
+                    historyRepository = historyRepository,
+                    messageCodec = messageCodec,
+                )
+            }
+        }
     }
 
-    override fun startResponse(
+    override suspend fun startResponse(
         target: ConversationState,
         request: ConversationResponseRequest,
         configuration: ModelConfiguration?,
@@ -656,9 +696,13 @@ internal class HistoryConversationExecution(
         onResponseFinished: suspend (completed: Boolean) -> Unit,
     ): Boolean {
         requireOpen()
-        track(target)
-        return executeStartResponse(target, request, configuration, service, generationRunner,
-            historyRepository, messageCodec, failureMessages, followBottom, onResponseFinished)
+        return admitted {
+            requireOpen()
+            currentCoroutineContext().ensureActive()
+            track(target)
+            executeStartResponse(target, request, configuration, service, coordinated(generationRunner),
+                historyRepository, messageCodec, failureMessages, followBottom, onResponseFinished)
+        }
     }
 
     override fun regenerateMessage(
@@ -676,22 +720,28 @@ internal class HistoryConversationExecution(
         followBottom: (ConversationState) -> Unit,
     ) {
         requireOpen()
-        track(conversation)
-        executeRegenerateMessage(
-            answer = answer,
-            configuration = configuration,
-            conversation = conversation,
-            service = service,
-            generationRunner = generationRunner,
-            goalSessionFactory = goalSessionFactory,
-            scope = ownedScope(scope),
-            failureMessages = failureMessages,
-            scheduledTaskSession = scheduledTaskSession,
-            shouldFollowLatest = shouldFollowLatest,
-            onFollowLatestChange = onFollowLatestChange,
-            followBottom = followBottom,
-            historyRepository = historyRepository,
-            messageCodec = messageCodec,
-        )
+        val requestScope = ownedScope(scope)
+        requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            admitted {
+                requireOpen()
+                track(conversation)
+                executeRegenerateMessage(
+                    answer = answer,
+                    configuration = configuration,
+                    conversation = conversation,
+                    service = service,
+                    generationRunner = coordinated(generationRunner),
+                    goalSessionFactory = goalSessionFactory,
+                    scope = requestScope,
+                    failureMessages = failureMessages,
+                    scheduledTaskSession = scheduledTaskSession,
+                    shouldFollowLatest = shouldFollowLatest,
+                    onFollowLatestChange = onFollowLatestChange,
+                    followBottom = followBottom,
+                    historyRepository = historyRepository,
+                    messageCodec = messageCodec,
+                )
+            }
+        }
     }
 }

@@ -52,7 +52,7 @@ class GoalUiLifecycleTest {
                 failureMessages: ChatFailureMessages, language: ai.meteor.kcode.localization.AppLanguage,
                 scheduledTaskSessionFor: (ConversationState) -> ai.meteor.kcode.chat.ScheduledTaskSession?,
                 onUserMessageAdded: (ConversationState, ChatMessage) -> Unit, followBottom: (ConversationState) -> Unit) = error("unused")
-            override fun startResponse(target: ConversationState, request: ai.meteor.kcode.chat.ConversationResponseRequest,
+            override suspend fun startResponse(target: ConversationState, request: ai.meteor.kcode.chat.ConversationResponseRequest,
                 configuration: ModelConfiguration?, service: ChatService, generationRunner: ChatGenerationRunner,
                 failureMessages: ChatFailureMessages, followBottom: (ConversationState) -> Unit,
                 onResponseFinished: suspend (Boolean) -> Unit): Boolean = error("unused")

@@ -196,3 +196,33 @@ the restored root admits work. This evidence does not prove every autonomous pro
 admission, pre-generation command protection, Desktop native dialogs or complete navigation.
 Those remain required acceptance work. The final host build is recorded separately in
 `profile-publication-barrier-host-validation.log`. No SDK ABI changed in this phase.
+
+
+## Conversation request admission (SDK 76)
+
+`ConversationExecution.startResponse` is now suspending. The standard executor captures root
+execution admission before command resolution, conversation allocation, message-ID reservation,
+generation flags, setup feedback or regeneration persistence. Command requests remain admitted
+through asynchronous history cleanup. Responses enter the same gate when transferred to a
+caller-supplied generation runner, retaining the runner's independent lifetime when the page
+withdraws. A cancelled launch whose body never starts clears prepared generation state.
+
+`profile-command-admission-unit-validation.log` passed 44 SDK tests, 16 Goal tests and 12
+Schedule tests. The final conversation suite in `profile-command-admission-native-validation.log`
+passed 20 tests, including closed-admission side-effect rejection, command cleanup joining,
+page-independent generation and rejected handoff state cleanup. That run also rebuilt native
+packages for ABI 76, passed selected actual-JAR conversation/generation/schedule/native admission
+suites, compiled desktop, assembled Android and assembled the instrumentation APK.
+
+`profile-command-admission-private-validation.log` then passed the expanded actual-JAR policy
+case and rebuilt the instrumentation APK. Its private executor rejects send/setup/new-conversation
+and suspending response calls during host Preparing; transcript, prior failure, next message ID
+and generation count remain unchanged. Failed preparation restores Ready. The shared chat and
+plugin API export prefixes remain authoritative; the executor is still privately loaded.
+
+Physical Android ran the equivalent private-APK executor case and both selected private-APK
+Schedule rejection/retry and cancellation/cleanup cases. `profile-command-admission-device-validation.log`
+reports `OK (3 tests)` and instrumentation code -1. No real model request or OS background
+permission claim follows from these fixtures. Additional detached producers/feature preparation,
+Desktop native dialogs and full management navigation still require acceptance before declaring
+the overall Profile goal complete. External consumers/providers must rebuild for ABI 76.

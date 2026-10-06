@@ -48,7 +48,7 @@ interface ConversationExecution {
         followBottom: (ConversationState) -> Unit,
     )
 
-    fun startResponse(
+    suspend fun startResponse(
         target: ConversationState,
         request: ConversationResponseRequest,
         configuration: ModelConfiguration?,

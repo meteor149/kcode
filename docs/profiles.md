@@ -418,5 +418,6 @@ publication barrier. Direct runtime creation releases it after successful prepar
 Profile factories defer release until the host exposes the committed runtime. Target switches
 release it after durable selection publication, and restoration releases it after verifying
 the previous frozen generation. Failed candidates retire their captured admission references.
-Command execution before generation and additional detached producers remain separate
-audit/acceptance work; do not infer complete background coordination from these tests.
+SDK 76 makes response preparation suspending and admits command/send/setup/regeneration
+work before allocating conversations, reserving IDs or writing history. Additional detached
+producers remain separate audit/acceptance work; do not infer complete background coordination from these tests.

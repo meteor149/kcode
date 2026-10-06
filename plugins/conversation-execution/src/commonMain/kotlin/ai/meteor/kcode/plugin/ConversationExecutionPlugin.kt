@@ -4,6 +4,7 @@ import ai.meteor.kcode.execution.HistoryConversationExecution
 import ai.meteor.kcode.plugin.api.KcodeConversationExecution
 import ai.meteor.kcode.plugin.api.KcodeConversationCommands
 import ai.meteor.kcode.plugin.api.KcodeMessageCodec
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.KcodeHistory
 import org.cordis.ConfigValidator
 import org.cordis.Context
@@ -18,7 +19,11 @@ object ConversationExecutionProviderPlugin : Plugin<Unit> {
     override val inject = dependencies(KcodeHistory.Key, KcodeConversationCommands.Key, KcodeMessageCodec.Key)
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         val commands = ctx.require(KcodeConversationCommands.Key)
-        val execution = HistoryConversationExecution(ctx.require(KcodeHistory.Key).repository, ctx.require(KcodeMessageCodec.Key).codec) { commands.committedSnapshot }
+        val execution = HistoryConversationExecution(
+            ctx.require(KcodeHistory.Key).repository,
+            ctx.require(KcodeMessageCodec.Key).codec,
+            admission = ctx.root[KcodeExecution.Key]?.admission,
+        ) { commands.committedSnapshot }
         KcodeConversationExecution(ctx, execution)
         effect.collect(Disposable { execution.close() })
     }
