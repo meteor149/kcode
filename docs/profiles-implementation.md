@@ -706,3 +706,39 @@ and Android application assembly passed against the final implementation.
 Independent recovery UI, failures before initial host construction, verified Bundle import,
 credential-safe export, autonomous-work admission auditing, Android device evidence under
 API 70 and final full-platform acceptance remain outstanding. The overall goal remains active.
+
+## Initial Profile failure ownership
+
+The suspending native Profile-host constructors now retain host-owned management after
+initial Profile preparation or product allocation fails. Catalogue construction errors still
+throw. A failed initial Profile creates no current product view and enters RecoveryRequired;
+metadata and accepted activation commands work without a product tree. The desktop test repairs
+an unavailable-module draft and activates it through the same host-owned command gateway,
+with no failed-startup generation or selection publication. Compatibility runtime constructors
+continue closing a failed host and throwing rather than returning an empty runtime to existing
+application callers.
+
+Startup cleanup retains a private resource owner when retirement fails. Runtime closure and
+startup cleanup explicitly retire Loader entries, including entries whose failed disposer has
+already removed its parent effect. They abort in-flight allocation, attempt all retirements,
+then release native loading and Context resources. A green parent Context close alone does not
+certify those residual entries. Initial incomplete tree restoration remains uncertified even
+when its remaining parent cleanup succeeds; explicit recovery cannot overlap that owner.
+Partial-startup and failed-edit tests prove retained cleanup failure cannot be forgotten, and
+that the disposer is not rerun. The existing successful-restoration recovery case remains green.
+
+Cancellation joins initial allocation cleanup and closes the unbound command gateway. An
+additional common-host boundary case cancels after initial creation returns and proves the
+created owner is retired before cancellation propagates, without publishing a host.
+
+Final focused validation passed 44 tests (7 native host, 21 host, 12 runtime, 4 startup recovery),
+with zero failures, errors or skips. Desktop compilation and Android application assembly passed
+against the final implementation and Cordis a1bd8d0. Host-private signatures and failure types
+do not change PluginHostApiPackages or exported SDK identities; Plugin API remains 70.
+
+This establishes the recovery Host and command boundary, not an interactive startup experience.
+The applications still use the compatibility runtime constructors. Independent recovery UI
+and app integration, corrupt authority repair, failure before catalogue construction or during
+bundled-package staging, verified Bundle import, credential-safe export, autonomous-work
+admission audit, device evidence and full platform acceptance remain outstanding.
+The overall goal remains active.

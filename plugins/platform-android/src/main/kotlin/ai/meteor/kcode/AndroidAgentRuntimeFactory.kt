@@ -52,8 +52,6 @@ import android.app.Activity
 import android.content.Context
 import java.io.File
 import java.nio.file.Files
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 
 /** Native loader bridge for custom compositions; the factory borrows the application context. */
 fun androidPluginControllerFactory(context: Context, directory: File): DynamicPluginControllerFactory {
@@ -95,7 +93,7 @@ suspend fun createAndroidKoogChatRuntime(
 ): KcodeAgentRuntime {
     return createAndroidProfileHost(activity, modeProvider, permissionModeProvider, toolCallApprover,
         settingsStore, historyRepository, profile, settingsBackedInteraction, settingsBackedShell,
-        permissionHost, confirmationDialogs, profileId, moduleFactories).runtime
+        permissionHost, confirmationDialogs, profileId, moduleFactories).requireInitialRuntime()
 }
 
 suspend fun createAndroidProfileHost(
@@ -146,7 +144,8 @@ suspend fun createAndroidProfileHost(
     val legacyStore = FilePluginCompositionStore(pluginDirectory)
     val repository = FileProfileRepository(File(activity.filesDir, "cordis_profiles"))
     lateinit var catalogue: Set<String>
-    lateinit var initialActivation: ProfileActivation
+    var startupReached = false
+    var startupProfileId = profileId ?: "native"
     suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
         val bundles = nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList())
         return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
@@ -183,7 +182,9 @@ suspend fun createAndroidProfileHost(
     }
     val startup = ProfileStartupFactory { modules ->
         catalogue = modules.map { it.descriptor.id }.toSet()
-        prepare().also { initialActivation = it }
+        startupReached = true
+        startupProfileId = profileId ?: repository.selected() ?: "native"
+        prepare()
     }
     fun hostInputs() = when {
         confirmationDialogs != null -> AndroidPluginHostInputs(activity, permissionHost, confirmationDialogs)
@@ -211,12 +212,6 @@ suspend fun createAndroidProfileHost(
         owner = runtime,
         applicationContent = runtime,
     )
-    val initial = try {
-        KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs()))
-    } catch (error: Throwable) {
-        withContext(NonCancellable) { commands.close() }
-        throw error
-    }
     suspend fun prepared(id: String, request: ProfileActivationRequest? = null): PreparedProfileRuntime {
         val activation = prepare(id, staging = true, request = request)
         return PreparedProfileRuntime(activation) {
@@ -236,5 +231,8 @@ suspend fun createAndroidProfileHost(
     val management = ProfileManagement(repository,
         { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
-    return KcodeProfileHost(facade(initial), initialActivation.resolved.definition.id, factory, management, commands).also(commands::bind)
+    return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
+        overlayAvailable = true, canRecover = { startupReached }) {
+        facade(KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs())))
+    }
 }

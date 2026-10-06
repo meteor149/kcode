@@ -391,6 +391,28 @@ class ProfileHostTest {
         verifyFailedCompositionRestoration(generalEdit = true)
     }
 
+    @Test
+    fun failedEntryRetirementDuringEditCannotBeForgottenByRuntimeClosure(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.failProviderCleanup += "old"
+            assertFailsWith<IllegalStateException> { host.pluginManager.setEnabled("agent", false) }
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            fixture.failProviderCleanup.clear()
+            assertFailsWith<IllegalStateException> { host.recoverTo("target") }
+            assertEquals(before, fixture.repository.state())
+            assertEquals(listOf("old"), fixture.allocations)
+            assertEquals(listOf("old"), fixture.cleanupAttempts)
+            assertFailsWith<IllegalStateException> { host.close() }
+        } finally {
+            try { fixture.host?.close() } catch (_: IllegalStateException) {
+                // Entry retirement retains its already-observed failure.
+            } finally { fixture.root.deleteRecursively() }
+        }
+    }
+
     private suspend fun verifyFailedCompositionRestoration(generalEdit: Boolean) {
         val fixture = Fixture()
         try {

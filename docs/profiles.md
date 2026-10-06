@@ -32,6 +32,20 @@ restoration refuses new work in `RecoveryRequired`. Diagnostics use the host's a
 runtime rather than a retained old owner. Each allocation receives fresh host inputs. Recovery UI
 remains pending. Native hosts also expose explicit activation through the SDK plugin manager.
 
+The suspending Profile-host factories retain host-owned management in RecoveryRequired when
+initial Profile preparation or product allocation fails after native catalogue construction.
+No initial product runtime is required to query metadata, repair a draft or submit activation.
+Failed startup resource retirement is retained and must complete before recovery allocates a
+target; incomplete initial tree retirement may require process restart. Cancellation closes
+the unbound command gateway and joins allocated resources rather than returning a recovery host.
+Invalid native module-factory configuration remains a construction error.
+
+The compatibility createDesktopKoogChatRuntime/createAndroidKoogChatRuntime functions still
+require successful initial startup: they close a failed host and rethrow its startup failure.
+The shipped applications currently use those functions. Interactive startup recovery awaits
+their integration with an independent recovery UI. Failure before catalogue construction,
+bundled-package staging failure and repair of corrupt repository authority remain outstanding.
+
 In `RecoveryRequired`, host-owned catalogue/draft/clone/delete/preview/history commands remain
 available without the product tree. The catalogue reports no active Profile; the durable selection
 remains unchanged. Ordinary agent work and active-composition commands remain closed. SDK

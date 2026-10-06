@@ -97,6 +97,7 @@ import org.cordis.loader.LoaderConfig
 import org.cordis.loader.LoaderPlugin
 import org.cordis.loader.TreeRestorationException
 import org.cordis.loader.EntryOptions
+import org.cordis.loader.Entry
 import org.cordis.loader.GroupPlugin
 import org.cordis.loader.withTreeTransaction
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
@@ -190,7 +191,7 @@ class KcodePluginRuntime private constructor(
         companion object Key : CoroutineContext.Key<ClosingRuntime>
     }
 
-    private data class ClosePlan(val turns: List<Job>, val fibers: List<Fiber<*>>)
+    private data class ClosePlan(val turns: List<Job>, val fibers: List<Fiber<*>>, val entries: List<Entry>)
 
     private val closeCompletion = CompletableDeferred<Unit>()
     private val lock = Mutex()
@@ -1274,6 +1275,7 @@ class KcodePluginRuntime private constructor(
                     turns.keys.toList(),
                     records.values.toList().asReversed().mapNotNull { it.fiber } +
                         bootstrap.asReversed() + context.fiber,
+                    context[Loader.Key]?.store?.values?.toList().orEmpty(),
                 )
             }
         }
@@ -1295,6 +1297,7 @@ class KcodePluginRuntime private constructor(
                 }
                 // Admission is closed; no mutation can race these snapshots. Keep the runtime lock
                 // free so cleanup callbacks can inspect diagnostics or receive closed-service errors.
+                dispose { retireProfileEntries(plan.entries) }
                 dispose { external?.close() }
                 plan.fibers.forEach { fiber -> dispose { fiber.dispose() } }
                 dispose { hostInputs?.close() }
@@ -1314,8 +1317,18 @@ class KcodePluginRuntime private constructor(
             try {
                 return createOwned(config)
             } catch (error: Throwable) {
-                withContext(NonCancellable) {
-                    runCatching { config.hostInputs?.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                val inputFailure = withContext(NonCancellable) {
+                    runCatching { config.hostInputs?.close() }.exceptionOrNull()
+                }
+                inputFailure?.takeIf { it !== error }?.let(error::addSuppressed)
+                if (error is RuntimeStartupRetirementException || inputFailure != null) {
+                    val owner = AgentRuntimeOwner {
+                        releaseStartupResources(
+                            { (error as? RuntimeStartupRetirementException)?.retirement?.close() },
+                            { config.hostInputs?.close() },
+                        )?.let { throw it }
+                    }
+                    throw RuntimeStartupRetirementException(error, owner)
                 }
                 throw error
             }
@@ -1437,9 +1450,25 @@ class KcodePluginRuntime private constructor(
                     }
                 }
             } catch (error: Throwable) {
-                withContext(NonCancellable) {
-                    runCatching { external?.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
-                    runCatching { context.fiber.dispose() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                // Failed Entry disposal removes its parent effect before propagating the
+                // retained failure. The Loader still owns that Entry, so root disposal
+                // alone cannot certify retirement or retain its resource references.
+                val entries = context[Loader.Key]?.store?.values?.toList().orEmpty()
+                val owner = AgentRuntimeOwner {
+                    releaseStartupResources(
+                        { retireProfileEntries(entries) },
+                        { external?.close() },
+                        { context.fiber.dispose() },
+                    )?.let { throw it }
+                    // Initial activation started with an empty product tree. Incomplete
+                    // tree restoration therefore cannot be certified by closing its
+                    // remaining parents, including failures inside nested provider trees.
+                    if (error is TreeRestorationException) throw error
+                }
+                val cleanupFailure = withContext(NonCancellable) { runCatching { owner.close() }.exceptionOrNull() }
+                if (cleanupFailure != null) {
+                    if (cleanupFailure !== error) error.addSuppressed(cleanupFailure)
+                    throw RuntimeStartupRetirementException(error, owner)
                 }
                 throw error
             }
@@ -1448,6 +1477,26 @@ class KcodePluginRuntime private constructor(
 }
 
 private val BootstrapIds = setOf("core.plugin-inventory", "core.loader")
+
+private suspend fun retireProfileEntries(entries: List<Entry>) {
+    val aborts = entries.filter { it.fiber?.state == FiberState.LOADING }.asReversed().map { entry ->
+        suspend { entry.fiber?.dispose(); Unit }
+    }
+    val retirements = entries.asReversed().map { entry ->
+        suspend { entry.parent.remove(entry.options.id, true) }
+    }
+    releaseStartupResources(*(aborts + retirements).toTypedArray())?.let { throw it }
+}
+
+private suspend fun releaseStartupResources(vararg actions: suspend () -> Unit): Throwable? {
+    var failure: Throwable? = null
+    actions.forEach { action ->
+        try { action() } catch (error: Throwable) {
+            if (failure == null) failure = error else if (failure !== error) failure!!.addSuppressed(error)
+        }
+    }
+    return failure
+}
 
 private fun builtinDescriptor(id: String, vararg capabilities: String) =
     PluginDescriptor(id, "builtin", "built-in", capabilities.toSet())

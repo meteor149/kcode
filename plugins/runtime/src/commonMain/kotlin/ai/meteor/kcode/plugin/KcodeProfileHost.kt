@@ -36,6 +36,7 @@ import androidx.compose.runtime.key
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -69,12 +70,15 @@ data class ProfileHostState(
 
 /** Stable native facades own task admission across replacement of complete product runtimes. */
 class KcodeProfileHost(
-    initial: KcodeAgentRuntime,
+    initial: KcodeAgentRuntime?,
     initialProfileId: String,
     private val factory: ProfileRuntimeFactory,
     private val management: ProfileManagement? = null,
     private val commandGateway: ProfileCommandGateway? = null,
+    initialFailure: Throwable? = null,
+    private val overlayAvailable: Boolean = initial?.conversationOverlayController != null,
 ) : AgentRuntimeOwner, ApplicationContent {
+    init { require(initial != null || initialFailure != null) { "A Profile host needs a runtime or startup failure" } }
     private class HostCall(val host: KcodeProfileHost) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<HostCall>
     }
@@ -88,12 +92,28 @@ class KcodeProfileHost(
     private val view = MutableStateFlow<KcodeAgentRuntime?>(initial)
     private var current: KcodeAgentRuntime? = initial
     private val pendingRetirement = mutableListOf<KcodeAgentRuntime>()
-    private val mutableState = MutableStateFlow(ProfileHostState(initialProfileId))
+    private val mutableState = MutableStateFlow(ProfileHostState(
+        initialProfileId,
+        if (initial == null) ProfileHostPhase.RecoveryRequired else ProfileHostPhase.Ready,
+        initialFailure,
+    ))
+    private var startupRetirement: AgentRuntimeOwner? = null
     val state: StateFlow<ProfileHostState> = mutableState.asStateFlow()
     val profileCommands: ProfileManagementClient? get() = commandGateway
     private var foreground = true
     private var overlayClosed = false
     private val closeCompletion = CompletableDeferred<Unit>()
+
+    /** Compatibility entry points require a running product rather than a recovery host. */
+    suspend fun requireInitialRuntime(): KcodeAgentRuntime {
+        val failure = state.value.failure
+        if (state.value.phase != ProfileHostPhase.Ready) {
+            val error = failure ?: IllegalStateException("Profile startup did not produce a ready runtime")
+            try { close() } catch (cleanup: Throwable) { if (cleanup !== error) error.addSuppressed(cleanup) }
+            throw error
+        }
+        return runtime
+    }
 
     private suspend fun outsideCall() {
         PluginOperationOwner.requireOutsideCall()
@@ -240,7 +260,7 @@ class KcodeProfileHost(
 
     val runtime = KcodeAgentRuntime(
         chatService = chatService,
-        conversationOverlayController = if (initial.conversationOverlayController == null) null else conversationOverlayController,
+        conversationOverlayController = if (overlayAvailable) conversationOverlayController else null,
         pluginManager = pluginManager,
         owner = this,
         applicationContent = this,
@@ -318,6 +338,7 @@ class KcodeProfileHost(
                 currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
                     // Never overlap a new owner with resources whose retirement failed.
+                    startupRetirement?.let { owner -> owner.close(); startupRetirement = null }
                     pendingRetirement.toList().forEach { releaseRuntime(it) }
                     admission.withLock { mutableState.value = previous.copy(phase = ProfileHostPhase.Switching) }
                 }
@@ -490,6 +511,7 @@ class KcodeProfileHost(
                 jobs.forEach { it.cancel() }
                 jobs.forEach { it.join() }
                 release { finishOverlays() }
+                release { startupRetirement?.close() }
                 val old = admission.withLock { current.also { current = null } }
                 release { old?.let { releaseRuntime(it) } }
                 pendingRetirement.toList().filterNot { it === old }.forEach { retired ->
@@ -498,6 +520,42 @@ class KcodeProfileHost(
                 if (failure == null) closeCompletion.complete(Unit) else closeCompletion.completeExceptionally(failure!!)
                 failure?.let { throw it }
             }
+        }
+    }
+
+    companion object {
+        /** Initial Profile failure leaves host-owned management available without a product tree. */
+        suspend fun start(
+            initialProfileId: () -> String,
+            factory: ProfileRuntimeFactory,
+            management: ProfileManagement,
+            commands: ProfileCommandGateway,
+            overlayAvailable: Boolean = false,
+            canRecover: () -> Boolean = { true },
+            createInitial: suspend () -> KcodeAgentRuntime,
+        ): KcodeProfileHost {
+            val initial = try { createInitial() }
+            catch (error: Throwable) {
+                if (error is CancellationException || !canRecover() || currentCoroutineContext()[Job]?.isActive == false) {
+                    withContext(NonCancellable) { commands.close() }
+                    throw error
+                }
+                return KcodeProfileHost(null, initialProfileId(), factory, management, commands,
+                    initialFailure = error, overlayAvailable = overlayAvailable).also { host ->
+                    host.startupRetirement = (error as? RuntimeStartupRetirementException)?.retirement
+                    commands.bind(host)
+                }
+            }
+            try { currentCoroutineContext().ensureActive() }
+            catch (cancelled: CancellationException) {
+                withContext(NonCancellable) {
+                    runCatching { initial.close() }.exceptionOrNull()?.takeIf { it !== cancelled }?.let(cancelled::addSuppressed)
+                    commands.close()
+                }
+                throw cancelled
+            }
+            return KcodeProfileHost(initial, initialProfileId(), factory, management, commands,
+                overlayAvailable = overlayAvailable).also(commands::bind)
         }
     }
 }

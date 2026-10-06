@@ -80,8 +80,13 @@ class NativeProfileHostTest {
         } finally { host.close() }
         try {
             assertTrue(live.isEmpty())
-            val missing = assertFailsWith<IllegalStateException> { createDesktopProfileHost(homeDirectory = home, profile = profile) }
-            assertTrue(missing.message.orEmpty().contains("No package release available for 'example.ui.alternate'"))
+            val unavailable = createDesktopProfileHost(homeDirectory = home, profile = profile)
+            try {
+                assertEquals(ProfileHostPhase.RecoveryRequired, unavailable.state.value.phase)
+                assertTrue(unavailable.state.value.failure?.message.orEmpty().contains("No package release available for 'example.ui.alternate'"))
+                assertNotNull(unavailable.profileCommands)
+                assertEquals("native", unavailable.pluginManager.profileCatalogue().selectedProfileId)
+            } finally { unavailable.close() }
             assertTrue(live.isEmpty())
             val restarted = createDesktopKoogChatRuntime(homeDirectory = home, profile = profile, moduleFactories = factories())
             try {
