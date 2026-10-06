@@ -11,10 +11,14 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -29,12 +33,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** Immutable generations become visible only through one atomically replaced authority file. */
-class FileProfileRepository(directory: File) : ProfileGenerationRepository {
+class FileProfileRepository(directory: File) : ProfileGenerationRepository, ProfileRepositoryRecovery {
     private val root by lazy { Files.createDirectories(directory.toPath()).toRealPath() }
     private val mutex get() = processLocks.computeIfAbsent(root) { Mutex() }
     private val json = Json { prettyPrint = true; encodeDefaults = true }
 
-    private suspend fun <T> access(atomic: Boolean = false, block: () -> T): T =
+    private suspend fun <T> access(atomic: Boolean = false, block: suspend () -> T): T =
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 withContext(if (atomic) Dispatchers.IO + NonCancellable else Dispatchers.IO) {
@@ -76,11 +80,11 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
         return bytes.decodeToString(throwOnInvalidSequence = true)
     }
 
-    private fun write(path: Path, text: String, replace: Boolean = true) {
+    private fun write(path: Path, text: String, replace: Boolean = true, maxBytes: Int = MaxBytes) {
         checkFile(path)
         require(replace || !Files.exists(path, LinkOption.NOFOLLOW_LINKS)) { "Generation already exists" }
         val bytes = text.encodeToByteArray()
-        require(bytes.size <= MaxBytes) { "Profile document is too large" }
+        require(bytes.size <= maxBytes) { "Profile document is too large" }
         val temporary = Files.createTempFile(path.parent, "profile-", ".tmp")
         try {
             FileOutputStream(temporary.toFile()).use { output -> output.write(bytes); output.fd.sync() }
@@ -122,10 +126,13 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
     private fun authority(): Authority {
         val existing = read(root.resolve(StateFilename))
         if (existing != null) return json.decodeFromString<Authority>(existing).also(::validateAuthority)
+        require(!Files.exists(root.resolve(CheckpointFilename), LinkOption.NOFOLLOW_LINKS) && !hasVersionedDocuments()) {
+            "Profile authority is missing; use explicit repository recovery"
+        }
         // Import once. Legacy documents remain read-only migration evidence; orphans are never adopted.
         val profiles = linkedMapOf<String, ProfileRecord>()
         Files.newDirectoryStream(root).use { entries ->
-            entries.filter { !Files.isSymbolicLink(it) && Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) }
+            entries.filter { !it.fileName.toString().startsWith('.') && !Files.isSymbolicLink(it) && Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) }
                 .sortedBy { it.fileName.toString() }.forEach { path ->
                     val id = path.fileName.toString()
                     profileDirectory(id)
@@ -165,7 +172,149 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
         require(previous.revision < Long.MAX_VALUE) { "Profile repository revision exhausted" }
         val updated = next.copy(formatVersion = 2, revision = previous.revision + 1)
         validateAuthority(updated)
+        saveCheckpoint(previous)
         write(root.resolve(StateFilename), json.encodeToString(updated))
+    }
+
+    private fun hasVersionedDocuments(): Boolean = Files.newDirectoryStream(root).use { entries ->
+        entries.any { path -> !path.fileName.toString().startsWith('.') &&
+            !Files.isSymbolicLink(path) && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) &&
+            listOf("generations", "drafts").any { Files.exists(path.resolve(it), LinkOption.NOFOLLOW_LINKS) } }
+    }
+
+    private fun raw(path: Path, limit: Int = MaxEvidenceBytes): ByteArray? {
+        checkFile(path)
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null
+        return Files.newInputStream(path).use { it.readNBytes(limit + 1) }.also {
+            require(it.size <= limit) { "Profile recovery evidence exceeds its size limit" }
+        }
+    }
+
+    private fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun documentChecks(value: Authority): Map<String, (ByteArray) -> Unit> {
+        validateAuthority(value)
+        return buildMap {
+            value.profiles.forEach { (id, record) ->
+                record.generations.forEach { pointer ->
+                    val path = generationPath(id, pointer.document)
+                    put(root.relativize(path).toString().replace('\\', '/')) { bytes ->
+                        val generation = decodeGeneration(bytes.decodeToString(throwOnInvalidSequence = true), id)
+                        require(generation.generation == pointer.generation) { "Generation pointer mismatch" }
+                    }
+                }
+                if (record.draft) {
+                    val path = record.draftDocument?.let { draftPath(id, it) } ?: profileDirectory(id).resolve("profile.json")
+                    put(root.relativize(path).toString().replace('\\', '/')) { bytes ->
+                        val text = bytes.decodeToString(throwOnInvalidSequence = true)
+                        val document = if (record.draftDocument == null) ProfileDraftDocument(json.decodeFromString<ProfileDefinition>(text))
+                            else json.decodeFromString<ProfileDraftDocument>(text)
+                        document.validate()
+                        require(document.definition.id == id) { "Profile identity mismatch" }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Only an authority already read from the published file becomes a checkpoint. */
+    private fun saveCheckpoint(value: Authority) {
+        val documents = documentChecks(value).keys.associateWith { relative ->
+            digest(checkNotNull(raw(root.resolve(relative), MaxBytes)) { "Published Profile document is missing" })
+        }
+        write(root.resolve(CheckpointFilename), json.encodeToString(Checkpoint(authority = value, documents = documents)), maxBytes = MaxEvidenceBytes)
+    }
+
+    private data class RecoveryInspection(
+        val review: ProfileRepositoryRecoveryReview,
+        val checkpoint: Authority?,
+        val observed: Map<String, String>,
+    )
+
+    private suspend fun inspect(): RecoveryInspection? {
+        val observed = linkedMapOf<String, String>()
+        fun observe(relative: String): ByteArray? = raw(root.resolve(relative)).also {
+            observed[relative] = it?.let(::digest) ?: "missing"
+        }
+        suspend fun validateDocuments(value: Authority, locked: Map<String, String>? = null) {
+            val checks = documentChecks(value)
+            require(locked == null || checks.keys == locked.keys) { "Checkpoint document set differs from authority" }
+            checks.forEach { (relative, validate) ->
+                currentCoroutineContext().ensureActive()
+                val bytes = checkNotNull(observe(relative)) { "Published Profile document is missing" }
+                require(bytes.size <= MaxBytes) { "Profile document is too large" }
+                require(locked == null || digest(bytes) == locked[relative]) { "Checkpoint Profile document changed" }
+                validate(bytes)
+            }
+        }
+        val primary = observe(StateFilename)
+        val failure = try {
+            val bytes = checkNotNull(primary) { "Profile authority is missing" }
+            require(bytes.size <= MaxBytes) { "Profile document is too large" }
+            validateDocuments(json.decodeFromString<Authority>(bytes.decodeToString(throwOnInvalidSequence = true)))
+            return null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) { error.message ?: error.toString() }
+        var checkpoint: Authority? = null
+        val checkpointFailure = try {
+            val bytes = checkNotNull(observe(CheckpointFilename)) { "No published checkpoint is available" }
+            val saved = json.decodeFromString<Checkpoint>(bytes.decodeToString(throwOnInvalidSequence = true))
+            require(saved.formatVersion == 1) { "Unsupported Profile checkpoint" }
+            validateDocuments(saved.authority, saved.documents)
+            checkpoint = saved.authority
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) { error.message ?: error.toString() }
+        val fingerprint = digest(json.encodeToString<Map<String, String>>(observed.toSortedMap()).encodeToByteArray())
+        return RecoveryInspection(ProfileRepositoryRecoveryReview(fingerprint, failure,
+            checkpoint?.let(::catalogue), checkpointFailure), checkpoint, observed)
+    }
+
+    override suspend fun inspectRecovery(): ProfileRepositoryRecoveryReview? = access { inspect()?.review }
+
+    override suspend fun repair(request: ProfileRepositoryRepairRequest): ProfileRepositoryRepairResult = access {
+        val inspected = checkNotNull(inspect()) { "Profile repository is healthy; repair is unnecessary" }
+        require(request.expectedFingerprint == inspected.review.fingerprint) { "Profile recovery inputs changed; review again" }
+        var revision: Long
+        do { revision = (1L shl 61) + SecureRandom().nextLong().ushr(3) }
+        while (revision == inspected.checkpoint?.revision)
+        val next = when (request.mode) {
+            ProfileRepositoryRepairMode.RestoreCheckpoint -> checkNotNull(inspected.checkpoint) { "No verified checkpoint is available" }
+                .copy(formatVersion = 2, revision = revision)
+            // A fresh opaque revision epoch prevents replay of pre-repair revision handles.
+            ProfileRepositoryRepairMode.StartEmpty -> Authority(revision = revision)
+        }
+        validateAuthority(next)
+        val nextCatalogue = catalogue(next)
+        currentCoroutineContext().ensureActive()
+        val evidenceRoot = checkedDirectory(root.resolve(EvidenceDirectory), create = true)
+        val evidenceId = UUID.randomUUID().toString()
+        val evidence = checkedDirectory(evidenceRoot.resolve(evidenceId), create = true)
+        inspected.observed.forEach { (relative, expected) ->
+            currentCoroutineContext().ensureActive()
+            val source = root.resolve(relative).normalize()
+            require(source.startsWith(root) && source != root) { "Invalid recovery evidence path" }
+            val bytes = raw(source)
+            require((bytes?.let(::digest) ?: "missing") == expected) { "Profile recovery inputs changed; review again" }
+            if (bytes != null) {
+                val destination = evidence.resolve(relative).normalize()
+                require(destination.startsWith(evidence) && destination != evidence) { "Invalid recovery evidence destination" }
+                Files.createDirectories(destination.parent)
+                FileOutputStream(destination.toFile()).use { output -> output.write(bytes); output.fd.sync() }
+            }
+        }
+        write(evidence.resolve("review.json"), json.encodeToString(RecoveryEvidence(
+            fingerprint = inspected.review.fingerprint, mode = request.mode.name, files = inspected.observed,
+            revision = next.revision,
+        )), replace = false, maxBytes = MaxEvidenceBytes)
+        require(inspect()?.review?.fingerprint == request.expectedFingerprint) { "Profile recovery inputs changed; review again" }
+        currentCoroutineContext().ensureActive()
+        withContext(NonCancellable) {
+            // The original bytes are durable before the single authority publication.
+            write(root.resolve(StateFilename), json.encodeToString(next))
+            ProfileRepositoryRepairResult(nextCatalogue, evidenceId)
+        }
     }
 
     override suspend fun list(): List<String> = access { authority().profiles.keys.sorted() }
@@ -219,13 +368,14 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
         writeDraft(document, previous, createOnly)
     }
 
-    override suspend fun catalogue(): ProfileCatalogue = access {
-        val previous = authority()
-        ProfileCatalogue(previous.revision, previous.selected, previous.profiles.entries.sortedBy { it.key }.map { (id, record) ->
+    private fun catalogue(value: Authority): ProfileCatalogue = ProfileCatalogue(
+        value.revision, value.selected, value.profiles.entries.sortedBy { it.key }.map { (id, record) ->
             val latest = record.generations.lastOrNull()?.let { load(id, it) }
             ProfileSummary(id, latest?.definition?.displayName ?: record.draftName ?: id, record.draft, latest?.generation, record.draftName)
-        })
-    }
+        },
+    )
+
+    override suspend fun catalogue(): ProfileCatalogue = access { catalogue(authority()) }
 
     override suspend fun loadCommitted(id: String): CommittedProfileGeneration? = access {
         profileDirectory(id)
@@ -317,9 +467,28 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository {
         val profiles: Map<String, ProfileRecord> = emptyMap(),
     )
 
+    @Serializable
+    private data class Checkpoint(
+        val formatVersion: Int = 1,
+        val authority: Authority,
+        val documents: Map<String, String>,
+    )
+
+    @Serializable
+    private data class RecoveryEvidence(
+        val formatVersion: Int = 1,
+        val fingerprint: String,
+        val mode: String,
+        val files: Map<String, String>,
+        val revision: Long,
+    )
+
     private companion object {
         const val MaxBytes = 1_048_576
         const val StateFilename = ".profile-state.json"
+        const val CheckpointFilename = ".profile-checkpoint.json"
+        const val EvidenceDirectory = ".profile-recovery"
+        const val MaxEvidenceBytes = 16_777_216
         val DocumentId = Regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")
         val processLocks = ConcurrentHashMap<Path, Mutex>()
     }

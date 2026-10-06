@@ -374,3 +374,28 @@ ADB rejection. They do not establish root or Shizuku authorization. See [verific
 for evidence boundaries; rendered management acceptance and independent recovery UI are still required. Explicit
 recovery commands are tested on Desktop and compiled for Android; device recovery-after-restoration-
 failure behavior requires its own instrumentation evidence.
+
+
+## Explicit repository authority repair
+
+The file repository keeps `.profile-checkpoint.json` containing the previously published
+catalogue and SHA-256 checks of its referenced drafts and historical generations. A normal
+metadata mutation saves this checkpoint before publishing the new authority. Restoration
+can therefore roll back the last catalogue mutation; it is never an automatic fallback.
+A missing authority with versioned documents or a checkpoint requires explicit recovery,
+rather than adopting documents through legacy migration or directory scanning.
+
+The independent native recovery surface offers two reviewed operations while no product
+runtime is active: restore the verified checkpoint, or start an empty catalogue. Both retain
+existing Profile files and business data. Empty-catalogue repair does not adopt orphaned
+files; create or import a separate draft afterwards. Repair does not activate a product.
+Bundle/module metadata preparation and explicit activation remain separate operations.
+
+A review fingerprint covers the observed authority, checkpoint and referenced document
+bytes. Repair rechecks it under the repository lock, writes and syncs evidence under
+`.profile-recovery/<evidence-id>`, rechecks the inputs, then atomically publishes authority.
+Changed inputs require a fresh review. Evidence preparation failure leaves authority intact.
+Repair creates a random revision epoch to reject old revision handles; revisions are equality
+tokens and must not be treated as a global chronological ordering across repairs. Ordinary
+mutations increment the current epoch. The native recovery contracts remain implementation
+APIs rather than exported plugin SDK contracts.

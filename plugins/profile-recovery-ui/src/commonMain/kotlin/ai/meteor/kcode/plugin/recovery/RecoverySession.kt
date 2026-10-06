@@ -13,6 +13,10 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRecoveryReview
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairMode
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairRequest
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,12 +34,19 @@ internal data class RecoveryState(
     val failure: String? = null,
     val history: List<ProfileCompositionState> = emptyList(),
     val historyFailure: String? = null,
+    val repositoryRecovery: ProfileRepositoryRecoveryReview? = null,
+    val evidenceId: String? = null,
 ) {
     val dirty: Boolean get() = document != savedDocument
 }
 
 /** Host metadata remains usable without product services or a loadable module tree. */
-internal class RecoverySession(private val client: ProfileManagementClient) {
+internal class RecoverySession(
+    private val client: ProfileManagementClient,
+    private val inspectRepository: suspend () -> ProfileRepositoryRecoveryReview? = { null },
+    private val repairRepository: (suspend (ProfileRepositoryRepairRequest) -> ProfileRepositoryRepairResult)? = null,
+    private val prepareMetadata: suspend () -> Unit = {},
+) {
     private val mutex = Mutex()
     private val json = Json { prettyPrint = true; encodeDefaults = true }
     private val mutableState = MutableStateFlow(RecoveryState())
@@ -52,9 +63,23 @@ internal class RecoverySession(private val client: ProfileManagementClient) {
     }
 
     suspend fun refresh() = operation {
-        val catalogue = client.catalogue()
+        val catalogue = try { client.catalogue() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            val review = inspectRepository()
+            mutableState.value = state.value.copy(catalogue = null, repositoryRecovery = review,
+                failure = error.message ?: error.toString())
+            return@operation
+        }
+        refresh(catalogue)
+    }
+
+    private suspend fun refresh(catalogue: ProfileCatalogue) {
+        val preparationFailure = try { prepareMetadata(); null }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { error.message ?: error.toString() }
         // A broken definition must not hide other saved choices or host templates.
-        mutableState.value = state.value.copy(catalogue = catalogue)
+        mutableState.value = state.value.copy(catalogue = catalogue, repositoryRecovery = null, failure = preparationFailure)
         if (state.value.dirty) {
             // Updating catalogue metadata cannot authorize overwriting intervening edits.
             mutableState.value = state.value.copy(catalogue = catalogue)
@@ -64,9 +89,21 @@ internal class RecoverySession(private val client: ProfileManagementClient) {
                     ?.let { ProfileTarget(it.id, if (it.generation == null) ProfileSource.Draft else ProfileSource.Committed) }
                 ?: catalogue.profiles.firstOrNull()
                     ?.let { ProfileTarget(it.id, if (it.generation == null) ProfileSource.Draft else ProfileSource.Committed) }
-            if (target == null) mutableState.value = RecoveryState(catalogue = catalogue, revision = catalogue.revision, busy = true)
+            if (target == null) mutableState.value = RecoveryState(catalogue = catalogue, revision = catalogue.revision, busy = true,
+                failure = preparationFailure, evidenceId = state.value.evidenceId)
             else load(catalogue, target)
         }
+    }
+
+    suspend fun repair(mode: ProfileRepositoryRepairMode) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val review = requireNotNull(state.value.repositoryRecovery) { "missing" }
+        require(mode != ProfileRepositoryRepairMode.RestoreCheckpoint || review.checkpoint != null) { "missing" }
+        val result = checkNotNull(repairRepository) { "Repository recovery is unavailable" }(
+            ProfileRepositoryRepairRequest(review.fingerprint, mode),
+        )
+        mutableState.value = RecoveryState(busy = true, evidenceId = result.evidenceId)
+        refresh(result.catalogue)
     }
 
     suspend fun select(target: ProfileTarget) = operation {

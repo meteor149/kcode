@@ -82,6 +82,12 @@ class ProfileManagement private constructor(
 
     suspend fun catalogue(): ProfileCatalogue = repository.catalogue()
     suspend fun draft(id: String): ProfileDefinition? = repository.loadDraft(id)
+    suspend fun prepareRecoveryMetadata() { bundles() }
+    suspend fun inspectRepositoryRecovery(): ProfileRepositoryRecoveryReview? =
+        (repository as? ProfileRepositoryRecovery)?.inspectRecovery()
+
+    suspend fun repairRepository(request: ProfileRepositoryRepairRequest): ProfileRepositoryRepairResult =
+        checkNotNull(repository as? ProfileRepositoryRecovery) { "Profile repository recovery is unavailable" }.repair(request)
 
     suspend fun write(write: ProfileDraftWrite): ProfileCatalogue {
         val detached = Json.decodeFromString(ProfileDefinition.serializer(), Json.encodeToString(ProfileDefinition.serializer(), write.definition))

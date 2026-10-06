@@ -160,7 +160,7 @@ SDK 72 通过中立管理客户端提供带 revision 校验的可携带 Profile 
 
 原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。可选 ui-profiles 包提供设置管理界面。两端应用接入独立恢复界面，支持在目录准备、Bundle 暂存、模块目录构建及产品启动失败时选择已保存或历史 Profile、修复 JSON 定义、创建独立模板副本并显式激活。当前行为与限制见 [Profile 指南](docs/profiles.md)。
 
-运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。管理界面支持树与 Bundle 草稿表单、预览和激活，完整管理渲染验收及损坏存储权威记录的显式修复仍待完成。修复故障原因后，预览或激活会重试失败的原生准备；存储不可用时元数据访问会报告错误，不会重置数据。
+运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。管理界面支持树与 Bundle 草稿表单、预览和激活，完整管理渲染验收仍待完成。独立恢复界面支持经确认恢复检查点或建立空目录，保留损坏元数据证据和业务数据；修复后仍需显式激活。修复故障原因后，预览或激活会重试失败的原生准备；存储不可用时元数据访问会报告错误，不会重置数据。
 
 实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
 

@@ -20,6 +20,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.CommittedProfileGeneration
 import ai.meteor.kcode.plugin.profiles.ProfileLock
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairMode
 import ai.meteor.kcode.plugin.recovery.ProfileHostContent
 import android.app.Activity
 import android.content.ContextWrapper
@@ -55,6 +56,85 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AndroidProfileRecoveryUiTest {
+    @Test(timeout = 120_000)
+    fun damagedAuthorityCanRestoreCheckpointThroughReviewedHostUi(): Unit = runBlocking {
+        repositoryRecoverySurface(ProfileRepositoryRepairMode.RestoreCheckpoint)
+    }
+
+    @Test(timeout = 120_000)
+    fun damagedAuthorityWithoutCheckpointCanStartASeparateRepairProfile(): Unit = runBlocking {
+        repositoryRecoverySurface(ProfileRepositoryRepairMode.StartEmpty)
+    }
+
+    private suspend fun repositoryRecoverySurface(mode: ProfileRepositoryRepairMode) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val directory = File(context.cacheDir, "storage-recovery-${System.nanoTime()}").apply { check(mkdirs()) }
+        val repositoryDirectory = File(directory, "cordis_profiles")
+        val repository = FileProfileRepository(repositoryDirectory)
+        val original = ProfileDefinition(id = "coding", displayName = "Original", patches = listOf(
+            ProfileOperation.Insert(listOf(ProfileEntry("root", "example.root"))),
+        ))
+        if (mode == ProfileRepositoryRepairMode.RestoreCheckpoint) {
+            repository.saveDraft(original)
+            repository.saveDraft(original.copy(displayName = "Later edit"))
+        } else repository.state()
+        val primary = File(repositoryDirectory, ".profile-state.json")
+        primary.writeText("{damaged authority")
+        val retained = File(directory, "retained-data.txt").apply { writeText("business data") }
+        var allocations = 0
+        val host = withContext(Dispatchers.Main.immediate) {
+            createAndroidProfileHost(isolatedActivity(directory), profileId = "coding",
+                profile = KcodePluginProfile(includeDefaults = false), moduleFactories = mapOf("example.root" to {
+                    kcodePlugin(PluginDescriptor("example.root", "test", "test", emptySet()), plugin<Unit> { ctx, _ ->
+                        allocations++
+                        KcodeApplicationUi(ctx, ApplicationRenderer {
+                            ApplicationFrame { BasicText("Recovered repository root", Modifier.safeDrawingPadding()) }
+                        })
+                    }, Unit)
+                }))
+        }
+        try {
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            withWindow(host) {
+                awaitLabel("Repair Profile storage")
+                val action = if (mode == ProfileRepositoryRepairMode.RestoreCheckpoint) "Restore saved checkpoint" else "Start an empty catalogue"
+                click(action)
+                awaitLabel("Confirm storage repair")
+                screenshot(if (mode == ProfileRepositoryRepairMode.RestoreCheckpoint) "profile-checkpoint-review.png" else "profile-empty-review.png")
+                click("Cancel")
+                assertEquals("{damaged authority", primary.readText())
+                assertEquals(0, allocations)
+                click(action)
+                click("Confirm storage repair")
+                if (mode == ProfileRepositoryRepairMode.RestoreCheckpoint) {
+                    awaitLabel("Original (coding)")
+                    assertEquals(original, repository.loadDraft("coding"))
+                } else {
+                    awaitLabel("Create from template: native")
+                    assertTrue(repository.catalogue().profiles.isEmpty())
+                }
+                assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+                assertEquals(0, allocations)
+                assertEquals("business data", retained.readText())
+                val evidence = File(repositoryDirectory, ".profile-recovery").listFiles()!!.single()
+                assertEquals("{damaged authority", File(evidence, ".profile-state.json").readText())
+                if (mode == ProfileRepositoryRepairMode.StartEmpty) {
+                    setField("recovery-copy-id", "repair")
+                    click("Create from template: native")
+                    awaitLabel("repair (repair)")
+                    setDocument(Json.encodeToString(ProfileDefinition.serializer(), original.copy(id = "repair", displayName = "repair",
+                        dataScope = ProfileDataScope(workspace = "profile"))))
+                    click("Save and activate")
+                } else click("Activate saved selection")
+                awaitLabel("Recovered repository root")
+                assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+                assertEquals(1, allocations)
+                assertEquals(if (mode == ProfileRepositoryRepairMode.StartEmpty) "repair" else "coding", repository.selected())
+                screenshot("profile-repository-recovered-root.png")
+            }
+        } finally { host.close(); directory.deleteRecursively() }
+    }
+
     @Test(timeout = 120_000)
     fun historicalSelectionReactivatesFrozenBundleAndAppendsAGeneration(): Unit = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -290,7 +370,9 @@ class AndroidProfileRecoveryUiTest {
         }
     }
 
-    private fun screenshot(name: String) {
+    private suspend fun screenshot(name: String) {
+        // Semantics arrive before the dialog/window enter transition finishes.
+        delay(400)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {

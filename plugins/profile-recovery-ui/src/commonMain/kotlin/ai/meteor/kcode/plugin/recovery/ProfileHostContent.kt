@@ -3,6 +3,7 @@ package ai.meteor.kcode.plugin.recovery
 import ai.meteor.kcode.ApplicationHostOptions
 import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.ProfileHostPhase
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairMode
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.ui.design.KcodeDefaultDesignTokens
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -45,10 +47,13 @@ import kotlinx.coroutines.launch
 fun ProfileHostContent(host: KcodeProfileHost, options: ApplicationHostOptions, languageCode: String) {
     val hostState by host.state.collectAsState()
     val client = host.profileCommands
-    val session = remember(host, client) { client?.let(::RecoverySession) }
+    val session = remember(host, client) { client?.let {
+        RecoverySession(it, host::inspectRepositoryRecovery, host::repairRepository, host::prepareRecoveryMetadata)
+    } }
     val scope = rememberCoroutineScope()
     var showDetails by remember(hostState.failure) { mutableStateOf(false) }
     var newProfileId by remember(host) { mutableStateOf("") }
+    var repairMode by remember(host) { mutableStateOf<ProfileRepositoryRepairMode?>(null) }
     val texts = remember(languageCode) {
         { key: String -> RecoveryResourceStrings[if (languageCode.startsWith("zh")) "${key}_zh" else key]
             ?: RecoveryResourceStrings[key] ?: key }
@@ -81,6 +86,32 @@ fun ProfileHostContent(host: KcodeProfileHost, options: ApplicationHostOptions, 
                         val state by session.state.collectAsState()
                         LaunchedEffect(session, hostState) { session.refresh() }
                         Button(onClick = { scope.launch { session.refresh() } }, enabled = !state.busy) { Text(texts("refresh")) }
+                        state.repositoryRecovery?.let { review ->
+                            Text(texts("storage_title"), style = MaterialTheme.typography.titleMedium)
+                            Text(texts("storage_explanation"))
+                            review.checkpoint?.let { checkpoint ->
+                                Text("${texts("checkpoint_revision")}: ${checkpoint.revision}")
+                                checkpoint.profiles.forEach { profile -> Text("${profile.displayName} (${profile.id})") }
+                                Text("${texts("checkpoint_selection")}: ${checkpoint.selectedProfileId ?: texts("none")}")
+                            }
+                            review.checkpointFailure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            OutlinedButton(onClick = { repairMode = ProfileRepositoryRepairMode.RestoreCheckpoint },
+                                enabled = !state.busy && !state.dirty && review.checkpoint != null) { Text(texts("restore_checkpoint")) }
+                            OutlinedButton(onClick = { repairMode = ProfileRepositoryRepairMode.StartEmpty },
+                                enabled = !state.busy && !state.dirty) { Text(texts("start_empty")) }
+                            repairMode?.let { mode ->
+                                AlertDialog(onDismissRequest = { repairMode = null },
+                                    title = { Text(texts(if (mode == ProfileRepositoryRepairMode.RestoreCheckpoint) "restore_checkpoint" else "start_empty")) },
+                                    text = { Text(texts(if (mode == ProfileRepositoryRepairMode.RestoreCheckpoint) "restore_confirm" else "empty_confirm")) },
+                                    confirmButton = {
+                                        TextButton(onClick = { repairMode = null; scope.launch { session.repair(mode) } },
+                                            enabled = !state.busy) { Text(texts("confirm_repair")) }
+                                    },
+                                    dismissButton = { TextButton(onClick = { repairMode = null }) { Text(texts("cancel")) } },
+                                )
+                            }
+                        }
+                        state.evidenceId?.let { Text("${texts("evidence")}: $it") }
                         state.catalogue?.profiles?.forEach { profile ->
                             Text("${profile.displayName} (${profile.id})", style = MaterialTheme.typography.titleMedium)
                             if (profile.generation != null) {
@@ -110,9 +141,9 @@ fun ProfileHostContent(host: KcodeProfileHost, options: ApplicationHostOptions, 
                                 enabled = !state.busy, readOnly = state.target?.source == ProfileSource.History,
                                 label = { Text(texts("document")) }, minLines = 8, maxLines = 16)
                             if (state.dirty) Text(texts("unsaved"))
-                            Button(onClick = { scope.launch { session.save() } }, enabled = !state.busy && state.dirty && state.target?.source != ProfileSource.History) { Text(texts("save")) }
-                            Button(onClick = { scope.launch { session.activate() } }, enabled = !state.busy && !state.dirty) { Text(texts("activate")) }
-                            Button(onClick = { scope.launch { session.activate(saveFirst = true) } }, enabled = !state.busy) { Text(texts("save_activate")) }
+                            Button(onClick = { scope.launch { session.save() } }, enabled = !state.busy && state.catalogue != null && state.dirty && state.target?.source != ProfileSource.History) { Text(texts("save")) }
+                            Button(onClick = { scope.launch { session.activate() } }, enabled = !state.busy && state.catalogue != null && !state.dirty) { Text(texts("activate")) }
+                            Button(onClick = { scope.launch { session.activate(saveFirst = true) } }, enabled = !state.busy && state.catalogue != null) { Text(texts("save_activate")) }
                             OutlinedButton(onClick = session::discard, enabled = !state.busy && state.dirty) { Text(texts("discard")) }
                         }
                         Text(texts("copies"), style = MaterialTheme.typography.titleMedium)

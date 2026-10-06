@@ -15,6 +15,9 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRecoveryReview
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairRequest
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairResult
 import ai.meteor.kcode.AgentConversationOverlayController
 import ai.meteor.kcode.AgentConversationOverlayTurn
 import ai.meteor.kcode.AgentRuntimeOwner
@@ -234,6 +237,27 @@ class KcodeProfileHost(
     )
     private suspend fun <T> metadata(block: suspend (ProfileManagement) -> T): T = admitted(allowRecovery = true) {
         block(checkNotNull(management) { "Profile management is unavailable" })
+    }
+
+    suspend fun inspectRepositoryRecovery(): ProfileRepositoryRecoveryReview? = metadata {
+        check(state.value.phase == ProfileHostPhase.RecoveryRequired) { "Repository recovery requires an inactive product" }
+        it.inspectRepositoryRecovery()
+    }
+
+    suspend fun prepareRecoveryMetadata() = metadata {
+        check(state.value.phase == ProfileHostPhase.RecoveryRequired) { "Recovery metadata requires an inactive product" }
+        it.prepareRecoveryMetadata()
+    }
+
+    /** Native recovery is explicit metadata repair; it never selects or allocates a product. */
+    suspend fun repairRepository(request: ProfileRepositoryRepairRequest): ProfileRepositoryRepairResult {
+        outsideCall()
+        return command.withLock {
+            metadata {
+                check(state.value.phase == ProfileHostPhase.RecoveryRequired) { "Repository recovery requires an inactive product" }
+                it.repairRepository(request)
+            }
+        }
     }
 
     private inner class OverlayTurn(val delegate: AgentConversationOverlayTurn) : AgentConversationOverlayTurn {

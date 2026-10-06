@@ -19,6 +19,9 @@ import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileSummary
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRecoveryReview
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairMode
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +36,74 @@ import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class RecoverySessionTest {
+    @Test
+    fun damagedAuthorityCanBeReviewedAndRepairedWithoutActivation() = runTest {
+        val client = Client()
+        val checkpoint = client.catalogue()
+        client.catalogueFailure = "authority damaged"
+        val review = ProfileRepositoryRecoveryReview("a".repeat(64), "authority damaged", checkpoint, null)
+        var metadataPreparations = 0
+        var repairs = 0
+        val session = RecoverySession(client, { review }, { request ->
+            assertEquals(review.fingerprint, request.expectedFingerprint)
+            assertEquals(ProfileRepositoryRepairMode.RestoreCheckpoint, request.mode)
+            repairs++
+            client.catalogueFailure = null
+            client.revision = 1L shl 61
+            ProfileRepositoryRepairResult(client.catalogue(), "evidence")
+        }, { metadataPreparations++ })
+        session.refresh()
+        assertEquals(review, session.state.value.repositoryRecovery)
+        assertEquals(null, session.state.value.catalogue)
+        assertEquals(0, repairs)
+        session.repair(ProfileRepositoryRepairMode.RestoreCheckpoint)
+        assertEquals(1, repairs)
+        assertEquals(1, metadataPreparations)
+        assertEquals("evidence", session.state.value.evidenceId)
+        assertEquals(null, session.state.value.repositoryRecovery)
+        assertEquals(ProfileTarget("broken", ProfileSource.Draft), session.state.value.target)
+        assertEquals(0, client.submissions)
+        assertFalse(session.state.value.busy)
+    }
+
+    @Test
+    fun dirtyEditorPreventsStorageRepairAndFailedRepairRetainsReview() = runTest {
+        val client = Client()
+        val checkpoint = client.catalogue()
+        val review = ProfileRepositoryRecoveryReview("a".repeat(64), "authority damaged", checkpoint, null)
+        var repairs = 0
+        val session = RecoverySession(client, { review }, {
+            repairs++
+            error("recovery inputs changed")
+        })
+        session.refresh()
+        session.edit("unfinished edit")
+        client.catalogueFailure = "authority damaged"
+        session.refresh()
+        session.repair(ProfileRepositoryRepairMode.StartEmpty)
+        assertEquals(0, repairs)
+        assertEquals("unfinished edit", session.state.value.document)
+        session.discard()
+        session.repair(ProfileRepositoryRepairMode.StartEmpty)
+        assertEquals(1, repairs)
+        assertEquals("recovery inputs changed", session.state.value.failure)
+        assertEquals(review, session.state.value.repositoryRecovery)
+        assertEquals(0, client.submissions)
+    }
+
+    @Test
+    fun metadataPreparationFailureDoesNotHideAvailableDrafts() = runTest {
+        val client = Client()
+        val session = RecoverySession(client, prepareMetadata = { error("catalogue unavailable") })
+        session.refresh()
+        assertNotNull(session.state.value.catalogue)
+        assertEquals(ProfileTarget("broken", ProfileSource.Draft), session.state.value.target)
+        assertEquals("catalogue unavailable", session.state.value.failure)
+        session.edit(encode(client.definition.copy(displayName = "Repair")))
+        session.save()
+        assertEquals("Repair", client.definition.displayName)
+    }
+
     @Test
     fun brokenModuleDraftCanBeEditedWithoutResolvingProductServices() = runTest {
         val client = Client()
@@ -261,9 +332,13 @@ class RecoverySessionTest {
         var lastWrite: ProfileDraftWrite? = null
         var historyFailure: String? = null
         var draftFailure: String? = null
-        override suspend fun catalogue() = ProfileCatalogue(revision, "broken", listOf(
+        var catalogueFailure: String? = null
+        override suspend fun catalogue(): ProfileCatalogue {
+            catalogueFailure?.let { error(it) }
+            return ProfileCatalogue(revision, "broken", listOf(
             ProfileSummary("broken", "Broken", true, generation), ProfileSummary("other", "Other", true, null),
-        ) + created.values.map { ProfileSummary(it.id, it.displayName, true, null) })
+            ) + created.values.map { ProfileSummary(it.id, it.displayName, true, null) })
+        }
         override suspend fun draft(id: String): ProfileDefinition {
             if (id == "broken") draftFailure?.let { error(it) }
             return created[id] ?: if (id == "broken") definition else ProfileDefinition(id = id)

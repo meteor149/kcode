@@ -120,3 +120,21 @@ This is evidence for these path/module faults and this Android host window. It d
 every storage failure, Desktop rendering/dialogs, power-loss durability, corrupt-authority
 repair, or the full autonomous/background-work admission boundary. No privileged execution
 or broad unchanged device suite was repeated in this phase.
+
+
+### Profile repository authority repair (2026-10-06)
+
+The repository-recovery phase passed 82 Profile tests, 16 recovery-session tests and
+67 selected native Desktop integration tests. Both native applications and the Android
+instrumentation APK built successfully (`profile-repository-recovery-validation.log`).
+Tests cover verified checkpoint restoration, empty catalogue creation, invalid UTF-8 evidence,
+missing authority, orphan retention, changed review inputs, competing repairs, evidence-write
+failure, staged draft nonpublication, stale revisions and explicit post-repair activation.
+
+Physical Android UI instrumentation passed both `damagedAuthorityCanRestoreCheckpointThroughReviewedHostUi`
+and `damagedAuthorityWithoutCheckpointCanStartASeparateRepairProfile`: `OK (2 tests)` and
+`INSTRUMENTATION_CODE: -1` (`profile-repository-recovery-device-validation.log`). The rendered
+host offers confirmation and cancellation, retains damaged-file evidence and business data,
+and allocates the product only after a separate activation. This evidence does not establish
+Desktop native dialogs, broad default management navigation, Shizuku/root authorization or
+all autonomous/background execution admission paths. These remain separate acceptance work.
