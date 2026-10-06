@@ -1,5 +1,33 @@
 # Profile implementation
 
+## Module-aware export review phase
+
+Private host reviews now receive module/package ID, entry ID, configuration kind, source field/
+location and original JSON. `ProfileExportPolicies` routes by a detached module map and denies
+unknown identities. Hosts can supply this review at management construction; the neutral client
+still cannot approve its own values. Existing native constructors preserve default denial.
+
+The export session uses the shared compiler to track original operations in declared Bundle order,
+regardless of frozen storage order. Configure/context fields use the current owner. Replace
+re-reviews inherited fields against the receiving module and rejects conflicting portable values;
+movement retains origin, cleared contexts do not transfer and removed/reinserted IDs cannot borrow
+old approvals. Every historical stored value is reviewed, including values overridden or removed
+later. Input/output JSON snapshots prevent mutable policy results from altering previous approvals.
+Policy failures omit value-bearing exception messages/causes; cancellation preserves its identity.
+
+Final concentrated verification passed 74 desktop cases: 59 Profiles, 9 command gateway and
+6 native startup recovery tests, plus Android Profiles compilation. New tests exercise the
+module/codec transitions, inherited context, ordering, movement, identity reuse, detached policy
+maps/results, exception/cancellation boundaries and host-selected policy through the real Cordis
+management bridge without changing active configuration or durable intent. SDK ABI remains 72;
+no shared namespace, document format or product UI changed. No device or full app build is claimed
+for this private implementation phase.
+
+This provides the policy execution/selection boundary, not completed shipped feature policies.
+Feature-owned schema metadata/registration, actual native policy wiring, native file operations/UI,
+verified external Bundle import and real portable archive exchange remain open. Corrupt-authority
+recovery, desktop rendering and the execution-admission/resource-ownership audit remain outstanding.
+
 ## Neutral portable exchange client phase
 
 Plugin API 72 adds `ProfilePortableImport`/`ProfilePortableExport` and neutral management client

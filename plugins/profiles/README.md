@@ -1,5 +1,17 @@
 # Profiles
 
+Host export review receives `ProfileExportValue` with module/package identity, instance identity,
+configuration codec, source location, field and original JSON value. `ProfileExportPolicies`
+selects detached module policies and denies unknown identities. Configure/context review uses
+the current composed module; replacements must approve inherited values with the same portable
+result. Module transitions are traced in declared Bundle order through the shared compiler,
+including movement and removal/reinsertion. Reviews see every stored layer. Policy inputs/outputs
+are detached, failures omit configuration contents and cancellation propagates. Hosts may construct
+`ProfileManagement(repository, bundles, policies, prepare)`; neutral clients cannot supply approvals.
+These implementation types do not change SDK 72. Native feature policy registration/metadata and
+the shipped feature schemas still need integration; default native export continues to deny opaque
+values. Review policies must be pure schema metadata, independent of withdrawn product resources.
+
 Portable named plugin compositions for Kcode. `ProfileDefinition` records ordered bundle
 references, user operations and logical data scopes. `ProfileCompiler` delegates operation
 interpretation to Cordis's detached composition engine, so preview and activation can share

@@ -23,6 +23,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.profiles.ProfilePortableExporter
+import ai.meteor.kcode.plugin.profiles.ProfileExportReview
+import ai.meteor.kcode.plugin.profiles.ProfileExportPolicies
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.CommittedProfileGeneration
 import ai.meteor.kcode.plugin.profiles.ProfileGenerationRepository
@@ -54,6 +56,23 @@ class ProfileCommandGatewayTest {
     private val configuration = ModelConfiguration(ModelProvider("test"), "test", "", 0.0)
 
     private val portable = """{"definition":{"id":"portable","patches":[{"type":"insert","entries":[{"id":"agent","packageId":"example.agent"},{"id":"listener","packageId":"example.listener"}]}]},"bundles":[],"lock":{}}"""
+
+    @Test
+    fun hostSchemaPolicyReviewsTheNeutralExportWithoutChangingActiveConfiguration(): Unit = runBlocking {
+        val fixture = Fixture(ProfileExportPolicies(mapOf("example.agent" to ProfileExportReview { value ->
+            if (value.field == "config" && value.configurationKind == "string") JsonPrimitive("portable-agent") else null
+        })))
+        try {
+            val host = fixture.start()
+            val before = fixture.client.catalogue()
+            val text = fixture.client.exportPortable(ProfilePortableExport(ProfileTarget("old"), before.revision))
+            val definition = ProfilePortableExporter.decode(text).definition
+            assertEquals(JsonPrimitive("portable-agent"), (definition.patches.single() as ProfileOperation.Insert).entries.first().config)
+            assertEquals("old", host.chatService.reply(configuration, emptyList(), "test"))
+            assertEquals(before, fixture.client.catalogue())
+            assertEquals(JsonPrimitive("old"), (fixture.repository.loadCommitted("old")!!.definition.patches.single() as ProfileOperation.Insert).entries.first().config)
+        } finally { fixture.close() }
+    }
 
     @Test
     fun neutralExchangePublishesOnlyDraftAndSurvivesThroughExplicitActivation(): Unit = runBlocking {
@@ -260,7 +279,7 @@ class ProfileCommandGatewayTest {
         } finally { fixture.close() }
     }
 
-    private class Fixture {
+    private class Fixture(private val exportReview: ProfileExportReview = ProfileExportReview { null }) {
         val root = Files.createTempDirectory("kcode-profile-commands").toFile()
         private val storage = FileProfileRepository(root)
         var afterPublication: (() -> Unit)? = null
@@ -320,7 +339,7 @@ class ProfileCommandGatewayTest {
                     return PreparedProfileRuntime(activation) { create(activation) }
                 }
             }
-            return KcodeProfileHost(initial, "old", factory, ProfileManagement(repository, { emptyList() }, ::prepare), gateway)
+            return KcodeProfileHost(initial, "old", factory, ProfileManagement(repository, { emptyList() }, exportReview, ::prepare), gateway)
                 .also { host = it; gateway.bind(it) }
         }
 

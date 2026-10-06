@@ -27,11 +27,25 @@ import org.cordis.include.CompositionDiagnostic
 import org.cordis.include.CompositionResult
 
 /** Metadata commands never mount providers. Activation stays with the native runtime owner. */
-class ProfileManagement(
+class ProfileManagement private constructor(
     private val repository: ProfileGenerationRepository,
     private val bundles: () -> List<ProfileBundle>,
     private val prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    private val exportReview: ProfileExportReview,
 ) {
+    constructor(
+        repository: ProfileGenerationRepository,
+        bundles: () -> List<ProfileBundle>,
+        prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    ) : this(repository, bundles, prepare, ProfileExportReview { null })
+
+    constructor(
+        repository: ProfileGenerationRepository,
+        bundles: () -> List<ProfileBundle>,
+        exportReview: ProfileExportReview,
+        prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    ) : this(repository, bundles, prepare, exportReview)
+
     suspend fun catalogue(): ProfileCatalogue = repository.catalogue()
     suspend fun draft(id: String): ProfileDefinition? = repository.loadDraft(id)
 
@@ -63,7 +77,7 @@ class ProfileManagement(
 
     suspend fun exportPortable(
         target: ProfileTarget,
-        review: ProfileExportReview = ProfileExportReview { _, _, _ -> null },
+        review: ProfileExportReview = exportReview,
         expectedRevision: Long? = null,
     ): String {
         require(target.source != ProfileSource.Draft) { "Activate a draft before exporting its verified package recipe" }

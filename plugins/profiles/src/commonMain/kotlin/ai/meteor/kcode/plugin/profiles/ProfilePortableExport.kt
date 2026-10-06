@@ -3,8 +3,6 @@ package ai.meteor.kcode.plugin.profiles
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
 import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
-import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
-import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,62 +32,51 @@ data class PortableProfileDocument(
  * Implementations must use feature schemas and remove credentials and machine addresses;
  * a key-name heuristic or unconditional identity policy is not a safe default.
  */
+data class ProfileExportValue(
+    val packageId: String,
+    val entryId: String,
+    val configurationKind: String,
+    val location: String,
+    val field: String,
+    val value: JsonElement,
+)
+
 fun interface ProfileExportReview {
-    fun review(location: String, field: String, value: JsonElement): JsonElement?
+    fun review(value: ProfileExportValue): JsonElement?
+}
+
+/** Detached host policy selection. Unknown module identities remain denied. */
+class ProfileExportPolicies(policies: Map<String, ProfileExportReview>) : ProfileExportReview {
+    private val policies = policies.toMap().also {
+        require(it.keys.all(String::isNotBlank)) { "Export policy module identities must not be blank" }
+    }
+
+    override fun review(value: ProfileExportValue): JsonElement? = policies[value.packageId]?.review(value)
 }
 
 /** Pure exchange boundary: no module resolution, resource allocation or repository mutation. */
 class ProfilePortableExporter(
-    private val review: ProfileExportReview = ProfileExportReview { _, _, _ -> null },
+    private val review: ProfileExportReview = ProfileExportReview { null },
 ) {
     fun export(source: CommittedProfileGeneration): String {
         source.validate(restoring = true)
         require(source.composition.external.all { it.packageInstallation != null }) {
             "Legacy local plugin descriptors require verified package archives before export"
         }
+        val session = ProfileExportSession(review, source.definition)
+        val available = source.bundles.associateBy { it.id }
+        val bundles = source.definition.bundles.map { reference ->
+            val bundle = available.getValue(reference.id)
+            bundle.copy(patches = session.operations(bundle.patches, "bundle:${bundle.id}@${bundle.version}"))
+        }
         val definition = source.definition.copy(
-            patches = operations(source.definition.patches, "profile"),
+            patches = session.operations(source.definition.patches, "profile"),
             dataScope = ProfileDataScope(workspace = "profile"),
         )
-        val bundles = source.bundles.map { bundle ->
-            bundle.copy(patches = operations(bundle.patches, "bundle:${bundle.id}@${bundle.version}"))
-        }
         val document = PortableProfileDocument(definition = definition, bundles = bundles, lock = source.lock)
         document.validate()
         return json.encodeToString(document)
     }
-
-    private fun reviewed(location: String, field: String, value: JsonElement): JsonElement =
-        requireNotNull(review.review(location, field, value)) {
-            // Never include rejected values in diagnostics.
-            "Profile export requires configuration review at $location/$field"
-        }
-
-    private fun fields(values: Map<String, JsonElement>, location: String, field: String) =
-        values.mapValues { (key, value) -> reviewed(location, "$field/$key", value) }
-
-    private fun entry(value: ProfileEntry, location: String): ProfileEntry = value.copy(
-        config = value.config?.let { reviewed(location, "config", it) },
-        inject = fields(value.inject, location, "inject"),
-        intercept = fields(value.intercept, location, "intercept"),
-        children = value.children?.mapIndexed { index, child -> entry(child, "$location/children/$index") },
-    )
-
-    private fun operations(values: List<ProfileOperation>, layer: String): List<ProfileOperation> =
-        values.mapIndexed { index, operation ->
-            val location = "$layer/patches/$index"
-            when (operation) {
-                is ProfileOperation.Insert -> operation.copy(
-                    entries = operation.entries.mapIndexed { child, value -> entry(value, "$location/entries/$child") },
-                )
-                is ProfileOperation.Configure -> operation.copy(config = reviewed(location, "config", operation.config))
-                is ProfileOperation.Context -> operation.copy(
-                    inject = operation.inject?.let { fields(it, location, "inject") },
-                    intercept = operation.intercept?.let { fields(it, location, "intercept") },
-                )
-                else -> operation
-            }
-        }
 
     companion object {
         private val json = Json { prettyPrint = true; encodeDefaults = true }

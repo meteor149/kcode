@@ -55,8 +55,8 @@ class ProfilePortableExportTest {
             ProfileOperation.Context("provider", inject = mapOf("dependency" to secret)),
         ))
         val locations = mutableListOf<String>()
-        val exporter = ProfilePortableExporter { location, field, _ ->
-            locations += "$location/$field"
+        val exporter = ProfilePortableExporter { value ->
+            locations += "${value.location}/${value.field}"
             JsonPrimitive("portable")
         }
         val text = exporter.export(source)
