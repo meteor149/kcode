@@ -61,6 +61,18 @@ The package lock has no artifact paths or credentials; runtime snapshots retain 
 Selection only references committed profiles, and deleting the selected profile is refused.
 Package caches and provider data are outside this repository and are never deleted with it.
 
+`ProfilePortableExporter` provides a host-side exchange boundary for committed generations.
+The versioned JSON envelope contains user intent, frozen declared bundles and package locks;
+it excludes the local runtime composition, machine/launch overlays and business data. Export
+resets settings/history/workspace scope aliases to independent Profile scopes. It reviews every
+explicit configuration, injection and interception value in every stored layer, including nested
+entries and values hidden by later overrides. The default policy denies these values rather than
+guessing whether a key contains a credential. Feature-schema reviews may supply portable values;
+the host must vet those reviews. Rejection messages never include rejected configuration values.
+Decode validates format, bundle completeness, lock structure and composition without loading code.
+It does not prove package authenticity or authorize installation/activation. Management commands,
+feature review policies, file dialogs and imported-draft publication still need integration.
+
 `ProfileResolver` collects only referenced package releases and their dependency archive
 hints. The existing native package resolver verifies the actual graph, platform variant and
 ABI, and every retained release is reverified. Resolution retains separate entry identities

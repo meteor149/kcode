@@ -1,5 +1,27 @@
 # Profile implementation
 
+## Portable export boundary phase
+
+The host-side Profiles implementation now includes `ProfilePortableExporter` and a versioned
+`PortableProfileDocument`. Export uses a committed generation's frozen declared bundles and
+package locks, excludes runtime composition/paths and machine/launch layers, and resets all
+three data scopes to independent Profile scopes. Every explicit configuration/injection/interception
+value requires host-owned feature-schema review, including nested entries and overridden values
+in older layers. Unknown values fail closed; diagnostics omit their contents. Review callbacks
+are trusted host policy and must not be installed as unconditional identity approvals.
+
+Strict decode validates the envelope, complete frozen bundles, lock structure and compiled tree
+without resource allocation. Decode does not establish package authenticity or activate anything.
+No exported SDK contract changed; API remains 71. Concentrated verification passed all 44 Profiles
+desktop tests (including 5 new exchange cases) and Android Profiles compilation. An initial nested
+fixture used a Loader path rather than the composer's entry ID; the fixture was corrected before
+the passing run. No device or full application regression was required for this pure common layer.
+
+This is an exchange foundation, not completed user-facing import/export. Neutral management
+commands, feature-schema policies, native file exchange, imported frozen-draft publication and
+verified external Bundle import remain outstanding, as do corrupt-authority recovery, desktop
+rendering and the execution-admission/resource-ownership audit.
+
 ## Historical and template recovery phase
 
 Recovery now lists generations for the selected Profile and can activate a historical target
