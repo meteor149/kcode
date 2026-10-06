@@ -40,8 +40,8 @@ its current API is inside that range and the compiled API is in the host's suppo
 Current-API packages must match the host SDK ABI fingerprint. For older APIs, the fingerprint
 remains bound to the package metadata and immutable profile lock; the declared range is the
 publisher's binary-compatibility claim, so publishers must validate each API they include.
-Legacy metadata without a range gets one-step forward compatibility for the immediately
-previous supported API. New packages should always publish the explicit range.
+Legacy metadata without a range uses the host’s reviewed supported API window
+(currently 76–78). New packages should always publish the explicit range.
 
 Package presentation metadata belongs to Cordis: its root manifest fields include
 `displayName`, `description`, `license`, `author`, `contributors`, `homepage`, `repository`,

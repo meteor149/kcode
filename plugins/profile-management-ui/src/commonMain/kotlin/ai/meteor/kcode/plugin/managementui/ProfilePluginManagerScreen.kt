@@ -71,6 +71,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 
@@ -131,7 +133,7 @@ fun ProfilePluginManagerScreen(
     val acceptingCommands = management.phase == ProfileManagementPhase.Ready ||
         management.phase == ProfileManagementPhase.RecoveryRequired
     val canManage = acceptingCommands && !state.busy
-    val canEdit = canManage && target?.source != ProfileSource.History
+    val canEdit = canManage && target != null && target.source != ProfileSource.History
     val canActivate = canManage && preview != null && preview.packagesVerified &&
         preview.diagnostics.isEmpty() && target != null && catalogue?.revision == preview.revision
     val showActivationBar = target != null && (!embeddedInSettings ||
@@ -315,33 +317,42 @@ fun ProfilePluginManagerScreen(
             }
 
             if (target != null) {
-                if (embeddedInSettings) {
+                Row(horizontalArrangement = Arrangement.spacedBy(KcodeSpacing.sm)) {
                     Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = canEdit && availableModules.isNotEmpty(),
-                        onClick = { showAddPlugin = true },
+                        modifier = Modifier.weight(1f).testTag("plugin-manager-install-plugin"),
+                        enabled = canEdit,
+                        onClick = {
+                            val revision = catalogue?.revision ?: return@Button
+                            val selectedProfileId = target.profileId
+                            scope.launch {
+                                try {
+                                    files.withBundles(text("install_plugin"), singlePlugin = true) { selected ->
+                                        val file = selected.single().reference
+                                        session.importPlugin(ProfileArchiveReference(file.archivePath, file.sha256), revision, selectedProfileId)
+                                    }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (failure: Exception) {
+                                    session.reportFailure(failure.message ?: text("plugin_import_failed"))
+                                }
+                            }
+                        },
                     ) {
                         KcodeIcon(KcodeIconAsset.Add, MaterialTheme.colorScheme.onPrimary, Modifier.size(18.dp))
                         Spacer(Modifier.size(KcodeSpacing.xs))
-                        Text(text("add_plugin"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(text("install_plugin"), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(KcodeSpacing.sm)) {
-                        Button(
-                            modifier = Modifier.weight(1f),
-                            enabled = canEdit && availableModules.isNotEmpty(),
-                            onClick = { showAddPlugin = true },
-                        ) {
-                            KcodeIcon(KcodeIconAsset.Add, MaterialTheme.colorScheme.onPrimary, Modifier.size(18.dp))
-                            Spacer(Modifier.size(KcodeSpacing.xs))
-                            Text(text("add_plugin"), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f),
-                            enabled = canManage && catalogue != null,
-                            onClick = { showInstallBundles = true },
-                        ) { Text(text("install_bundle_short"), maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    }
+                    OutlinedButton(
+                        enabled = canEdit && availableModules.isNotEmpty(),
+                        onClick = { showAddPlugin = true },
+                    ) { Text(text("add_instance"), maxLines = 1) }
+                }
+                Text(text("install_plugin_hint"), color = SoftInk, style = MaterialTheme.typography.bodySmall)
+                if (!embeddedInSettings) {
+                    TextButton(
+                        enabled = canManage && catalogue != null,
+                        onClick = { showInstallBundles = true },
+                    ) { Text(text("install_bundle_short")) }
                 }
 
                 ManagerSection("${text("plugins")} · ${entries.size}") {
@@ -509,7 +520,7 @@ fun ProfilePluginManagerScreen(
     if (showAddPlugin) {
         AlertDialog(
             onDismissRequest = { showAddPlugin = false },
-            title = { Text(text("add_plugin")) },
+            title = { Text(text("add_instance")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(KcodeSpacing.sm)) {
                     Box {
@@ -559,7 +570,7 @@ fun ProfilePluginManagerScreen(
                             entryId = ""
                         }
                     }
-                }) { Text(text("add_plugin")) }
+                }) { Text(text("add_instance")) }
             },
             dismissButton = { TextButton(onClick = { showAddPlugin = false }) { Text(text("cancel")) } },
         )

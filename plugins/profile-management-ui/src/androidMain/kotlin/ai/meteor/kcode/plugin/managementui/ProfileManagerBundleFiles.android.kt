@@ -23,16 +23,21 @@ internal actual fun rememberProfileManagerBundleFiles(): ProfileManagerBundleFil
         state.pending?.complete(uris)
         state.pending = null
     }
+    val pluginPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        state.pending?.complete(listOfNotNull(uri))
+        state.pending = null
+    }
     DisposableEffect(state) {
         onDispose {
             state.pending?.cancel()
             state.pending = null
         }
     }
-    return remember(resolver, picker) {
+    return remember(resolver, picker, pluginPicker) {
         object : ProfileManagerBundleFiles {
             override suspend fun withBundles(
                 title: String,
+                singlePlugin: Boolean,
                 consume: suspend (List<ProfileManagerBundleFile>) -> Unit,
             ): Boolean {
                 val uris = withContext(Dispatchers.Main.immediate) {
@@ -40,7 +45,7 @@ internal actual fun rememberProfileManagerBundleFiles(): ProfileManagerBundleFil
                     val pending = CompletableDeferred<List<Uri>>()
                     state.pending = pending
                     try {
-                        picker.launch(arrayOf("*/*"))
+                        if (singlePlugin) pluginPicker.launch(arrayOf("*/*")) else picker.launch(arrayOf("*/*"))
                     } catch (failure: Exception) {
                         if (state.pending === pending) state.pending = null
                         throw failure
@@ -59,6 +64,9 @@ internal actual fun rememberProfileManagerBundleFiles(): ProfileManagerBundleFil
                             if (cursor.moveToFirst()) cursor.getString(0)?.take(256) else null
                         }?.takeIf(String::isNotBlank) ?: "Bundle ${index + 1}"
                     }
+                }
+                require(!singlePlugin || uris.size == 1 && names.single().endsWith(".kplugin", ignoreCase = true)) {
+                    "Select one .kplugin file"
                 }
                 stageManagerBundles(uris.mapIndexed { index, uri ->
                     names[index] to { requireNotNull(resolver.openInputStream(uri)) }

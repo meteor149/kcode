@@ -461,3 +461,30 @@ Goal button work and automatic restoration also enter root execution admission b
 changing resume intent, cancelling a response or allocating Goal sessions. A refused response
 does not consume automatic restoration intent. Their owned operations remain admitted through
 cancellation cleanup. This extends the preparation boundary without another SDK ABI change.
+
+## Installing a single native plugin
+
+SDK 78 adds `ProfileManagementClient.importPlugin(ProfilePluginImport(...))`. The request
+contains an existing Profile ID, a temporary archive path/SHA-256 and the expected catalogue
+revision. Native Android and Desktop management screens expose **Install plugin** for a single
+`.kplugin` file. **Add instance** remains a secondary operation for available code.
+
+Import verifies the container, platform variant, API/ABI and dependency graph with the ordinary
+native package resolver, stages immutable releases and adds one default-configured instance to
+the editable draft. A package already referenced by an instance is rejected; configuration edits
+and additional instances use their existing actions. Dependencies must already be available in
+the Profile's verified package recipe; import does not download missing code. Missing required
+services can still leave an instance pending after activation.
+
+Import never mounts providers or changes the active generation. Users configure the new instance
+and explicitly apply the draft through the host command boundary. In Settings, the target is the
+active Profile; the independent manager also supports selected drafts in recovery mode.
+
+Draft document version 3 preserves an additional verified package lock alongside its frozen base.
+Only digests/versions/variants/ABI/dependencies are persisted, never picker paths. Further edits,
+cloning and process restart retain those releases. Versions 1 and 2 remain readable. Explicit
+activation resolves imported digests from the immutable native cache, validates the complete
+candidate and commits through the normal rollback-capable activation protocol. Stale revisions,
+cancellation and invalid archives publish no draft; staging may leave immutable cache entries.
+Temporary picker files are removed after import. Deleting the verified code cache can prevent
+activation or restart and requires obtaining the missing package again.

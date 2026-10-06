@@ -347,7 +347,7 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository, Prof
         val id = document.definition.id
         require(!createOnly || id !in previous.profiles) { "Profile already exists" }
         val pointer = UUID.randomUUID().toString()
-        write(draftPath(id, pointer, create = true), json.encodeToString(document.copy(formatVersion = 2)), replace = false)
+        write(draftPath(id, pointer, create = true), json.encodeToString(document.copy(formatVersion = 3)), replace = false)
         val record = previous.profiles[id] ?: ProfileRecord()
         publish(previous, previous.copy(profiles = previous.profiles + (id to record.copy(
             draft = true, draftDocument = pointer, draftName = document.definition.displayName))))
@@ -359,7 +359,8 @@ class FileProfileRepository(directory: File) : ProfileGenerationRepository, Prof
         val base = record?.generations?.lastOrNull()?.let { load(definition.id, it) }
             ?: draft(definition.id, record)?.base
         val imported = draft(definition.id, record)?.imported.takeIf { base == null }
-        writeDraft(ProfileDraftDocument(definition, base, imported = imported), previous, createOnly = false)
+        writeDraft(ProfileDraftDocument(definition, base, imported = imported,
+            packageImports = draft(definition.id, previous.profiles[definition.id])?.packageImports ?: ProfileLock()), previous, createOnly = false)
     }
 
     override suspend fun writeDraft(document: ProfileDraftDocument, expectedRevision: Long, createOnly: Boolean) = access(atomic = true) {

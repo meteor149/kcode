@@ -21,6 +21,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePluginImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
@@ -138,6 +139,7 @@ class ProfileCommandGateway : ProfileManagementClient {
     override suspend fun modules() = backend().profileModules()
     override suspend fun importPortable(request: ProfilePortableImport) = backend().importPortableProfile(request)
     override suspend fun importBundles(request: ProfileBundleImport) = backend().importProfileBundles(request.copy(archives = request.archives.toList()))
+    override suspend fun importPlugin(request: ProfilePluginImport) = backend().importProfilePlugin(request.copy(archive = request.archive.copy()))
     override suspend fun exportPortable(request: ProfilePortableExport) = backend().exportPortableProfile(request)
     override suspend fun importArchive(request: ProfileArchiveImport) = backend().importProfileArchive(request)
     override suspend fun exportArchive(request: ProfilePortableExport, consume: suspend (ProfileArchiveReference) -> Unit) =
@@ -224,6 +226,7 @@ class ProfileCommandGateway : ProfileManagementClient {
                 override suspend fun history(id: String): List<ProfileCompositionState> { requireLive(); return operations.run { this@ProfileCommandGateway.history(id) } }
                 override suspend fun modules(): List<ProfileModuleSummary> { requireLive(); return operations.run { this@ProfileCommandGateway.modules() } }
                 override suspend fun importPortable(request: ProfilePortableImport): ProfileCatalogue { requireLive(); return operations.run { this@ProfileCommandGateway.importPortable(request) } }
+                override suspend fun importPlugin(request: ProfilePluginImport): ProfileCatalogue { requireLive(); return operations.run { this@ProfileCommandGateway.importPlugin(request) } }
                 override suspend fun importBundles(request: ProfileBundleImport): ProfileCatalogue { requireLive(); return operations.run { this@ProfileCommandGateway.importBundles(request) } }
                 override suspend fun exportPortable(request: ProfilePortableExport): String { requireLive(); return operations.run { this@ProfileCommandGateway.exportPortable(request) } }
                 override suspend fun importArchive(request: ProfileArchiveImport): ProfileCatalogue { requireLive(); return operations.run { this@ProfileCommandGateway.importArchive(request) } }

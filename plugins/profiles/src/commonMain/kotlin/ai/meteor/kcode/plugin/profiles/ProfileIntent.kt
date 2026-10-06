@@ -9,6 +9,7 @@ data class ProfileIntent(
     val definition: ProfileDefinition,
     val base: CommittedProfileGeneration?,
     val imported: PortableProfileDocument? = null,
+    val packageImports: ProfileLock = ProfileLock(),
 )
 
 suspend fun loadProfileIntent(repository: ProfileGenerationRepository, target: ProfileTarget): ProfileIntent {
@@ -19,7 +20,7 @@ suspend fun loadProfileIntent(repository: ProfileGenerationRepository, target: P
         ProfileSource.Draft -> requireNotNull(repository.loadDraftDocument(target.profileId)) { "Profile has no draft" }
             .let {
                 val base = it.base ?: repository.loadCommitted(target.profileId)
-                ProfileIntent(it.definition, base, it.imported.takeIf { base == null })
+                ProfileIntent(it.definition, base, it.imported.takeIf { base == null }, it.packageImports)
             }
         ProfileSource.History -> requireNotNull(repository.loadGeneration(target.profileId, checkNotNull(target.generation))) { "Historical generation is missing" }
             .let { ProfileIntent(it.definition, it) }

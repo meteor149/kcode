@@ -14,9 +14,8 @@ suspend fun profileImportedOffers(
 ): Map<String, ProfilePackageOffer> {
     if (target != null && target.source != ProfileSource.Draft || target == null && repository.loadCommitted(id) != null) return offers
     val draft = repository.loadDraftDocument(id) ?: return offers
-    if (draft.base != null) return offers
-    val imported = draft.imported ?: return offers
-    return offers + imported.lock.packages.associate { locked ->
+    val imported = draft.imported.takeIf { draft.base == null }?.lock?.packages.orEmpty()
+    return offers + (imported + draft.packageImports.packages).associate { locked ->
         locked.id to ProfilePackageOffer(cached(locked.archiveSha256), locked.dependencies.keys)
     }
 }

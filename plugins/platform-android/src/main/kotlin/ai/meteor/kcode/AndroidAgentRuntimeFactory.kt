@@ -7,6 +7,7 @@ import ai.meteor.kcode.plugin.profiles.ProfileArchiveExchange
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
 import ai.meteor.kcode.plugin.profiles.profileImportedOffers
+import ai.meteor.kcode.plugin.profiles.ProfilePluginPackageImporter
 
 import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
@@ -263,6 +264,9 @@ suspend fun createAndroidProfileHost(
         },
         ProfileArchiveExchange(pluginDirectory, androidPackageHost(), NativePluginPackageResolver(pluginDirectory, androidPackageHost(),
             artifactVerifier = androidPackageVerifier(activity)), { preparation.prepare().modules }),
+        NativePluginPackageResolver(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity)).let { resolver ->
+            ProfilePluginPackageImporter(resolver, resolver::cachedRelease)
+        },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     val templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }
     return if (managementOnly) {

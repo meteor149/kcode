@@ -51,7 +51,7 @@ class ProfilePortableImportTest {
             val legacyText = Json.encodeToString(legacy)
             assertEquals(legacy, Json.decodeFromString<ProfileDraftDocument>(legacyText))
             repository.writeDraft(legacy, repository.state().revision, createOnly = true)
-            assertEquals(2, repository.loadDraftDocument("legacy")!!.formatVersion)
+            assertEquals(3, repository.loadDraftDocument("legacy")!!.formatVersion)
             assertNull(repository.loadDraftDocument("legacy")!!.imported)
             assertFailsWith<IllegalArgumentException> {
                 legacy.copy(imported = ProfilePortableExporter.decode(text)).validate()

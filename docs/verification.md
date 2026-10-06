@@ -408,3 +408,37 @@ deleted, with both its directory and descriptor confirmed absent; no original An
 or user application was reset, stopped or deleted. The Cordis integrated validation log was
 moved into the kcode development worktree alongside the other ignored validation logs;
 both repositories retain their source evidence without committing generated logs.
+
+## Single native plugin import
+
+The Profile worktree adds SDK 78 single `.kplugin` import through the host-owned management
+client. `ProfilePluginImportTest` in `plugins/platform-desktop` uses the actual packaged
+Localization JAR. Both cases pass: an existing committed Profile stays unchanged during
+import, retains the verified lock through configuration edits, activates and restarts after
+source deletion; a management-only host imports into an uncommitted draft without starting
+a product, then a subsequent normal launch boots from cached code after source deletion.
+
+The Profile metadata test covers stale revisions before verification, verification failure,
+cancellation, a publication conflict after preparation, and preservation through direct save,
+management edits, clone and repository reopen. All 84 Profile desktop tests and the plugin
+SDK `allTests` pass. Desktop host compilation and Android debug APK assembly pass. These
+checks do not establish physical Android document-picker acceptance or real APK import;
+Android's new action uses a single-document SAF picker and the existing native APK verifier.
+
+## Legacy package upgrade compatibility
+
+Physical Android upgrade acceptance found a retained `core.continuations` release compiled
+against API 76 with Android ARM/x86 targets and no `pluginApiRange`. The API 78 host rejected
+it because the legacy fallback only covered the immediately previous API, despite the host's
+reviewed minimum remaining 76. The fallback now uses the complete supported host window.
+Explicit publisher ranges, the minimum compiled API, current-API ABI fingerprints, immutable
+release identities and native artifact checks remain enforced. Variant selection diagnostics
+now identify API/range/ABI rejections separately from missing platform variants.
+
+The desktop real-JAR integration test covers retained legacy code across install/restart,
+explicit-range rejection, below-minimum rejection and current-API ABI mismatch. All 16 package
+integration cases plus two single-plugin import cases pass; Android debug assembly passes.
+The updated APK was installed over the existing physical-phone application without clearing
+its data. Its original `native` Profile successfully published the next generation and the
+normal chat UI was observed with no recovery or compatibility error; retained API 76 releases
+remain in that generation. This is upgrade/startup evidence, not document-picker acceptance.

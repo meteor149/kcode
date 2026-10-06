@@ -116,19 +116,25 @@ interface ProfileGenerationRepository : ProfileRepository {
 
 /** A cloned draft retains the source's frozen bundle/code recipe without copying business data. */
 @Serializable
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 data class ProfileDraftDocument(
     val definition: ProfileDefinition,
     val base: CommittedProfileGeneration? = null,
-    val formatVersion: Int = 2,
+    @kotlinx.serialization.EncodeDefault
+    val formatVersion: Int = 3,
     /** Portable frozen recipe retained until a local committed generation becomes authoritative. */
     val imported: PortableProfileDocument? = null,
+    /** Verified draft additions, addressed by digest rather than temporary input paths. */
+    val packageImports: ProfileLock = ProfileLock(),
 ) {
     fun validate() {
-        require(formatVersion == 1 || formatVersion == 2) { "Unsupported Profile draft format" }
-        require(formatVersion == 2 || imported == null) { "Imported recipes require Profile draft format 2" }
+        require(formatVersion in 1..3) { "Unsupported Profile draft format" }
+        require(formatVersion >= 2 || imported == null) { "Imported recipes require Profile draft format 2" }
         definition.validate()
         base?.validate(restoring = true)
         imported?.validate()
+        packageImports.validate()
+        require(formatVersion >= 3 || packageImports.packages.isEmpty()) { "Plugin imports require Profile draft format 3" }
         require(base == null || imported == null) { "Draft cannot have both local and imported bases" }
     }
 }

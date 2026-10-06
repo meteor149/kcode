@@ -16,6 +16,8 @@
   </p>
 </div>
 
+Both the Settings plugin manager and the independent manager can import a single `.kplugin` file into an editable draft; apply changes explicitly to activate it. See [Profiles](docs/profiles.md).
+
 > [!IMPORTANT]
 > kcode is evolving quickly. Expect breaking changes, verify important agent actions, and read the security model before enabling privileged tools.
 

@@ -155,7 +155,7 @@ fingerprint policy: packages built against the current API must match the host f
 packages built against an older API keep their SDK fingerprint bound to their package metadata
 and immutable release lock. Their declared range is the publisher's binary-compatibility claim,
 so test each API in the range before publishing it. Manifests created before `pluginApiRange`
-existed remain accepted for the immediately previous supported API. Lower the minimum supported
+existed remain accepted within the host’s reviewed supported API window. Raise the minimum supported
 API only after reviewing an incompatible change, and document which legacy package versions
 remain accepted.
 

@@ -63,6 +63,9 @@ interface ProfileManagementClient {
     /** Verifies native code but does not mount it; activation remains explicit. */
     suspend fun importBundles(request: ProfileBundleImport): ProfileCatalogue =
         error("This client does not support Bundle archives")
+    /** Verify/cache a native plugin and add its default instance to the current Profile draft. */
+    suspend fun importPlugin(request: ProfilePluginImport): ProfileCatalogue =
+        error("This client does not support plugin archive import")
     /** Host feature policies review opaque configuration; callers cannot bypass that review. */
     suspend fun exportPortable(request: ProfilePortableExport): String =
         error("This client does not support portable Profile export")

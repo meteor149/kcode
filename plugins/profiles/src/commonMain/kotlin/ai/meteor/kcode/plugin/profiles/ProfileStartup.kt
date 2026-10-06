@@ -53,6 +53,8 @@ suspend fun prepareNativeProfileActivation(
         ?: (repository as? ProfileGenerationRepository)?.loadDraftDocument(prepared.definition.id)?.base
     val imported = if (committed == null) intent?.imported
         ?: (repository as? ProfileGenerationRepository)?.loadDraftDocument(prepared.definition.id)?.imported else null
+    val packageImports = (intent?.packageImports ?: if (repository.loadCommitted(prepared.definition.id) == null)
+        (repository as? ProfileGenerationRepository)?.loadDraftDocument(prepared.definition.id)?.packageImports else null)?.packages.orEmpty()
     val frozenBundles = if (intent != null) profileIntentBundles(intent, bundles)
         else profileIntentBundles(ProfileIntent(prepared.definition, committed, imported), bundles)
     val snapshot = prepared.session.load()
@@ -60,7 +62,7 @@ suspend fun prepareNativeProfileActivation(
     // Restart an existing generation from its lock. Newly introduced distro offers do not upgrade it.
     require(refreshBundledPackageIds.none { it.isBlank() }) { "Bundled package refresh identities must not be blank" }
     val effectiveOffers = if (committed != null) offers.filterKeys { id ->
-        previous.none { it.id == id } || id in refreshBundledPackageIds
+        previous.none { it.id == id } || id in refreshBundledPackageIds || packageImports.any { it.id == id }
     }
         else offers.filterKeys { id ->
             val existing = previous.firstOrNull { it.id == id }
@@ -69,7 +71,9 @@ suspend fun prepareNativeProfileActivation(
     val resolved = ProfileResolver(resolver).resolve(
         prepared.definition, frozenBundles, effectiveOffers, builtinModules, previous,
         machineOverrides(prepared.definition, frozenBundles), launchOverrides, builtinOverrides,
-        expectedLock = imported?.lock,
+        expectedLock = if (imported != null || packageImports.isNotEmpty()) ProfileLock(
+            packages = (imported?.lock?.packages.orEmpty() + packageImports).associateBy { it.id }.values.toList(),
+        ) else null,
     )
     return ProfileActivation(resolved, prepared.session, machineOverrides)
 }

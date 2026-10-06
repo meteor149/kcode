@@ -16,17 +16,21 @@ internal actual fun rememberProfileManagerBundleFiles(): ProfileManagerBundleFil
     object : ProfileManagerBundleFiles {
         override suspend fun withBundles(
             title: String,
+            singlePlugin: Boolean,
             consume: suspend (List<ProfileManagerBundleFile>) -> Unit,
         ): Boolean {
-            val paths = chooseBundleFiles(title)
+            val paths = chooseBundleFiles(title, singlePlugin)
             if (paths.isEmpty()) return false
+            require(!singlePlugin || paths.size == 1 && paths.single().fileName.toString().endsWith(".kplugin", ignoreCase = true)) {
+                "Select one .kplugin file"
+            }
             stageManagerBundles(paths.map(::selectedPath), consume)
             return true
         }
     }
 }
 
-private suspend fun chooseBundleFiles(title: String): List<Path> = suspendCancellableCoroutine { continuation ->
+private suspend fun chooseBundleFiles(title: String, singlePlugin: Boolean): List<Path> = suspendCancellableCoroutine { continuation ->
     var dialog: FileDialog? = null
     continuation.invokeOnCancellation { EventQueue.invokeLater { dialog?.dispose() } }
     EventQueue.invokeLater {
@@ -35,7 +39,8 @@ private suspend fun chooseBundleFiles(title: String): List<Path> = suspendCancel
             val owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow as? Frame
             val picker = FileDialog(owner, title, FileDialog.LOAD)
             dialog = picker
-            picker.isMultipleMode = true
+            picker.isMultipleMode = !singlePlugin
+            if (singlePlugin) picker.setFilenameFilter { _, name -> name.endsWith(".kplugin", ignoreCase = true) }
             try {
                 picker.isVisible = true
                 val result = picker.files.map { it.toPath().toAbsolutePath() }

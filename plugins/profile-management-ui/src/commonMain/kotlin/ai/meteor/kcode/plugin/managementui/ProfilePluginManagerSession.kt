@@ -2,6 +2,8 @@ package ai.meteor.kcode.plugin.managementui
 
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
+import ai.meteor.kcode.plugin.api.profiles.ProfilePluginImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
@@ -100,6 +102,19 @@ internal class ProfilePluginManagerSession(
             displayName = displayName.ifBlank { id },
         ))
         load(next, ProfileTarget(id, ProfileSource.Draft), moduleSnapshot())
+    }
+
+    suspend fun importPlugin(archive: ProfileArchiveReference, expectedRevision: Long, profileId: String) = operation {
+        val current = state.value
+        check(current.target?.profileId == profileId && current.target.source != ProfileSource.History) {
+            "Select an editable Profile first"
+        }
+        val next = client.importPlugin(ProfilePluginImport(profileId, archive, expectedRevision))
+        load(next, ProfileTarget(profileId, ProfileSource.Draft), moduleSnapshot())
+    }
+
+    suspend fun reportFailure(message: String) {
+        mutableState.value = state.value.copy(failure = message)
     }
 
     suspend fun add(moduleId: String, entryId: String) = append(ProfileOperation.Insert(

@@ -8,6 +8,7 @@ import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import java.io.File
 import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
 import ai.meteor.kcode.plugin.profiles.profileImportedOffers
+import ai.meteor.kcode.plugin.profiles.ProfilePluginPackageImporter
 
 import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
@@ -201,6 +202,9 @@ suspend fun createDesktopProfileHost(
                 .prepare(archives.map { ProfileBundleArchiveInput(File(it.archivePath), it.sha256) }, id, name)
         },
         ProfileArchiveExchange(pluginDirectory, desktopPackageHost(), NativePluginPackageResolver(pluginDirectory, desktopPackageHost()), { preparation.prepare().modules }),
+        NativePluginPackageResolver(pluginDirectory, desktopPackageHost()).let { resolver ->
+            ProfilePluginPackageImporter(resolver, resolver::cachedRelease)
+        },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     val templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }
     return if (managementOnly) {

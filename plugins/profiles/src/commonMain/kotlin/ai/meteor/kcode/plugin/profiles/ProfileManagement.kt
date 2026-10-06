@@ -2,6 +2,8 @@ package ai.meteor.kcode.plugin.profiles
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePluginImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
@@ -42,6 +44,7 @@ class ProfileManagement private constructor(
     private val exportReviews: ProfileExportReviewFactory? = null,
     private val bundlePrepare: (suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument)? = null,
     private val archiveTransport: ProfileArchiveTransport? = null,
+    private val pluginPrepare: ProfilePluginImportPreparation? = null,
 ) {
     constructor(
         repository: ProfileGenerationRepository,
@@ -80,6 +83,16 @@ class ProfileManagement private constructor(
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews, bundlePrepare, archiveTransport)
 
+    constructor(
+        repository: ProfileGenerationRepository,
+        bundles: suspend () -> List<ProfileBundle>,
+        exportReviews: ProfileExportReviewFactory,
+        bundlePrepare: suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument,
+        archiveTransport: ProfileArchiveTransport,
+        pluginPrepare: ProfilePluginImportPreparation,
+        prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews, bundlePrepare, archiveTransport, pluginPrepare)
+
     suspend fun catalogue(): ProfileCatalogue = repository.catalogue()
     suspend fun draft(id: String): ProfileDefinition? = repository.loadDraft(id)
     suspend fun prepareRecoveryMetadata() { bundles() }
@@ -94,14 +107,15 @@ class ProfileManagement private constructor(
         detached.validate()
         val base = repository.loadCommitted(detached.id) ?: repository.loadDraftDocument(detached.id)?.base
         val imported = repository.loadDraftDocument(detached.id)?.imported.takeIf { base == null }
-        repository.writeDraft(ProfileDraftDocument(detached, base, imported = imported), write.expectedRevision, write.createOnly)
+        val imports = repository.loadDraftDocument(detached.id)?.packageImports ?: ProfileLock()
+        repository.writeDraft(ProfileDraftDocument(detached, base, imported = imported, packageImports = imports), write.expectedRevision, write.createOnly)
         return catalogue()
     }
 
     suspend fun clone(request: ProfileCloneRequest): ProfileCatalogue {
         val intent = loadProfileIntent(repository, request.source)
         val definition = intent.definition.copy(id = request.id, displayName = request.displayName, dataScope = request.dataScope)
-        repository.writeDraft(ProfileDraftDocument(definition, intent.base, imported = intent.imported), request.expectedRevision, createOnly = true)
+        repository.writeDraft(ProfileDraftDocument(definition, intent.base, imported = intent.imported, packageImports = intent.packageImports), request.expectedRevision, createOnly = true)
         return catalogue()
     }
 
@@ -130,6 +144,51 @@ class ProfileManagement private constructor(
         // Publication performs a second revision/create-only check after potentially slow I/O.
         return importPortable(Json.encodeToString(PortableProfileDocument.serializer(), prepared),
             request.id, request.displayName, request.expectedRevision)
+    }
+
+    suspend fun importPlugin(request: ProfilePluginImport): ProfileCatalogue {
+        ProfileDefinition(id = request.profileId).validate()
+        require(request.archive.archivePath.isNotBlank() && request.archive.sha256.matches(Regex("[a-f0-9]{64}"))) {
+            "Invalid plugin archive input"
+        }
+        val before = catalogue()
+        require(before.revision == request.expectedRevision) { "Profile repository changed; refresh" }
+        val summary = requireNotNull(before.profiles.find { it.id == request.profileId }) { "Profile is unavailable" }
+        val target = ProfileTarget(request.profileId, if (summary.hasDraft) ProfileSource.Draft else ProfileSource.Committed)
+        val intent = loadProfileIntent(repository, target)
+        val existing = ProfileLock(packages = (
+            intent.base?.lock?.packages.orEmpty() + intent.imported?.lock?.packages.orEmpty() + intent.packageImports.packages
+        ).associateBy { it.id }.values.toList())
+        val prepared = checkNotNull(pluginPrepare) { "Plugin archive preparation is unavailable" }
+            .prepare(request.archive, existing)
+        prepared.lock.validate()
+        require(prepared.lock.packages.any { it.id == prepared.packageId && it.archiveSha256 == request.archive.sha256 }) {
+            "Imported plugin identity differs from its verified archive"
+        }
+        val frozen = profileIntentBundles(intent, bundles())
+        val composition = ProfileCompiler().compile(intent.definition, frozen).requireValid()
+        val entries = mutableListOf<EntryOptions>()
+        fun collect(values: List<EntryOptions>) {
+            values.forEach { entry ->
+                entries += entry
+                if (entry.group == true) collect((entry.config as List<*>).map { it as EntryOptions })
+            }
+        }
+        collect(composition.entries)
+        require(entries.none { it.name == prepared.packageId }) { "Plugin is already configured; use its existing instance" }
+        val ids = entries.map { it.id }.toSet()
+        var entryId = prepared.packageId
+        var suffix = 2
+        while (entryId in ids) entryId = "${prepared.packageId}-${suffix++}"
+        val definition = intent.definition.copy(patches = intent.definition.patches + ProfileOperation.Insert(
+            listOf(ProfileEntry(entryId, prepared.packageId)),
+        ))
+        val imports = ProfileLock(packages = (intent.packageImports.packages + prepared.lock.packages)
+            .associateBy { it.id }.values.toList())
+        currentCoroutineContext().ensureActive()
+        repository.writeDraft(ProfileDraftDocument(definition, intent.base, imported = intent.imported, packageImports = imports),
+            request.expectedRevision)
+        return catalogue()
     }
 
     suspend fun exportPortable(

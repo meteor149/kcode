@@ -89,8 +89,8 @@ package's ABI fingerprint to its own metadata. This lets a newer host keep loadi
 packages when the publisher declares and validates that range, without republishing every
 package for each host API increment.
 
-Legacy manifests without `pluginApiRange` receive one-step forward compatibility for the
-immediately previous supported API. New releases should always include the range. A matching
+Legacy manifests without `pluginApiRange` use the host’s reviewed supported API window
+(currently 76–78). Explicit publisher ranges remain authoritative and are never widened. New releases should always include the range. A matching
 API number alone does not establish compiler or binary compatibility.
 
 ## Native payloads

@@ -12,6 +12,7 @@ internal data class ProfileManagerBundleFile(
 internal interface ProfileManagerBundleFiles {
     suspend fun withBundles(
         title: String,
+        singlePlugin: Boolean = false,
         consume: suspend (List<ProfileManagerBundleFile>) -> Unit,
     ): Boolean
 }

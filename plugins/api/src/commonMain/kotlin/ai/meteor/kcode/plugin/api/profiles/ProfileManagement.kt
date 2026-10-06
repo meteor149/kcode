@@ -64,6 +64,13 @@ data class ProfilePortableExport(val target: ProfileTarget, val expectedRevision
 /** Local locator, never persisted. Export locators are borrowed only during the consumer call. */
 data class ProfileArchiveReference(val archivePath: String, val sha256: String)
 
+/** Temporary plugin archive imported into an existing editable Profile; activation remains explicit. */
+data class ProfilePluginImport(
+    val profileId: String,
+    val archive: ProfileArchiveReference,
+    val expectedRevision: Long,
+)
+
 /** Verify code and frozen layers, then create an isolated draft without activation. */
 data class ProfileArchiveImport(
     val archive: ProfileArchiveReference,
