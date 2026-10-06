@@ -115,3 +115,20 @@ and duplicate Bundle references without publishing a Profile.
 The real Android APK case prepares/imports a single Bundle and starts twice after removing
 the source archive and outer Bundle deployment. Native host API tests alone do not prove an
 OS picker acceptance round trip or self-contained binary archive export.
+
+## Reviewing selected layers
+
+The default Profile UI shows an ordered file review when the native picker returns multiple
+Bundle archives. File names identify the selected inputs; move-up/down actions determine
+application order before any draft is created. Later layers override earlier layers.
+Confirmation submits that exact order with the repository revision captured before opening
+the picker. Cancellation publishes no draft. Single-file selections retain immediate import.
+
+Staged file ownership spans the review and import. Closing/withdrawing the presenter cancels
+and joins the suspended review before staged inputs are removed. The same private UI workflow
+serves Desktop and Android; native paths are never presented as portable configuration.
+
+Physical Android acceptance selects two actual archives using DocumentsUI's Select all in an
+isolated Downloads directory, changes the order in this private review and verifies a draft
+whose later layer overrides the earlier insertion. The active generation stays unchanged;
+see verification.md for evidence and remaining platform/provider boundaries.

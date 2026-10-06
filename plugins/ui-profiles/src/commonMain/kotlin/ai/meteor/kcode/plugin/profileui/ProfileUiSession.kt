@@ -24,6 +24,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,8 @@ import kotlinx.serialization.json.Json
 
 enum class ProfileUiFailure { InvalidDocument, OperationFailed }
 enum class ProfileExchangeResult { Imported, Exported }
+
+data class ProfileBundleSelection(val token: Int, val name: String)
 
 data class ProfileUiState(
     val catalogue: ProfileCatalogue? = null,
@@ -50,6 +53,7 @@ data class ProfileUiState(
     val failure: ProfileUiFailure? = null,
     val leaveRequested: Boolean = false,
     val exchange: ProfileExchangeResult? = null,
+    val bundleSelection: List<ProfileBundleSelection>? = null,
 )
 
 /** Presentation owns queries/observers; the native host owns accepted composition commands. */
@@ -60,6 +64,7 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
     private val mutableState = MutableStateFlow(ProfileUiState())
     private data class PendingLeave(val target: ProfileTarget?, val revision: Long?, val document: String, val proceed: () -> Unit)
     private var pendingLeave: PendingLeave? = null
+    private var bundleDecision: CompletableDeferred<List<Int>?>? = null
     val state: StateFlow<ProfileUiState> = mutableState.asStateFlow()
 
     fun edit(document: String) {
@@ -139,7 +144,20 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
         check(!current.dirty) { "Unsaved Profile edits" }
         ProfileDefinition(id = id, displayName = displayName).validate()
         val revision = requireNotNull(current.catalogue).revision
-        files.readBundles(title) { archives ->
+        files.readBundles(title) { selected ->
+            val order = if (selected.size <= 1) selected.indices.toList() else {
+                val decision = CompletableDeferred<List<Int>?>()
+                bundleDecision = decision
+                mutableState.value = state.value.copy(bundleSelection = selected.mapIndexed { index, file ->
+                    ProfileBundleSelection(index, file.name)
+                })
+                try { decision.await() } finally {
+                    decision.cancel()
+                    if (bundleDecision === decision) bundleDecision = null
+                    mutableState.value = state.value.copy(bundleSelection = null)
+                }
+            } ?: return@readBundles
+            val archives = order.map { selected[it].archive }
             val next = client.importBundles(ProfileBundleImport(archives, id, revision, displayName))
             val definition = requireNotNull(client.draft(id)) { "Imported draft is unavailable" }
             check(client.catalogue().revision == next.revision) { "Profile repository changed; refresh" }
@@ -148,6 +166,24 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
                 document = text, savedDocument = text, documentRevision = next.revision, dirty = false,
                 preview = null, history = emptyList(), exchange = ProfileExchangeResult.Imported)
         }
+    }
+
+    fun moveBundle(token: Int, offset: Int) {
+        owner.requireOpen()
+        check(bundleDecision?.isCompleted == false) { "Bundle selection is unavailable" }
+        require(offset == -1 || offset == 1)
+        val selection = requireNotNull(state.value.bundleSelection).toMutableList()
+        val index = selection.indexOfFirst { it.token == token }
+        require(index >= 0 && index + offset in selection.indices)
+        selection.add(index + offset, selection.removeAt(index))
+        mutableState.value = state.value.copy(bundleSelection = selection)
+    }
+
+    fun finishBundleSelection(confirmed: Boolean) {
+        owner.requireOpen()
+        val decision = requireNotNull(bundleDecision) { "Bundle selection is unavailable" }
+        decision.complete(if (confirmed) requireNotNull(state.value.bundleSelection).map { it.token } else null)
+        mutableState.value = state.value.copy(bundleSelection = null)
     }
 
     internal suspend fun importArchive(files: ProfileDocumentFiles, id: String, displayName: String, title: String) = fileOperation {

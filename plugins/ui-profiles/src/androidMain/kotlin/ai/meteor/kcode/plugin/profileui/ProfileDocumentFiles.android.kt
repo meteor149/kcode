@@ -94,7 +94,7 @@ internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles {
                 }
                 return true
             }
-            override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
+            override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleFile>) -> Unit): Boolean {
                 val uris = withContext(Dispatchers.Main.immediate) {
                     check(!requests.busy()) { "Document picker is busy" }
                     val pending = CompletableDeferred<List<Uri>>()
@@ -106,7 +106,15 @@ internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles {
                     try { pending.await() } finally { pending.cancel() }
                 }
                 if (uris.isEmpty()) return false
-                stageProfileBundles(uris.map { uri -> { requireNotNull(resolver.openInputStream(uri)) } }, consume = consume)
+                require(uris.size <= 16) { "Select between one and sixteen Bundles" }
+                val names = withContext(Dispatchers.IO) { uris.mapIndexed { index, uri ->
+                    resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getString(0)?.take(256) else null
+                    }?.takeIf(String::isNotBlank) ?: "archive-${index + 1}"
+                } }
+                stageProfileBundles(uris.map { uri -> { requireNotNull(resolver.openInputStream(uri)) } }) { archives ->
+                    consume(archives.mapIndexed { index, archive -> ProfileBundleFile(archive, names[index]) })
+                }
                 return true
             }
             override suspend fun read(title: String): String? {

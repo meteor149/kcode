@@ -11,6 +11,11 @@ import ai.meteor.kcode.plugin.api.NativeAndroidPluginWindowHost
 import ai.meteor.kcode.plugin.api.PluginDescriptor
 import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
+import ai.meteor.kcode.plugin.api.profiles.ProfileBundleReference
+import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveWriter
+import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
+import org.cordis.packages.PackageTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
@@ -88,6 +93,7 @@ class AndroidProfileFileRoundtripTest {
         val token = "kcode-picker-${System.nanoTime()}"
         val jsonName = "$token.json"
         val archiveName = "$token.kprofile"
+        val bundleUris = mutableListOf<android.net.Uri>()
         var window: AndroidPluginWindow? = null
         lateinit var view: ComposeView
         val language = mutableStateOf(AppLanguage("en"))
@@ -183,6 +189,58 @@ class AndroidProfileFileRoundtripTest {
             assertEquals(jsonDraft.patches, archiveDraft.patches)
             assertEquals(before.revision + 2, root.catalogue().revision)
             assertEquals(active, host.pluginManager.currentProfile())
+
+            val base = ProfileBundle(id = "picker.base", version = "1.0.0", patches = listOf(
+                ProfileOperation.Insert(listOf(ProfileEntry("dictionary", "feature.localization",
+                    Json.parseToJsonElement("""{"defaultLanguage":"en"}""")))),
+            ))
+            val override = ProfileBundle(id = "picker.override", version = "1.0.0", patches = listOf(
+                ProfileOperation.Configure("dictionary", Json.parseToJsonElement("""{"defaultLanguage":"zh"}""")),
+            ))
+            val release = requireNotNull(host.pluginManager.installed().single { it.id == "feature.localization" }.packageInstallation)
+            val baseFile = File(directory, "$token-z-base.kbundle")
+            val overrideFile = File(directory, "$token-a-override.kbundle")
+            val targets = listOf(PackageTarget("android", listOf("arm", "x86")))
+            ProfileBundleArchiveWriter().pack(base, listOf(ProfileBundleArchiveInput(File(release.archivePath), release.archiveSha256)), targets, baseFile)
+            ProfileBundleArchiveWriter().pack(override, emptyList(), targets, overrideFile)
+            bundleUris += publishDownload(baseFile, token)
+            bundleUris += publishDownload(overrideFile, token)
+            scrollIndex(5)
+            withContext(Dispatchers.Main.immediate) {
+                check(editor("Profile ID").config[SemanticsActions.SetText].action!!.invoke(AnnotatedString("picker-bundles")))
+            }
+            val beforeBundles = root.catalogue()
+            scrollIndex(6)
+            click("Import Bundle archives")
+            openMultipleDocuments(token, overrideFile.name, baseFile.name)
+            awaitLabel("Bundle order")
+            assertEquals(beforeBundles, root.catalogue())
+            assertEquals(null, root.draft("picker-bundles"))
+            val baseToken = bundleToken(baseFile.name)
+            val overrideToken = bundleToken(overrideFile.name)
+            // Change the returned picker order, then explicitly ensure the inserting layer precedes its override.
+            val bottom = withContext(Dispatchers.Main.immediate) {
+                nodes().filter { it.config.getOrNull(SemanticsProperties.TestTag) in setOf(
+                    "profile-bundle-selected-$baseToken", "profile-bundle-selected-$overrideToken") }
+                    .maxBy { it.positionInRoot.y }.config[SemanticsProperties.TestTag].substringAfterLast('-')
+            }
+            clickTag("profile-bundle-up-$bottom")
+            delay(100)
+            instrumentation.waitForIdleSync()
+            val baseCanMoveUp = withContext(Dispatchers.Main.immediate) {
+                nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == "profile-bundle-up-$baseToken" }
+                    .config.getOrNull(SemanticsProperties.Disabled) == null
+            }
+            if (baseCanMoveUp) clickTag("profile-bundle-up-$baseToken")
+            click("Import in this order")
+            awaitLabel("Imported as a draft. Preview and activate when ready.")
+            val bundlesDraft = requireNotNull(root.draft("picker-bundles"))
+            assertEquals(listOf(ProfileBundleReference(base.id, base.version), ProfileBundleReference(override.id, override.version)), bundlesDraft.bundles)
+            val preview = root.preview(ProfileTarget("picker-bundles", ProfileSource.Draft))
+            assertTrue(preview.packagesVerified)
+            assertEquals(Json.parseToJsonElement("""{"defaultLanguage":"zh"}"""), preview.entries.single().config)
+            assertEquals(beforeBundles.revision + 1, root.catalogue().revision)
+            assertEquals(active, host.pluginManager.currentProfile())
         } finally {
             if (pickerNodes().any { it.packageName?.toString()?.contains("documentsui") == true }) {
                 instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
@@ -191,6 +249,10 @@ class AndroidProfileFileRoundtripTest {
                 try { host.close() } finally {
                     deleteDownload(jsonName)
                     deleteDownload(archiveName)
+                    bundleUris.forEach { context.contentResolver.delete(it, null, null) }
+                    require(token.matches(Regex("kcode-picker-[0-9]+")))
+                    val cleanup = instrumentation.uiAutomation.executeShellCommand("rmdir /sdcard/Download/$token")
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(cleanup).use { it.readBytes() }
                     instrumentation.uiAutomation.dropShellPermissionIdentity()
                     require(directory.canonicalFile.parentFile == context.cacheDir.canonicalFile)
                     directory.deleteRecursively()
@@ -249,13 +311,23 @@ class AndroidProfileFileRoundtripTest {
         }
     }
 
-    private fun pickerClick(node: android.view.accessibility.AccessibilityNodeInfo) {
-        val clickable = generateSequence(node) { it.parent }.first { it.isClickable && it.isEnabled }
-        check(clickable.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+    private suspend fun pickerClick(node: android.view.accessibility.AccessibilityNodeInfo) = withTimeout(10_000) {
+        val text = node.text?.toString()
+        val description = node.contentDescription?.toString()
+        val className = node.className?.toString()
+        while (true) {
+            val refreshed = if (node.refresh()) node else pickerNodes().firstOrNull {
+                it.text?.toString() == text && it.contentDescription?.toString() == description && it.className?.toString() == className
+            }
+            val clickable = refreshed?.let { generateSequence(it) { parent -> parent.parent }.firstOrNull { it.isClickable && it.isEnabled } }
+            if (clickable?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) == true) return@withTimeout
+            delay(100)
+        }
     }
 
     private suspend fun downloads() {
         pickerNode("DocumentsUI window") { it.packageName?.toString()?.contains("documentsui") == true }
+        delay(300)
         val navigation = pickerNodes().firstOrNull {
             it.contentDescription?.toString() in setOf("显示根目录", "Show roots") && it.isClickable
         }
@@ -282,6 +354,47 @@ class AndroidProfileFileRoundtripTest {
         withTimeout(20_000) {
             while (pickerNodes().any { it.packageName?.toString()?.contains("documentsui") == true }) delay(100)
         }
+    }
+
+    private suspend fun openMultipleDocuments(folder: String, first: String, second: String) {
+        downloads()
+        pickerClick(pickerNode("test Bundle directory") { it.text?.toString() == folder })
+        pickerNode("first Bundle") { it.text?.toString() == first }
+        pickerNode("second Bundle") { it.text?.toString() == second }
+        pickerClick(pickerNode("file selection menu") { it.contentDescription?.toString() in setOf("更多选项", "More options") })
+        pickerClick(pickerNode("Select all test Bundles") { it.text?.toString() in setOf("全选", "选择全部", "Select all") })
+        pickerClick(pickerNode("Open selected Bundles") {
+            (it.text?.toString() in setOf("Open", "OPEN", "打开", "Select", "SELECT", "选择") ||
+                it.contentDescription?.toString() in setOf("Open", "打开", "Select", "选择")) &&
+                generateSequence(it) { node -> node.parent }.any { node -> node.isClickable && node.isEnabled }
+        })
+    }
+    private suspend fun bundleToken(name: String): Int = withContext(Dispatchers.Main.immediate) {
+        fun contains(node: SemanticsNode): Boolean = name in ownLabels(node) || node.children.any(::contains)
+        nodes().first { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("profile-bundle-selected-") == true && contains(it) }
+            .config[SemanticsProperties.TestTag].substringAfterLast('-').toInt()
+    }
+
+    private suspend fun clickTag(tag: String) = withContext(Dispatchers.Main.immediate) {
+        val node = nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+        check(node.config.getOrNull(SemanticsProperties.Disabled) == null)
+        check(node.config[SemanticsActions.OnClick].action!!.invoke())
+    }
+
+    private fun publishDownload(file: File, folder: String): android.net.Uri {
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/$folder")
+            put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = requireNotNull(resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values))
+        try {
+            requireNotNull(resolver.openOutputStream(uri)).use { output -> file.inputStream().use { it.copyTo(output) } }
+            resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+            return uri
+        } catch (failure: Throwable) { resolver.delete(uri, null, null); throw failure }
     }
 
     private fun readDownload(name: String): ByteArray {

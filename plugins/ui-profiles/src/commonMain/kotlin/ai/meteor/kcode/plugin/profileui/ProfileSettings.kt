@@ -66,6 +66,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import ai.meteor.kcode.plugin.profileui.resources.profile_bundle_order
+import ai.meteor.kcode.plugin.profileui.resources.profile_bundle_order_hint
+import ai.meteor.kcode.plugin.profileui.resources.profile_bundle_import_confirm
+import ai.meteor.kcode.plugin.profileui.resources.profile_move_up
+import ai.meteor.kcode.plugin.profileui.resources.profile_move_down
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -268,6 +274,27 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
         item { Text(profileText(Res.string.profile_modules), style = MaterialTheme.typography.titleMedium) }
         items(state.modules, key = { it.id }) { module -> Text("${module.id} · ${module.version}", style = MaterialTheme.typography.bodySmall) }
     }
+    state.bundleSelection?.let { selection -> AlertDialog(
+        onDismissRequest = { session.finishBundleSelection(false) },
+        title = { Text(profileText(Res.string.profile_bundle_order)) },
+        text = {
+            LazyColumn {
+                item { Text(profileText(Res.string.profile_bundle_order_hint)) }
+                itemsIndexed(selection, key = { _, item -> item.token }) { index, item ->
+                    Column(Modifier.testTag("profile-bundle-selected-${item.token}")) {
+                        Text(item.name)
+                        TextButton(enabled = index > 0, modifier = Modifier.testTag("profile-bundle-up-${item.token}"),
+                            onClick = { session.moveBundle(item.token, -1) }) { Text(profileText(Res.string.profile_move_up)) }
+                        TextButton(enabled = index < selection.lastIndex, modifier = Modifier.testTag("profile-bundle-down-${item.token}"),
+                            onClick = { session.moveBundle(item.token, 1) }) { Text(profileText(Res.string.profile_move_down)) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(modifier = Modifier.testTag("profile-bundle-import-confirm"),
+            onClick = { session.finishBundleSelection(true) }) { Text(profileText(Res.string.profile_bundle_import_confirm)) } },
+        dismissButton = { TextButton(onClick = { session.finishBundleSelection(false) }) { Text(profileText(Res.string.profile_cancel)) } },
+    ) }
     deletion?.let { pending -> AlertDialog(onDismissRequest = { deletion = null },
         text = { Text(profileText(Res.string.profile_delete_question)) },
         confirmButton = { TextButton(onClick = { deletion = null; scope.launch { session.delete(pending.first, pending.second) } }) {

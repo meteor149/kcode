@@ -99,19 +99,58 @@ class ProfileUiSessionTest {
             session.refresh()
             val previews = client.previewCalls
             val files = Files()
-            session.importBundles(files, "copy", "Copy", "Bundles")
-            assertEquals(ProfileBundleImport(files.bundles, "copy", 1, "Copy"), client.bundleImported)
+            val importing = async { session.importBundles(files, "copy", "Copy", "Bundles") }
+            runCurrent()
+            assertNull(client.bundleImported)
+            assertFalse(files.finished)
+            session.moveBundle(1, -1)
+            assertEquals(listOf("second", "first"), session.state.value.bundleSelection!!.map { it.name })
+            session.finishBundleSelection(true)
+            importing.await()
+            assertTrue(files.finished)
+            assertEquals(ProfileBundleImport(files.bundles.reversed(), "copy", 1, "Copy"), client.bundleImported)
             assertEquals(ProfileTarget("copy", ProfileSource.Draft), session.state.value.target)
             assertNull(session.state.value.preview)
             assertEquals(previews, client.previewCalls)
             assertNull(client.submitted)
             files.onRead = { client.revision++ }
             val document = session.state.value.document
-            session.importBundles(files, "conflict", "Conflict", "Bundles")
+            val conflicting = async { session.importBundles(files, "conflict", "Conflict", "Bundles") }
+            runCurrent()
+            session.finishBundleSelection(true)
+            conflicting.await()
             assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
             assertEquals(document, session.state.value.document)
             assertEquals("copy", client.bundleImported!!.id)
         } finally { session.close() }
+    }
+
+    @Test
+    fun bundleOrderCancellationAndWithdrawalReleaseInputsWithoutPublishing(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        session.refresh()
+        val before = session.state.value
+        val cancelledFiles = Files()
+        val cancelled = async { session.importBundles(cancelledFiles, "copy", "Copy", "Bundles") }
+        runCurrent()
+        assertEquals(listOf(0, 1), session.state.value.bundleSelection!!.map { it.token })
+        assertFailsWith<IllegalArgumentException> { session.moveBundle(0, -1) }
+        session.finishBundleSelection(false)
+        cancelled.await()
+        assertTrue(cancelledFiles.finished)
+        assertEquals(before, session.state.value)
+        assertNull(client.bundleImported)
+        val withdrawnFiles = Files()
+        val withdrawn = async { session.importBundles(withdrawnFiles, "copy", "Copy", "Bundles") }
+        runCurrent()
+        assertFalse(withdrawnFiles.finished)
+        session.close()
+        assertFailsWith<CancellationException> { withdrawn.await() }
+        assertTrue(withdrawnFiles.finished)
+        assertNull(session.state.value.bundleSelection)
+        assertFalse(session.state.value.busy)
+        assertNull(client.bundleImported)
     }
 
     @Test
@@ -247,12 +286,12 @@ class ProfileUiSessionTest {
         }
         var bundles = listOf(ProfileBundleArchiveReference("first", "a".repeat(64)),
             ProfileBundleArchiveReference("second", "b".repeat(64)))
-        override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
+        override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleFile>) -> Unit): Boolean {
             try {
                 gate?.await()
                 onRead()
                 if (bundles.isEmpty()) return false
-                consume(bundles)
+                consume(bundles.map { ProfileBundleFile(it, it.archivePath) })
                 return true
             } finally { finished = true }
         }

@@ -82,12 +82,20 @@ independent recovery UI, desktop rendering and broader device acceptance remain 
 
 ## Profile export policy
 
+Multi-file Bundle import includes an ordered review before draft creation. Selected file names
+remain visible while move-up/down actions change the layer order. Confirming uses the original
+selection revision; cancelling or withdrawing the presenter releases staged inputs without
+publishing a draft. Single-file imports retain their immediate behavior. This implementation
+is private to the UI package and does not change SDK 74 or Cordis composition semantics.
+
 AndroidProfileFileRoundtripTest exercises actual DocumentsUI JSON and complete archive save/open
 selections through this private APK's settings page. The saved intent matches the committed
 source, imports publish drafts and the active product remains unchanged. Committed/draft
 selection controls expose stable tags containing their Profile ID, so repeated labels do not
-make selection ambiguous in acceptance tests. Desktop selected-file dialogs and multi-Bundle
-selection remain unverified; see docs/verification.md for the precise boundary.
+make selection ambiguous in acceptance tests. The same case also selects two Bundles from an
+isolated Downloads directory, changes their order in the private review dialog and verifies
+an inserting layer followed by its override. Desktop selected-file dialogs remain unverified;
+see docs/verification.md for the precise boundary.
 
 The release-owned schemas under "src/profile-export" declare portable configuration for:
 

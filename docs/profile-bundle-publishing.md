@@ -4,7 +4,7 @@
 from a portable `ProfileBundle`, native code archives with SHA-256 identities, declared
 `PackageTarget` values and an output file. The JVM implementation is shared by Desktop
 and Android. It is publisher tooling, not a Profile activation or committed-state export.
-SDK API remains 73.
+The writer requires no new SDK contract. The current host SDK ABI is 74.
 
 ## Command-line build
 
@@ -109,4 +109,7 @@ native caches, and export through verified feature policies. These establish the
 API/native import boundary. They do not establish selected-file acceptance in an OS picker.
 Self-contained committed Profile export and verified target-host lock rebuilding now have a
 separate [archive backend](profile-archives.md) with SDK 74 commands/native file actions.
-Selected-file OS picker acceptance remains outstanding.
+Android selected-file acceptance now covers two real archives chosen through DocumentsUI
+from an isolated Downloads directory. The private Profile page reviews and changes their
+order before creating a draft; preview verifies the later configuration override and the
+active generation remains unchanged. Desktop selected-file dialogs remain outstanding.

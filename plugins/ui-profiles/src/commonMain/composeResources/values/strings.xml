@@ -169,4 +169,10 @@
     <string name="profile_import_archive_zh">导入完整 Profile 归档</string>
     <string name="profile_export_archive">Export complete Profile archive</string>
     <string name="profile_export_archive_zh">导出完整 Profile 归档</string>
+    <string name="profile_bundle_order">Bundle order</string>
+    <string name="profile_bundle_order_zh">Bundle 顺序</string>
+    <string name="profile_bundle_order_hint">Bundles apply from top to bottom. Later layers override earlier layers. Confirm the order before creating a draft.</string>
+    <string name="profile_bundle_order_hint_zh">Bundle 从上到下应用，后面的层覆盖前面的层。请先确认顺序，再创建草稿。</string>
+    <string name="profile_bundle_import_confirm">Import in this order</string>
+    <string name="profile_bundle_import_confirm_zh">按此顺序导入</string>
 </resources>

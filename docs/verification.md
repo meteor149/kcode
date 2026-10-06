@@ -64,5 +64,29 @@ APK assembled (profile-file-roundtrip-controls-build.log). Earlier failed runs r
 ignored logs; no temporary product logging or debugger sessions were introduced.
 
 This proves JSON and complete-archive selected-file exchange in this private Android settings
-page. It does not prove Desktop dialogs, multi-Bundle selected-file exchange, complete default
+page. At that phase it did not prove Desktop dialogs, multi-Bundle selected-file exchange, complete default
 application navigation, all accessibility methods or every DocumentsProvider implementation.
+
+## Ordered multi-Bundle file selection
+
+The subsequent AndroidProfileFileRoundtripTest extension publishes two test-owned archives
+in an isolated Downloads directory: a Localization APK insertion Bundle and a data-only
+configuration override Bundle. DocumentsUI's Select all action selects those two inputs;
+no activity result is injected. The private page shows their names, permits reordering and
+does not create a draft until confirmation. The test changes the returned order, ensures
+the insertion precedes the override, imports a draft and previews the resulting Chinese
+default language with verified packages. Authority advances once and the active generation
+is unchanged. MediaStore entries and the empty test directory are removed.
+
+The final physical ARM64 API 36 run passed one extended roundtrip test, OK (1 test), code -1
+(profile-bundle-order-stable-device.log). Earlier fixture attempts failed because long-click
+semantics/gestures did not enter selection mode and native transition nodes became stale.
+An isolated directory, actual Select all menu action and fresh-node waits resolved those
+test assumptions. The private review workflow additionally passed 34 UI desktop tests with
+zero failures/errors/skips, covering reorder, cancellation, withdrawal and revision conflict.
+Both app builds and the test APK passed (profile-bundle-order-validation.log,
+profile-bundle-order-device-build.log and profile-bundle-order-stable-build.log).
+
+This covers this Android provider/page and two ordered layers. It does not establish Desktop
+native dialogs, every selection gesture/provider, all sixteen layers, full application
+navigation or the remaining startup-recovery/background-admission audit.

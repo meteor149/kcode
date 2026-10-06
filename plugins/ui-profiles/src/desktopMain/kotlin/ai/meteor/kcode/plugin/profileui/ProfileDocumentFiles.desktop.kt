@@ -49,10 +49,12 @@ internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles = remem
             }
         }
 
-        override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
+        override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleFile>) -> Unit): Boolean {
             val paths = chooseMany(title)
             if (paths.isEmpty()) return false
-            stageProfileBundles(paths.map { path -> { Files.newInputStream(path) } }, consume = consume)
+            stageProfileBundles(paths.map { path -> { Files.newInputStream(path) } }) { archives ->
+                consume(archives.mapIndexed { index, archive -> ProfileBundleFile(archive, paths[index].fileName.toString()) })
+            }
             return true
         }
         override suspend fun read(title: String): String? {
