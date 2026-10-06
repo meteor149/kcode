@@ -29,6 +29,8 @@ import org.cordis.packages.PackageHost
 import org.cordis.packages.PackageVariant
 import org.cordis.packages.PluginPackageArchive
 import org.cordis.packages.resolvePackageGraph
+import org.cordis.packages.PluginPackageManifest
+import kotlinx.serialization.json.JsonElement
 
 class NativePluginPackagesPlugin(
     private val directory: File,
@@ -124,7 +126,13 @@ class NativePluginPackageResolver(
         candidates
     }
 
-    override suspend fun verify(spec: DynamicPluginSpec) = withContext(Dispatchers.IO) {
+    override suspend fun verify(spec: DynamicPluginSpec) { verifiedManifest(spec) }
+
+    /** Reads data from the verified locked release, never a product service or host resource. */
+    suspend fun profileExportSchema(spec: DynamicPluginSpec): JsonElement? =
+        verifiedManifest(spec).extensions["ai.meteor.kcode.profile-export"]
+
+    private suspend fun verifiedManifest(spec: DynamicPluginSpec): PluginPackageManifest = withContext(Dispatchers.IO) {
         val lock = requireNotNull(spec.packageInstallation) { "Missing package installation" }
         require(!Files.isSymbolicLink(root)) { "Invalid package root" }
         val expected = root.toRealPath().resolve(lock.archiveSha256).resolve("release.kplugin")
@@ -142,6 +150,7 @@ class NativePluginPackageResolver(
         require(spec.sha256 == manifest.files.single { it.path == variant.artifact }.sha256) { "Package artifact digest mismatch" }
         require(lock.dependencies == manifest.dependencies.associate { it.id to it.version }) { "Package dependency lock mismatch" }
         verifyArtifact(deployed, variant)
+        manifest
     }
 
     private fun compatible(variant: PackageVariant): Boolean = variant.kcodeMetadata().let {

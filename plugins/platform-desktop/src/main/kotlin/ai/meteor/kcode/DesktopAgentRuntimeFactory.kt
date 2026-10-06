@@ -2,6 +2,7 @@ package ai.meteor.kcode
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
+import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
 
 import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
@@ -174,6 +175,7 @@ suspend fun createDesktopProfileHost(
     }
     val management = ProfileManagement(repository,
         { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
+        ProfilePackageExportReviews { spec -> NativePluginPackageResolver(pluginDirectory, desktopPackageHost()).profileExportSchema(spec) },
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
         canRecover = { startupReached }, templates = {

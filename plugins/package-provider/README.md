@@ -1,5 +1,11 @@
 # Native plugin package provider
 
+`NativePluginPackageResolver.profileExportSchema(spec)` returns the selected release's
+`ai.meteor.kcode.profile-export` manifest data only after deployment, artifact, SDK and
+descriptor verification. It uses the immutable generation in the stored specification;
+there is no host-resource fallback, live feature callback or newer-release substitution.
+The Profiles module interprets the schema dialect. Missing schema remains absent.
+
 `NativePluginPackagesPlugin` supplies `KcodePluginPackages` (`pluginPackages`). Native hosts
 mount it as `provider.plugin-packages.platform`. It depends on the neutral SDK and the
 optional Cordis `packages` library, not any concrete product provider. Allocation happens

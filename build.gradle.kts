@@ -268,7 +268,10 @@ bundledProviders.forEach { provider ->
         packageId.set(provider.id)
         packageVersion.set(releaseVersion)
         contentVersion.set(true)
-        manifestExtensions.set(unitConfiguration)
+        val exportSchema = owner.layout.projectDirectory.file("src/profile-export/${provider.id}.json")
+        manifestExtensions.set(if (exportSchema.asFile.exists()) owner.providers.fileContents(exportSchema).asText.map { schema ->
+            unitConfiguration.dropLast(1) + ",\"ai.meteor.kcode.profile-export\":" + schema.trim() + "}"
+        } else owner.providers.provider { unitConfiguration })
         fun configureVariant(platform: String, entry: String) {
             variants.register(platform) {
                 entryPoint.set(entry)

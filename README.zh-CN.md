@@ -150,7 +150,7 @@ Profile 支持指定位置插入、排序，以及在分组和根节点之间移
 
 发行 Bundle 显式声明模块成员，插件 ID 前缀不决定所属层；额外可用模块需要通过 Profile 显式选择。
 
-SDK 72 通过中立管理客户端提供带 revision 校验的可携带 Profile 导入导出。导入创建独立草稿并保留冻结的 Bundle 与包意图，激活仍须显式执行。可选 Profile 界面通过原生文件选择器导入导出。导出读取已提交或历史记录，拒绝未经审查的配置值；默认 feature 拥有的导出审查规则仍在开发中。
+SDK 72 通过中立管理客户端提供带 revision 校验的可携带 Profile 导入导出。导入创建独立草稿并保留冻结的 Bundle 与包意图，激活仍须显式执行。可选 Profile 界面通过原生文件选择器导入导出。导出按对应世代的已验证包元数据审查已提交或历史配置。Goal、Web Search 和 Localization 已声明可携带配置规则，其他未经审查的配置值仍被拒绝。
 
 原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。可选 ui-profiles 包提供设置管理界面。两端应用接入独立恢复界面，支持在模块目录建立后的启动失败中选择已保存或历史 Profile、修复 JSON 定义、创建独立模板副本并显式激活。当前行为与限制见 [Profile 指南](docs/profiles.md)。
 

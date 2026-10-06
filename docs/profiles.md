@@ -4,10 +4,12 @@ SDK 72 exposes portable exchange through `KcodeProfiles.client.importPortable` a
 `exportPortable`. Requests carry the catalogue revision. Import creates a new draft, retains
 frozen bundle/package intent and resets data scopes; it never activates code. Export accepts
 committed/historical targets and requires host feature-schema review for opaque values. The
-default host policy denies explicit configuration values; consumers cannot bypass it. These
+native host reads feature schemas from the generation's verified locked package manifests;
+missing rules and unknown fields/codecs deny export, and consumers cannot bypass it. These
 metadata calls work in Ready and RecoveryRequired, follow bridge operation ownership and reject
 calls after withdrawal. Activation remains a separate host-owned command. The optional settings
-screen provides native file dialogs; shipped feature-schema export policies and real portable
+screen provides native file dialogs. Goal and Web Search declare Unit configuration rules;
+Localization also declares portable dictionary JSON. Other feature schemas and real portable
 archive acceptance are still being integrated.
 
 Profiles describe plugin instances as portable data. Compilation applies ordered bundle
@@ -160,8 +162,8 @@ name defaults to that ID), then import a UTF-8 JSON document up to 2 MiB. Import
 the repository revision before selection and creates a draft only: it does not prepare
 packages or activate the tree. Save or discard unsaved editor text before file exchange.
 Export requires a committed or historical selection and completes host schema review
-before opening the save picker. Unreviewed opaque values are rejected; shipped feature
-policies remain outstanding. Desktop replacement is atomic; Android document-provider
+before opening the save picker. Unreviewed opaque values are rejected; feature packages
+declare permitted fields/codecs in their verified metadata. Desktop replacement is atomic; Android document-provider
 writes are not guaranteed atomic. Picker cancellation changes no Profile metadata.
 
 Structured tree forms append SDK operations for insertion/grouping, position/parent movement,

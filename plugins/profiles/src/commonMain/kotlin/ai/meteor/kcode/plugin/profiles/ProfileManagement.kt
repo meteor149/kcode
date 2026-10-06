@@ -32,6 +32,7 @@ class ProfileManagement private constructor(
     private val bundles: () -> List<ProfileBundle>,
     private val prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     private val exportReview: ProfileExportReview,
+    private val exportReviews: ProfileExportReviewFactory? = null,
 ) {
     constructor(
         repository: ProfileGenerationRepository,
@@ -45,6 +46,13 @@ class ProfileManagement private constructor(
         exportReview: ProfileExportReview,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, exportReview)
+
+    constructor(
+        repository: ProfileGenerationRepository,
+        bundles: () -> List<ProfileBundle>,
+        exportReviews: ProfileExportReviewFactory,
+        prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews)
 
     suspend fun catalogue(): ProfileCatalogue = repository.catalogue()
     suspend fun draft(id: String): ProfileDefinition? = repository.loadDraft(id)
@@ -77,14 +85,15 @@ class ProfileManagement private constructor(
 
     suspend fun exportPortable(
         target: ProfileTarget,
-        review: ProfileExportReview = exportReview,
+        review: ProfileExportReview? = null,
         expectedRevision: Long? = null,
     ): String {
         require(target.source != ProfileSource.Draft) { "Activate a draft before exporting its verified package recipe" }
         val revision = repository.state().revision
         require(expectedRevision == null || expectedRevision == revision) { "Profile repository changed; refresh before exporting" }
         val source = requireNotNull(loadProfileIntent(repository, target).base)
-        val text = ProfilePortableExporter(review).export(source)
+        val selected = review ?: exportReviews?.create(source) ?: exportReview
+        val text = ProfilePortableExporter(selected).export(source)
         check(repository.state().revision == revision) { "Profile repository changed; refresh before exporting" }
         return text
     }

@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "fields": {
+    "config": {
+      "unit": { "type": "null" },
+      "json": {
+        "type": "object",
+        "properties": {
+          "defaultLanguage": { "type": "string", "maxLength": 128 },
+          "fallbackLanguage": { "type": "string", "maxLength": 128 },
+          "languages": {
+            "type": "object",
+            "additionalProperties": { "type": "string", "maxLength": 1024 }
+          },
+          "translations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "maxLength": 65536 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

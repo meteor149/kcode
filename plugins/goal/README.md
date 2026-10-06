@@ -1,5 +1,8 @@
 # Goal service and consumers
 
+`src/profile-export/feature.goal.json` permits explicit Unit configuration in portable
+Profiles. Goal documents, callbacks and saved execution state are not Profile configuration.
+
 `feature.goal` / `GoalFeaturePlugin` is the single install/enable boundary. Its owned
 children provide sessions, commands, model tools, continuation policy, status decoration,
 and restoration effects. Missing optional UI services suspend presentation children only.

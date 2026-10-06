@@ -8,9 +8,13 @@ result. Module transitions are traced in declared Bundle order through the share
 including movement and removal/reinsertion. Reviews see every stored layer. Policy inputs/outputs
 are detached, failures omit configuration contents and cancellation propagates. Hosts may construct
 `ProfileManagement(repository, bundles, policies, prepare)`; neutral clients cannot supply approvals.
-These implementation types do not change SDK 72. Native feature policy registration/metadata and
-the shipped feature schemas still need integration; default native export continues to deny opaque
-values. Review policies must be pure schema metadata, independent of withdrawn product resources.
+These implementation types do not change SDK 72. Native hosts use `ProfilePackageExportReviews`
+to read declarative schemas from each selected generation's verified package manifest. Historical
+exports use their frozen deployments, not newer offers or live product services. Missing schemas,
+unknown fields/codecs and malformed rules remain denied. Goal and Web Search declare Unit-only
+configuration; Localization also declares its portable dictionary JSON fields. Other explicit
+feature configurations still require feature-owned declarations. Review policies are pure metadata,
+independent of withdrawn product resources. See the schema dialect in the plugin development guide.
 
 Portable named plugin compositions for Kcode. `ProfileDefinition` records ordered bundle
 references, user operations and logical data scopes. `ProfileCompiler` delegates operation

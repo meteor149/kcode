@@ -1,5 +1,45 @@
 # Profile implementation
 
+## Verified feature export schema phase
+
+Native hosts now select export reviews from the exact generation's verified package
+manifest through `ProfilePackageExportReviews`. The resolver verifies immutable deployment,
+native artifact, SDK, descriptor and lock identities before returning the
+`ai.meteor.kcode.profile-export` extension. Newer offers, host APK resources and live
+product callbacks do not supply historical rules. Missing rules remain denied.
+
+Feature-owned `src/profile-export/<package-id>.json` files are inputs to release manifest
+metadata/content versions. Goal and Web Search explicitly permit Unit configuration.
+Localization permits Unit and dictionary JSON with declared language/translation fields
+and bounded text maps. The closed version-1 dialect supports exact field/codec selection,
+null, boolean, integer, enum, bounded string and object rules, explicit required properties
+and optional schema-controlled map values. Unknown schema fields/types, undeclared config
+fields and invalid codec identities reject export. Rule metadata is detached before use.
+Runtime ConfigValidator validation remains separate from export permission.
+
+Real dictionary activation exposed typed JSON coercion in generic container copying.
+Cordis commit `6a9b4e4` retains/detaches JsonObject/JsonArray during composition,
+Loader interpolation and tree transaction snapshots/restoration. Typed JSON containing
+`__jsExpr` remains literal; explicit JsExpr/plain-map expression semantics remain available.
+65 Loader/Include JVM cases passed, including insertion/overrides, literal JSON validation
+and failed-publication restoration. Kcode concentrated validation passed 79 local cases:
+63 Profiles and 16 native export/gateway/startup recovery cases. Both applications and
+the Android instrumentation APK built successfully. The real private JAR case activates
+custom dictionary JSON, exports it via host metadata review, then rejects a tampered locked
+archive without changing Profile metadata. SDK API remains 72; framework ABI descriptors
+and native package metadata were regenerated from the changed framework bytecode.
+
+Physical ARM64 API 36 validation passed 6 cases with `OK (6 tests)` and
+`INSTRUMENTATION_CODE: -1`. The new actual private APK case activates dictionary JSON,
+exports it through the native host's verified schema reader, tampers with its locked
+archive and verifies denial with unchanged catalogue. Private default APK loading, native
+file-picker cancellation/editor navigation and three recovery cases also passed. This
+does not establish external Bundle installation or a user file-exchange round trip.
+
+Other feature configuration schemas, verified external Bundle import and real file/archive
+round trips remain open. Corrupt-authority recovery, Desktop native dialog rendering and
+the full execution-admission/resource-ownership audit remain outstanding.
+
 ## Native file exchange UI phase
 
 The optional private Profile settings package now exposes native file import/export.

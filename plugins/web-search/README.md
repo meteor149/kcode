@@ -1,5 +1,9 @@
 # Web Search feature
 
+`src/profile-export/feature.web-search.json` permits explicit Unit configuration in portable
+Profiles. Search credentials and settings remain feature-owned business data and are not
+exported as this package's deployment configuration.
+
 `feature.web-search` is the single Unit-configured entry point:
 `ai.meteor.kcode.plugin.websearch.WebSearchFeaturePlugin`.
 One package owns HTTP search, the `web_search` model tool, search configuration,

@@ -20,6 +20,40 @@ configuration uses the typed default; explicit configuration retains its scalar/
 identity and validator. Opaque legacy mounts support their default configuration only. Portable
 Profile data cannot contain Kotlin implementation objects, callbacks or arbitrary graphs.
 
+## Portable Profile configuration
+
+A feature may declare `src/profile-export/<package-id>.json`. The native build includes it
+in that release's `ai.meteor.kcode.profile-export` manifest extension. External publishers
+can emit the same extension directly. The host verifies the selected locked archive, native
+artifact and SDK identity before reading it; it never starts the feature to obtain approval.
+Unknown packages/fields/codecs remain denied, and newer installed releases cannot review
+historical values. Missing schema does not authorize opaque configuration.
+
+```json
+{
+  "formatVersion": 1,
+  "fields": {
+    "config": {
+      "unit": { "type": "null" },
+      "json": {
+        "type": "object",
+        "properties": { "enabled": { "type": "boolean" } },
+        "required": ["enabled"]
+      }
+    }
+  }
+}
+```
+
+Field keys are `config`, `inject/<service>` or `intercept/<service>`, followed by explicit
+configuration codec rules. Supported rules are null, boolean, integer, enum (`values`),
+string (`maxLength`, 1..65536) and object. Objects deny undeclared properties unless their
+`additionalProperties` explicitly contains another rule. Nested rules are limited to 16
+levels. Unknown schema members/types and invalid required properties reject export.
+This is export permission, not a replacement for ConfigValidator. Do not declare credentials,
+host paths or arbitrary implementation graphs portable. Feature fields that contain text
+are the author's responsibility; the host does not infer confidentiality from key names.
+
 ## Withdrawal and asynchronous work
 
 Own asynchronous operations explicitly, using `PluginOperationOwner` where appropriate.

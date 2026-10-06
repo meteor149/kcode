@@ -28,6 +28,12 @@ the provider's list. Headless Goal/schedule calls and export status use the inje
 
 The provider accepts `Unit` for existing defaults, or a JSON object:
 
+The package's `src/profile-export/feature.localization.json` declares portable Unit and
+dictionary JSON configuration. Export permits only default/fallback language, language
+labels and translation maps with bounded string values. Unknown root fields and non-text
+dictionary values are denied. Runtime validation still checks locale declarations and
+translation placeholders; schema review does not start a localization provider.
+
 ```json
 {
   "defaultLanguage": "fr",
