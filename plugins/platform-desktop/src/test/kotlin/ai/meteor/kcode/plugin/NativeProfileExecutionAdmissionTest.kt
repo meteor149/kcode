@@ -4,6 +4,9 @@ import ai.meteor.kcode.createDesktopProfileHost
 import ai.meteor.kcode.plugin.api.ExecutionAdmission
 import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.RootAgentPath
+import ai.meteor.kcode.SubagentCoordinatorFactory
+import ai.meteor.kcode.plugin.api.KcodeSubagents
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
@@ -11,13 +14,16 @@ import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import java.nio.file.Files
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.cordis.plugin
+import org.cordis.dependencies
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -26,6 +32,53 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class NativeProfileExecutionAdmissionTest {
+    @Test
+    fun directPackagedSubagentWorkBlocksSwitchAndCancellationJoinsBeforeTargetPreparation(): Unit = runBlocking {
+        val home = Files.createTempDirectory("native-profile-subagent-admission")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        repository.saveDraft(ProfileDefinition(id = "second"))
+        lateinit var factory: SubagentCoordinatorFactory
+        val capture = kcodePlugin(PluginDescriptor("provider.ui.compose", "test", "test", emptySet()),
+            plugin<Unit>(inject = dependencies(KcodeSubagents.Key)) { ctx, _ -> factory = ctx.require(KcodeSubagents.Key).factory }, Unit)
+        val host = createDesktopProfileHost(homeDirectory = home, profile = KcodePluginProfile(overrides = listOf(capture)))
+        val release = CompletableDeferred<Unit>()
+        try {
+            host.state.value.failure?.let { throw it }
+            val original = factory
+            val started = CompletableDeferred<Unit>()
+            val cleaning = CompletableDeferred<Unit>()
+            val coordinator = original.create(CoroutineScope(coroutineContext), "external root", {
+                assertFailsWith<IllegalStateException> { host.close() }
+                started.complete(Unit)
+                try { awaitCancellation() } finally {
+                    withContext(NonCancellable) { cleaning.complete(Unit); release.await() }
+                }
+            }, {})
+            assertNotSame(SubagentCoordinatorFactory::class.java.classLoader, original.javaClass.classLoader)
+            coordinator.spawn(RootAgentPath, "worker", "detached task", null)
+            withTimeout(5_000) { started.await() }
+            val committed = repository.state()
+            assertFailsWith<IllegalStateException> { host.switchTo("second") }
+            assertEquals(committed, repository.state())
+            val switching = async { host.switchTo("second", cancelActive = true) }
+            withTimeout(5_000) { cleaning.await() }
+            assertFalse(switching.isCompleted)
+            assertEquals(ProfileHostPhase.Preparing, host.state.value.phase)
+            assertEquals(committed, repository.state())
+            assertFailsWith<CancellationException> { coordinator.followupTask(RootAgentPath, "worker", "denied") }
+            assertFailsWith<CancellationException> { coordinator.sendMessage(RootAgentPath, "worker", "denied") }
+            release.complete(Unit)
+            withTimeout(10_000) { switching.await() }
+            assertEquals("second", repository.selected())
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            assertFailsWith<IllegalStateException> { original.create(CoroutineScope(coroutineContext), "stale", { "" }, {}) }
+            assertFailsWith<IllegalStateException> { coordinator.spawn(RootAgentPath, "stale", "denied", null) }
+        } finally {
+            release.complete(Unit)
+            try { host.close() } finally { home.toFile().deleteRecursively() }
+        }
+    }
+
     @Test
     fun failedProductStartupRetiresCapturedAdmissionWithTheRootEffect(): Unit = runBlocking {
         val home = Files.createTempDirectory("native-profile-startup-admission")

@@ -9,6 +9,7 @@ import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.ToolUseEvent
 import ai.meteor.kcode.plugin.api.PluginCleanupException
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -19,7 +20,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 
 /** Factory ownership includes every coordinator and its child agent jobs. */
-internal class OwnedSubagentFactory(private val capacity: Int = DefaultMaxAgentConcurrency) : SubagentCoordinatorFactory {
+internal class OwnedSubagentFactory(
+    private val capacity: Int = DefaultMaxAgentConcurrency,
+    private val admission: ExecutionAdmission? = null,
+) : SubagentCoordinatorFactory {
     init { require(capacity > 0) { "Subagent capacity must be positive" } }
 
     override val maxConcurrency: Int? get() = capacity.takeIf { state.value.live }
@@ -40,7 +44,8 @@ internal class OwnedSubagentFactory(private val capacity: Int = DefaultMaxAgentC
         val job = SupervisorJob(scope.coroutineContext[Job])
         val ownedScope = CoroutineScope(scope.coroutineContext + job)
         val coordinator = OwnedCoordinator(
-            MultiAgentCoordinator(ownedScope, rootContext, maxConcurrency = capacity, runAgent = runAgent, onEvent = onEvent),
+            MultiAgentCoordinator(ownedScope, rootContext, maxConcurrency = capacity, runAgent = runAgent,
+                onEvent = onEvent, admission = admission),
             job,
         )
         while (true) {
@@ -93,7 +98,10 @@ internal class OwnedSubagentFactory(private val capacity: Int = DefaultMaxAgentC
         private val owner = PluginOperationOwner("Subagent coordinator")
         private val closing = MutableStateFlow(false)
         private val completion = CompletableDeferred<Unit>()
-        private suspend fun <T> call(block: suspend () -> T): T = owner.run { requireOpen(); block() }
+        private suspend fun <T> call(block: suspend () -> T): T = owner.run {
+            requireOpen()
+            if (admission == null) block() else admission.run { requireOpen(); block() }
+        }
         override suspend fun spawn(callerPath: String, taskName: String, message: String, forkTurns: String?) =
             call { delegate.spawn(callerPath, taskName, message, forkTurns) }
         override suspend fun sendMessage(callerPath: String, target: String, message: String) =

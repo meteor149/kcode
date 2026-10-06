@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.plugin.api.KcodeSubagents
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import org.cordis.Disposable
 import org.cordis.ConfigValidator
 import org.cordis.Context
@@ -11,7 +12,7 @@ object InProcessSubagentProviderPlugin : Plugin<Any?> {
     override val config = ConfigValidator<Any?> { resolveConcurrencyLimit(it) }
     override val name = "kcode-subagent-in-process"
     override suspend fun apply(ctx: Context, config: Any?, effect: EffectScope) {
-        val factory = OwnedSubagentFactory((config as ConcurrencyLimit).value)
+        val factory = OwnedSubagentFactory((config as ConcurrencyLimit).value, ctx.root[KcodeExecution.Key]?.admission)
         effect.collect(Disposable { factory.close() })
         KcodeSubagents(ctx, factory)
     }

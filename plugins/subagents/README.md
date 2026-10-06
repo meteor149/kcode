@@ -26,6 +26,23 @@ Tests cover coordination, capacity, tool schemas, retained handles, joined child
 replacement failure, withdrawal/recovery, and real desktop JAR/Android APK identities.
 Android test compilation alone does not establish device execution.
 
+## Profile execution admission
+
+The standard factory captures the root `KcodeExecution` admission boundary during apply.
+Coordinator calls enter that boundary before state changes or callbacks, and each child
+turn enters it independently even when its caller supplied a separate coroutine scope.
+Structured child work finishes before the turn reports completion or releases its slot;
+admission remains held through callbacks and cancellation cleanup. A handoff rejected
+before entry marks the child interrupted without invoking product callbacks and permits
+retry after admission reopens. Bare Cordis contexts without KcodeExecution retain the
+standalone coordinator behavior.
+
+Active children must finish or be explicitly shut down and joined before ordinary plugin
+composition changes. Profile switching with explicit cancellation joins admitted cleanup
+before preparing the target. Shutdown remains available while execution is paused, and
+retired factory/coordinator references reject new work. Alternative autonomous providers
+must implement the same execution contract for their own detached work.
+
 Running status cards and detail sheets live in `subagentui` here. The feature registers
 one `subagents` conversation decoration using the generic `AboveComposer` anchor;
 `ui-pages` owns placement/measurement and contains no Subagent filtering or status UI.

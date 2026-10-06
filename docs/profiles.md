@@ -418,8 +418,12 @@ active product work. Host switching closes it before preparing a target. Explici
 joins admitted work and cleanup; preparation failure reopens the retained runtime. Retirement
 permanently closes stale admission handles. Metadata reads remain available during preparation.
 
-Koog continuations and in-process subagents run under the admitted structured operation.
-Detached autonomous providers must use the shared boundary themselves. Admission starts closed
+Koog continuations run under the admitted structured operation. The standard in-process
+subagent factory also captures root admission for direct coordinator calls and each child
+turn, including separately supplied scopes. Child execution waits for structured descendants
+before completion, and admission covers callbacks and cancellation cleanup. Rejected child
+handoffs release their live slot without invoking product callbacks. Other detached autonomous
+providers must use the shared boundary themselves. Admission starts closed
 before the first product provider mounts. Temporary composition resume cannot release that
 publication barrier. Direct runtime creation releases it after successful preparation; native
 Profile factories defer release until the host exposes the committed runtime. Target switches

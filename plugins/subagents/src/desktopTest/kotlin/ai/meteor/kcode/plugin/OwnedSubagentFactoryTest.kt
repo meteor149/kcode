@@ -3,6 +3,12 @@ package ai.meteor.kcode.plugin
 import ai.meteor.kcode.RootAgentPath
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.ToolUseEvent
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -18,6 +24,103 @@ import kotlinx.coroutines.yield
 import kotlinx.coroutines.withContext
 
 class OwnedSubagentFactoryTest {
+    @Test
+    fun closedAdmissionRejectsCoordinatorPreparationBeforeCallbacksAndRecoversWithoutPhantomAgents() = runTest {
+        var open = false
+        var events = 0
+        var runs = 0
+        val admission = object : ExecutionAdmission {
+            override suspend fun <T> run(block: suspend () -> T): T {
+                if (!open) throw CancellationException("Preparing Profile")
+                return block()
+            }
+        }
+        val factory = OwnedSubagentFactory(admission = admission)
+        val coordinator = factory.create(backgroundScope, "root", { runs++; "answer" }, { events++ })
+        try {
+            assertFailsWith<CancellationException> { coordinator.spawn(RootAgentPath, "worker", "task", null) }
+            assertFailsWith<CancellationException> { coordinator.followupTask(RootAgentPath, "worker", "task") }
+            assertFailsWith<CancellationException> { coordinator.sendMessage(RootAgentPath, "worker", "message") }
+            assertFailsWith<CancellationException> { coordinator.waitForUpdate(RootAgentPath) }
+            assertFailsWith<CancellationException> { coordinator.drainMailbox(RootAgentPath) }
+            assertEquals(0, events)
+            assertEquals(0, runs)
+            open = true
+            assertTrue(coordinator.list(RootAgentPath, null).contains("No matching agents"))
+            coordinator.spawn(RootAgentPath, "worker", "retry", null)
+            testScheduler.runCurrent()
+            assertEquals(1, runs)
+            assertTrue(coordinator.list(RootAgentPath, null).contains("completed"))
+        } finally { factory.close() }
+    }
+
+    @Test
+    fun childHandoffDeniedAfterSpawnReleasesItsSlotWithoutExecutingCallbacks() = runTest {
+        var open = true
+        var runs = 0
+        val events = mutableListOf<SubAgentEvent>()
+        val admission = object : ExecutionAdmission {
+            override suspend fun <T> run(block: suspend () -> T): T {
+                if (!open) throw CancellationException("Handoff paused")
+                return block()
+            }
+        }
+        val factory = OwnedSubagentFactory(2, admission)
+        val coordinator = factory.create(backgroundScope, "root", { runs++; "answer" }, events::add)
+        try {
+            coordinator.spawn(RootAgentPath, "worker", "task", null)
+            open = false
+            testScheduler.runCurrent()
+            assertEquals(0, runs)
+            assertEquals(1, events.size)
+            assertTrue(events.single() is SubAgentEvent.Spawned)
+            open = true
+            assertTrue(coordinator.list(RootAgentPath, null).contains("interrupted"))
+            coordinator.followupTask(RootAgentPath, "worker", "retry")
+            testScheduler.runCurrent()
+            assertEquals(1, runs)
+            assertTrue(coordinator.list(RootAgentPath, null).contains("completed"))
+        } finally { factory.close() }
+    }
+
+    @Test
+    fun detachedCoordinatorHoldsAdmissionThroughStructuredChildAndCancellationCleanup() = runTest {
+        val admitted = mutableSetOf<Job>()
+        val admission = object : ExecutionAdmission {
+            override suspend fun <T> run(block: suspend () -> T): T {
+                val job = checkNotNull(currentCoroutineContext()[Job])
+                admitted += job
+                try { return block() } finally { admitted -= job }
+            }
+        }
+        val entered = CompletableDeferred<Unit>()
+        val cleaning = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val factory = OwnedSubagentFactory(admission = admission)
+        val coordinator = factory.create(backgroundScope, "root", {
+            CoroutineScope(currentCoroutineContext()).launch {
+                entered.complete(Unit)
+                try { awaitCancellation() } finally {
+                    withContext(NonCancellable) { cleaning.complete(Unit); release.await() }
+                }
+            }
+            "parent returned"
+        }, {})
+        try {
+            coordinator.spawn(RootAgentPath, "worker", "task", null)
+            entered.await()
+            assertEquals(1, admitted.size)
+            assertTrue(coordinator.list(RootAgentPath, null).contains("running"))
+            val closing = async { factory.close() }
+            cleaning.await()
+            assertFalse(closing.isCompleted)
+            assertEquals(1, admitted.size)
+            release.complete(Unit)
+            closing.await()
+            assertTrue(admitted.isEmpty())
+        } finally { release.complete(Unit); factory.close() }
+    }
+
     @Test
     fun providerDisposalWaitsForChildCleanupAndRejectsOldFactoryAndCoordinator() = runTest {
         val factory = OwnedSubagentFactory()

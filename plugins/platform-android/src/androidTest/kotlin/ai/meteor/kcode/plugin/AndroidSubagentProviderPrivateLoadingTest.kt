@@ -32,7 +32,8 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AndroidSubagentProviderPrivateLoadingTest {
-    @Test(timeout = 90_000)
+    // The aggregate instrumentation APK also performs cold native catalogue initialization.
+    @Test(timeout = 300_000)
     fun actualPackageOwnsConfiguredCapacityAndJoinsChildCleanupAcrossWithdrawalAndRestart(): Unit = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -92,12 +93,16 @@ class AndroidSubagentProviderPrivateLoadingTest {
             }
             assertSame(original, factory)
             assertEquals(2, factory.maxConcurrency)
-            val withdrawing = async { runtime.pluginManager.setEnabled("feature.subagents", false) }
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("feature.subagents", false) }
+            val stopping = async { coordinator.shutdown() }
             withTimeout(5_000) { cleaning.await() }
-            assertFalse(withdrawing.isCompleted)
-            assertEquals(null, original.maxConcurrency)
+            assertFalse(stopping.isCompleted)
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("feature.subagents", false) }
+            assertEquals(2, original.maxConcurrency)
             release.complete(Unit)
-            withTimeout(5_000) { withdrawing.await() }
+            withTimeout(5_000) { stopping.await() }
+            runtime.pluginManager.setEnabled("feature.subagents", false)
+            assertEquals(null, original.maxConcurrency)
             assertFailsWith<IllegalStateException> { original.create(CoroutineScope(coroutineContext), "stale", { "" }, {}) }
             assertFailsWith<IllegalStateException> { coordinator.list(RootAgentPath, null) }
             runtime.close()

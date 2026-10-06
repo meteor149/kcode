@@ -1297,3 +1297,37 @@ valid override. Desktop additionally compared complete archive and JSON frozen i
 Logs: profile-default-export-validation.log and profile-default-export-device-validation.log
 (ignored local evidence). This does not establish native selected-file roundtrip acceptance,
 all feature JSON configurations, early startup recovery or the full background admission audit.
+
+## Direct subagent execution admission
+
+The standard in-process factory captures root execution admission at apply. Direct
+coordinator calls enter it before callbacks/state changes; child turns enter separately
+so caller-supplied scopes cannot bypass Profile switching. A denied queued child handoff
+becomes Interrupted without product callbacks and releases its live slot for retry.
+Structured descendants finish before Completed is reported, and admitted ownership extends
+through cancellation cleanup. Shutdown remains available while admission is closed.
+Ordinary manager changes reject active children; explicit Profile cancellation joins them
+before preparing the candidate. Retired factory/coordinator references reject new calls.
+This changes private implementations, not exported contracts; SDK ABI remains 76.
+
+Current desktop XML evidence records 15 subagent tests and five native tests (four
+NativeProfileExecutionAdmissionTest cases plus the actual private-JAR provider case),
+with zero failures/errors/skips. The native switch case uses a caller-supplied scope,
+checks default switch refusal, retained repository authority during held cleanup,
+rejection during preparation, successful cancellation/switch and stale-reference refusal.
+Both application targets passed in profile-subagent-admission-complete-validation.log.
+The first attempt at the expanded native test omitted a withTimeout import; that compile
+error was corrected before the successful final run. Android instrumentation APK assembly
+passed in profile-subagent-admission-android-package.log. Android execution evidence is
+recorded separately in verification.md; assembly alone is not device acceptance.
+
+Core acceptance now takes precedence over richer editors and native-dialog polish. The
+remaining work is a current requirement/code/test audit and integrated core validation;
+historical UI acceptance gaps are deferred, not converted into passing evidence.
+The first API 35 emulator execution failed its 90-second test-wide timeout while
+initializing the native default catalogue, before subagent assertions. The log
+profile-subagent-admission-emulator-validation.log reports Tests run: 1, Failures: 1;
+instrumentation code -1 alone does not mean success. The fixture now allows a bounded
+300 seconds for cold aggregate-APK initialization while retaining its existing 5-second
+operation/cleanup waits. This is a test deadline adjustment, not a product performance
+fix. A rebuilt APK and subsequent emulator run are required for acceptance.
