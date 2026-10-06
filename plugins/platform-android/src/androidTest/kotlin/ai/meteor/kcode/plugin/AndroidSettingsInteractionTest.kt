@@ -63,7 +63,7 @@ class AndroidSettingsInteractionTest {
                     settingsBackedInteraction = true, profile = KcodePluginProfile(overrides = listOf(capture)),
                 )
                 try {
-                    val root = runtime.owner as KcodePluginRuntime
+                    val root = runtime.productRuntimeForTest()
                     val previous = requireNotNull(policy)
                     assertTrue(previous.permissionModeProvider.javaClass.classLoader !== HostToolApprovalsInputPlugin::class.java.classLoader)
                     assertEquals(ToolPermissionMode.Deny, previous.permissionModeProvider())

@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin.packages
 
 import ai.meteor.kcode.plugin.CurrentPluginApiVersion
+import ai.meteor.kcode.plugin.MinimumCompatiblePluginApiVersion
 import ai.meteor.kcode.plugin.DynamicPluginSpec
 import ai.meteor.kcode.plugin.KcodePluginPackages
 import ai.meteor.kcode.plugin.PluginPackageImport
@@ -29,6 +30,8 @@ import org.cordis.packages.PackageHost
 import org.cordis.packages.PackageVariant
 import org.cordis.packages.PluginPackageArchive
 import org.cordis.packages.resolvePackageGraph
+import org.cordis.packages.PluginPackageManifest
+import kotlinx.serialization.json.JsonElement
 
 class NativePluginPackagesPlugin(
     private val directory: File,
@@ -84,7 +87,7 @@ class NativePluginPackageResolver(
         inspected.forEach { release ->
             release.manifest.kcodeConfiguration()
             release.manifest.variants.forEach { it.kcodeMetadata() }
-            release.manifest.select(host, ::compatible)
+            selectVariant(release.manifest)
             installed.firstOrNull { it.id == release.manifest.id && it.version == release.manifest.version }?.packageInstallation?.let { previous ->
                 require(previous.archiveSha256 == release.archiveSha256) { "A package release cannot be republished with different bytes" }
             }
@@ -93,7 +96,7 @@ class NativePluginPackageResolver(
             val index = inspected.indexOfFirst { it.manifest.id == manifest.id }
             val request = imports[index]
             val previous = installed.firstOrNull { it.id == manifest.id }
-            val variant = manifest.select(host, ::compatible)
+            val variant = selectVariant(manifest)
             val deployed = interruptiblePackageOperation { archives.deploy(File(request.archivePath), request.sha256, root.toFile()) }
             if (variant.runtime.id == "android-dex") {
                 require(deployed.artifact(variant).setReadOnly()) { "Cannot make plugin DEX container read-only" }
@@ -124,7 +127,19 @@ class NativePluginPackageResolver(
         candidates
     }
 
-    override suspend fun verify(spec: DynamicPluginSpec) = withContext(Dispatchers.IO) {
+    override suspend fun verify(spec: DynamicPluginSpec) { verifiedManifest(spec) }
+
+    /** Reads data from the verified locked release, never a product service or host resource. */
+    suspend fun profileExportSchema(spec: DynamicPluginSpec): JsonElement? =
+        verifiedManifest(spec).extensions["ai.meteor.kcode.profile-export"]
+
+    /** A locator only: resolve/verify must still establish release, platform and ABI identities. */
+    fun cachedRelease(sha256: String): PluginPackageImport {
+        require(sha256.matches(Regex("[a-f0-9]{64}"))) { "Invalid cached package identity" }
+        return PluginPackageImport(root.resolve(sha256).resolve("release.kplugin").toString(), sha256)
+    }
+
+    private suspend fun verifiedManifest(spec: DynamicPluginSpec): PluginPackageManifest = withContext(Dispatchers.IO) {
         val lock = requireNotNull(spec.packageInstallation) { "Missing package installation" }
         require(!Files.isSymbolicLink(root)) { "Invalid package root" }
         val expected = root.toRealPath().resolve(lock.archiveSha256).resolve("release.kplugin")
@@ -132,7 +147,7 @@ class NativePluginPackageResolver(
         require(File(lock.archivePath).toPath().toRealPath() == expected.toRealPath()) { "Package archive is outside its immutable generation" }
         val deployed = interruptiblePackageOperation { archives.verifyDeployment(expected.parent.toFile(), lock.archiveSha256) }
         val manifest = deployed.manifest
-        val variant = manifest.select(host, ::compatible)
+        val variant = selectVariant(manifest)
         val metadata = variant.kcodeMetadata()
         manifest.kcodeConfiguration()
         require(spec.id == manifest.id && spec.version == manifest.version && lock.variantId == variant.id) { "Package release lock mismatch" }
@@ -142,11 +157,39 @@ class NativePluginPackageResolver(
         require(spec.sha256 == manifest.files.single { it.path == variant.artifact }.sha256) { "Package artifact digest mismatch" }
         require(lock.dependencies == manifest.dependencies.associate { it.id to it.version }) { "Package dependency lock mismatch" }
         verifyArtifact(deployed, variant)
+        manifest
     }
 
-    private fun compatible(variant: PackageVariant): Boolean = variant.kcodeMetadata().let {
+    private fun selectVariant(manifest: PluginPackageManifest): PackageVariant {
+        val rejections = mutableListOf<String>()
+        return try {
+            manifest.select(host) { variant ->
+                val reason = incompatibility(variant)
+                if (reason != null) rejections += "${variant.id}: $reason"
+                reason == null
+            }
+        } catch (failure: IllegalArgumentException) {
+            if (rejections.isEmpty()) throw failure
+            throw IllegalArgumentException("${failure.message}; host plugin API $CurrentPluginApiVersion " +
+                "(supported $MinimumCompatiblePluginApiVersion..$CurrentPluginApiVersion); ${rejections.joinToString("; ")}", failure)
+        }
+    }
+
+    private fun incompatibility(variant: PackageVariant): String? = variant.kcodeMetadata().let {
         variant.nativePackageName()
-        it.pluginApi == CurrentPluginApiVersion && it.runtimeAbi == runtimeAbi
+        if (it.pluginApi !in MinimumCompatiblePluginApiVersion..CurrentPluginApiVersion) {
+            return "compiled plugin API ${it.pluginApi} is outside the host's supported range"
+        }
+        // Legacy packages have no publisher range. The reviewed host compatibility window
+        // supplies their fallback, so successive compatible upgrades do not strand old locks.
+        // An explicit publisher range remains authoritative and is never widened by the host.
+        if (it.pluginApiRange?.let { range -> CurrentPluginApiVersion !in range } == true) {
+            return "declared plugin API range ${it.pluginApiRange.minimum}..${it.pluginApiRange.maximum} excludes this host"
+        }
+        if (it.pluginApi == CurrentPluginApiVersion && it.runtimeAbi != runtimeAbi) {
+            return "SDK ABI fingerprint differs from this host"
+        }
+        null
     }
 
     private fun verifyArtifact(deployed: DeployedPluginPackage, variant: PackageVariant) {

@@ -25,26 +25,29 @@ fun SettingsPageOverlay(request: SettingsPageRequest) {
     val sections = request.sections.mapNotNull { if (it.isVisible(request)) it else null }
     val selected = sections.firstOrNull { it.id == route }
     val focusManager = LocalFocusManager.current
+    val returnToList: () -> Unit = { route = null }
+    val leaveSection: () -> Unit = { selected?.onLeave?.invoke(returnToList) ?: returnToList() }
     LaunchedEffect(route, selected) {
         focusManager.clearFocus(force = true)
         if (route != null && selected == null) route = null
     }
     BottomSheetOverlay(
         onDismissRequest = request.onDismiss,
-        onBackRequest = if (route == null) null else ({ route = null }),
+        onBackRequest = if (route == null) null else leaveSection,
+        onDismissAttempt = { proceed -> selected?.onLeave?.invoke(proceed) ?: proceed() },
     ) { dismissSheet ->
         Column(Modifier.fillMaxSize()) {
             SettingsWindowHeader(
                 title = selected?.title?.invoke() ?: text(UiText.Settings),
                 isRoot = selected == null,
-                onNavigation = { if (selected == null) dismissSheet() else route = null },
+                onNavigation = { if (selected == null) dismissSheet() else leaveSection() },
             )
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 if (selected == null) {
                     SettingsHome(request, sections) { route = it }
                 } else {
                     key(selected) {
-                        selected.renderer.Render(SettingsSectionRequest(request) { route = null })
+                        selected.renderer.Render(SettingsSectionRequest(request, leaveSection))
                     }
                 }
             }

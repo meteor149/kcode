@@ -51,6 +51,7 @@ internal class AndroidDynamicPluginController(
     }
     private val hmr: Hmr
     private val specs = linkedMapOf<String, DynamicPluginSpec>()
+    private val profileSpecs = linkedMapOf<String, DynamicPluginSpec>()
     private var manualReloadOnly = false
 
     private suspend fun ensureManualReloadOnly() {
@@ -65,6 +66,47 @@ internal class AndroidDynamicPluginController(
     init {
         loader.internal = configuredModules
         hmr = Hmr(context, HmrConfig(base = trustedDirectory.path))
+    }
+
+    override suspend fun registerProfilePackages(specs: List<DynamicPluginSpec>): Map<String, String> {
+        require(this.specs.isEmpty() && profileSpecs.isEmpty()) { "Profile modules must register before any plugin instances" }
+        require(specs.map { it.id }.distinct().size == specs.size) { "Duplicate profile package" }
+        ensureManualReloadOnly()
+        try {
+            specs.forEach { spec ->
+                spec.validatePluginApi()
+                modules.register(AndroidModuleDescriptor(
+                    id = spec.id,
+                    version = spec.version,
+                    entryClass = spec.entryClass,
+                    file = File(spec.artifactPath),
+                    expectedSha256 = spec.sha256,
+                    dependencies = spec.dependencies,
+                    sharedHostPackages = SharedPluginApiPackages,
+                    packageName = spec.packageName,
+                ))
+                profileSpecs[spec.id] = spec
+            }
+            return specs.associate { it.id to modules.moduleUrl(it.id) }
+        } catch (error: Throwable) {
+            profileSpecs.keys.toList().asReversed().forEach { id ->
+                runCatching { modules.release(id) }.exceptionOrNull()?.let(error::addSuppressed)
+                runCatching { modules.unregister(id) }.exceptionOrNull()?.let(error::addSuppressed)
+            }
+            profileSpecs.clear()
+            throw error
+        }
+    }
+
+    override suspend fun prepareProfilePackages(specs: List<DynamicPluginSpec>): ProfileModuleTransaction {
+        require(this.specs.isEmpty()) { "Cannot mix Profile and legacy modules" }
+        ensureManualReloadOnly()
+        return prepareProfileModules(profileSpecs.values.toList(), specs, configuredModules, modules::moduleUrl,
+            register = { spec -> modules.register(AndroidModuleDescriptor(spec.id, spec.version, spec.entryClass,
+                File(spec.artifactPath), spec.sha256, dependencies = spec.dependencies, sharedHostPackages = SharedPluginApiPackages,
+                packageName = spec.packageName)) },
+            release = modules::release, unregister = { modules.unregister(it) }, forget = configuredModules::forget,
+            stageSpecs = { candidate -> profileSpecs.clear(); profileSpecs.putAll(candidate.associateBy { it.id }) })
     }
 
     override suspend fun validateCandidate(spec: DynamicPluginSpec) {
@@ -179,9 +221,12 @@ internal class AndroidDynamicPluginController(
         }
     }
 
-    override suspend fun uninstall(id: String) {
+    override suspend fun uninstall(id: String) = uninstallOwned(id, allowRetiredEntry = false)
+
+    private suspend fun uninstallOwned(id: String, allowRetiredEntry: Boolean) {
         require(id in specs) { "plugin '$id' is not installed" }
-        loader.remove(entryId(id))
+        // Runtime closure may already have retired every tracked entry before releasing code.
+        if (!allowRetiredEntry || loader.store.containsKey(entryId(id))) loader.remove(entryId(id))
         modules.release(id)
         modules.unregister(id)
         configuredModules.forget(modules.moduleUrl(id))
@@ -189,9 +234,19 @@ internal class AndroidDynamicPluginController(
         inventory.remove(id)
     }
 
-    override suspend fun installed(): List<DynamicPluginSpec> = specs.values.toList()
+    override suspend fun installed(): List<DynamicPluginSpec> = specs.values.toList() + profileSpecs.values
 
     override suspend fun settle() {
+        profileSpecs.values.forEach { spec ->
+            val entries = loader.entries().filter { it.options.name == modules.moduleUrl(spec.id) || it.options.extra["kcode.packageId"] == spec.id }.toList()
+            val state = when {
+                entries.isEmpty() || entries.all { it.disabled } -> PluginState.Disabled
+                entries.any { it.fiber?.state == FiberState.FAILED } -> PluginState.Failed
+                entries.any { it.fiber?.state == FiberState.ACTIVE } -> PluginState.Active
+                else -> PluginState.Pending
+            }
+            inventory.replace(PluginDescriptor("package:${spec.id}", spec.version, spec.artifactPath, spec.capabilities, state = state))
+        }
         specs.values.forEach { spec ->
             val entry = loader.resolve(entryId(spec.id))
             entry.fiber?.await()
@@ -219,9 +274,22 @@ internal class AndroidDynamicPluginController(
 
     override suspend fun close() {
         var failure: Throwable? = null
+        if (profileSpecs.isNotEmpty()) {
+            runCatching { loader.root.stop() }.exceptionOrNull()?.let { failure = it }
+            profileSpecs.keys.toList().asReversed().forEach { id ->
+                listOf<() -> Unit>({ modules.release(id) }, { modules.unregister(id) }).forEach { release ->
+                    runCatching(release).exceptionOrNull()?.let { error ->
+                        if (failure == null) failure = error else failure?.addSuppressed(error)
+                    }
+                }
+                configuredModules.forget(modules.moduleUrl(id))
+                inventory.remove("package:$id")
+            }
+            profileSpecs.clear()
+        }
         specs.keys.toList().asReversed().forEach { id ->
             try {
-                uninstall(id)
+                uninstallOwned(id, allowRetiredEntry = true)
             } catch (error: Throwable) {
                 if (failure == null) failure = error else failure.addSuppressed(error)
             }

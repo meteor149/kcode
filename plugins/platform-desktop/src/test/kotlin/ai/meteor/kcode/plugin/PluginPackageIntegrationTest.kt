@@ -31,6 +31,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -49,6 +51,35 @@ import org.cordis.packages.packageFileSha256
 
 class PluginPackageIntegrationTest {
     private val abi = "a".repeat(64)
+
+    @Test
+    fun legacyPackagesRemainLoadableAcrossTheSupportedHostApiWindowAndExplicitRangesStayAuthoritative(): Unit = runBlocking {
+        val root = Files.createTempDirectory("kcode-legacy-api-window").toFile()
+        try {
+            val store = FilePluginCompositionStore(root)
+            val release = pack(root, "example.legacy", "1.0.0", pluginApi = MinimumCompatiblePluginApiVersion, legacyApi = true)
+            repeat(2) { attempt ->
+                val loaded = runtime(root, store)
+                try {
+                    if (attempt == 0) loaded.pluginManager.importPackages(listOf(release))
+                    assertEquals("private:first:default", reply(loaded))
+                    assertEquals(MinimumCompatiblePluginApiVersion, loaded.pluginManager.installed().single().apiVersion)
+                } finally { loaded.close() }
+            }
+            val resolver = NativePluginPackageResolver(root, desktopPackageHost(), abi)
+            val explicit = pack(root, "example.bounded", "1.0.0", pluginApi = CurrentPluginApiVersion - 1,
+                maximumApi = CurrentPluginApiVersion - 1)
+            val excluded = assertFailsWith<IllegalArgumentException> { resolver.resolve(listOf(explicit), emptyList()) }
+            assertTrue(excluded.message.orEmpty().contains("declared plugin API range"))
+            assertTrue(excluded.message.orEmpty().contains("host plugin API $CurrentPluginApiVersion"))
+            val tooOld = pack(root, "example.unsupported", "1.0.0", pluginApi = MinimumCompatiblePluginApiVersion - 1, legacyApi = true)
+            val unsupported = assertFailsWith<IllegalArgumentException> { resolver.resolve(listOf(tooOld), emptyList()) }
+            assertTrue(unsupported.message.orEmpty().contains("outside the host's supported range"))
+            val badAbi = pack(root, "example.abi", "1.0.0", runtimeAbi = "b".repeat(64))
+            val mismatched = assertFailsWith<IllegalArgumentException> { resolver.resolve(listOf(badAbi), emptyList()) }
+            assertTrue(mismatched.message.orEmpty().contains("SDK ABI fingerprint"))
+        } finally { root.deleteRecursively() }
+    }
 
     @Test
     fun externalDependencyKeepsTheEntireFormerGoalFeatureFunctional(): Unit = runBlocking {
@@ -511,6 +542,9 @@ class PluginPackageIntegrationTest {
         dependencies: List<PackageDependency> = emptyList(),
         runtimeAbi: String = abi,
         implementation: File? = null,
+        pluginApi: Int = CurrentPluginApiVersion,
+        legacyApi: Boolean = false,
+        maximumApi: Int = CurrentPluginApiVersion,
     ): PluginPackageImport {
         val source = File(root, "source-${java.util.UUID.randomUUID()}").also { it.mkdirs() }
         val jar = File(source, "plugin.jar")
@@ -527,9 +561,15 @@ class PluginPackageIntegrationTest {
             output.write(resource.encodeToByteArray())
             output.closeEntry()
         }
+        val extension = if (legacyApi) JsonObject(mapOf("ai.meteor.kcode" to JsonObject(mapOf(
+            "pluginApi" to JsonPrimitive(pluginApi),
+            "runtimeAbi" to JsonPrimitive(runtimeAbi),
+            "capabilities" to JsonArray(emptyList()),
+        )))) else kcodeVariantExtension(runtimeAbi, pluginApi = pluginApi,
+            pluginApiRange = ai.meteor.kcode.plugin.packages.PluginApiCompatibilityRange(minOf(pluginApi, MinimumCompatiblePluginApiVersion), maximumApi))
         val manifest = PluginPackageManifest(
             id = id, version = version, dependencies = dependencies,
-            variants = listOf(PackageVariant("desktop", listOf("windows", "linux", "macos").map { PackageTarget(it, listOf("arm", "x86")) }, PackageRuntime("jvm", entry, "17"), "plugin.jar", extensions = kcodeVariantExtension(runtimeAbi))),
+            variants = listOf(PackageVariant("desktop", listOf("windows", "linux", "macos").map { PackageTarget(it, listOf("arm", "x86")) }, PackageRuntime("jvm", entry, "17"), "plugin.jar", extensions = extension)),
             files = listOf(PackageFile("plugin.jar", jar.length(), packageFileSha256(jar))),
             extensions = kcodeConfigurationExtension(if (entry == PackageFixtureProvider::class.java.name) StoredPluginConfiguration("string", JsonPrimitive("default")) else StoredPluginConfiguration("unit")),
         )

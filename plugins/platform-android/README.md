@@ -10,6 +10,27 @@ trusted bundled catalog or explicitly imported packages. Shared exports are defi
 default product. A supplied settings store replaces the packaged storage provider without
 transferring ownership of that caller resource.
 
+The factory's `profileId` selects named startup; otherwise it uses saved selection or the
+`native` template. The Activity forwards its `profile` intent extra. Metadata lives in
+`filesDir/cordis_profiles`. Settings scopes select separate encrypted MMKV identities;
+history scopes select separate Room database paths. The native template retains legacy
+locations. `createAndroidProfileHost` creates the stable coordinator; the existing runtime
+factory returns its chat/manager/overlay/application facades. Each product allocation receives
+fresh host-input leases. Switching stages the target, joins admitted work, closes the old
+product and publishes generation/selection together. Failure reconstructs the old locked
+intent; failed closure/restoration refuses execution.
+Privately loaded storage providers accept their legacy Unit defaults or machine-supplied
+String identities/paths; those machine values are not copied into portable Profile intent.
+Explicit workspace scopes bind filesystem, App system shell and local Ubuntu `/workspace`
+to `filesDir/workspaces/<scope>`. Unit/default and `legacy` retain their previous locations.
+The current ADB worlds cannot access app-private scoped workspaces and reject those requests
+before requesting authorization; they must not silently reuse the shared ADB workspace.
+
+`AndroidDynamicPluginController.prepareProfilePackages` uses the shared native transaction
+protocol with Android descriptors and candidate dex exports. The managed runtime owns the
+tree and durable generation boundary. Code resources are released only after restoration
+or successful retirement. Build validation does not establish this protocol's device behavior.
+
 `settingsBackedInteraction = true` retains the independently loaded interaction settings
 feature. A custom approver is published through the SDK-only `HostToolApprovalsInputPlugin`
 and `KcodeToolApprovals`; the feature owns permission schema, validation and optional UI.
@@ -21,3 +42,43 @@ the settings-owned execution policy rather than a caller mode reader.
 Desktop package tests do not establish APK/dex resource identity. Run this module's relevant
 `connectedDebugAndroidTest` classes on API 35+; privileged execution additionally requires
 separate real Shizuku/root evidence described in the verification guide.
+`AndroidProfileHostTest` covers real bundled APK providers, scope switching, stale references,
+saved-selection restart, failed target reconstruction and scoped ADB rejection. Device results
+are recorded separately from build evidence in `docs/profiles-implementation.md`.
+The Plugin API 66 stable manager also exposes draft/clone/preview/history commands and
+revision-checked activation of committed, draft or historical intent. The dedicated device
+suite exercises draft activation and historical restoration with actual APK providers;
+historical restoration appends a generation and preserves the Profile workspace.
+The native application links independent recovery UI and optional `ui-profiles` settings
+management; rendering and selected-file verification are recorded separately.
+The common host exposes metadata and explicit activation in RecoveryRequired, independently
+of the withdrawn product tree. Desktop recovery tests do not prove this path on an Android
+device or recover failures that happen before initial host construction.
+
+The runtime/host factories accept moduleFactories for distinct lazy in-process alternates.
+They provide available code without automatic instances and run again per product allocation.
+The stable host's selectProfileModule checks expected Profile/generation and records explicit
+module references through the managed transaction. Supplying the catalogue on restart restores
+selection; missing selected code rejects preparation. Factory keys must match descriptor IDs
+and cannot shadow native packages/default modules. Provider resources allocate during apply.
+The added typed-alternate instrumentation case passed on ARM64 API 36 with actual APK filesystem/
+history providers, scoped App workspace IO, stale-reference rejection, switching and restart.
+It was run separately from the four previously validated Profile cases; see implementation evidence.
+
+Native hosts now own a bounded `ProfileCommandGateway` and expose Plugin API 67 `KcodeProfiles`
+through a fresh infrastructure bridge in each product tree. Initial apply sees Starting until
+the host binds; do not await readiness from apply. Injected clients submit detached activation,
+edit or module-selection commands synchronously, then observe their host-owned handles. Accepted
+work survives the submitting provider's withdrawal. Old clients reject new calls; explicit
+cancellation after publication retains the committed result. The host's `profileCommands` client
+remains available for metadata/activation after failed restoration. Default Profile UI remains optional.
+
+Directory preparation, bundled staging and module factory/catalogue errors now return a
+`RecoveryRequired` host before any product allocation. Repository and legacy store directories
+open on use rather than in constructors. Host metadata commands remain available when storage
+is readable, and report unavailable storage without deleting/resetting it. Explicit preview
+or activation retries unsuccessful native preparation after the underlying cause is repaired.
+Preparation shares catalogue validation with runtime creation and never applies providers;
+only a complete successful snapshot is retained. Failed template queries are retried after
+preparation succeeds. Cancellation still closes the gateway and propagates; compatibility
+runtime factories still require a ready product and rethrow failed startup.

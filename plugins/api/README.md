@@ -1,5 +1,26 @@
 # Plugin SDK
 
+Plugin API 79 shares the default palette and typography helpers from the UI library with isolated plugins.
+Theme implementation classes remain private; the host exports name only those two file facades.
+
+Plugin API 78 adds `ProfilePluginImport` and `ProfileManagementClient.importPlugin` for
+verified native package imports into existing Profile drafts. Plugin API 77 remains binary compatible with API 76. Native package variants can declare host
+API compatibility ranges (currently 76–79), similar to DeepSeek Harness peer dependency ranges.
+Current-API packages must match the host SDK fingerprint; older API packages in a declared range
+keep their fingerprint bound to the release lock, and the publisher owns testing that compatibility.
+Raise the minimum only when a reviewed API change requires it.
+
+Plugin API 74 adds complete committed Profile archive import and host-owned export leases.
+`importArchive` verifies code and publishes an isolated draft. `exportArchive` calls a
+suspending consumer with a temporary path/digest and removes that file on return, failure or
+cancellation. Clients cannot supply review rules or output paths to the host. See
+[committed archives](../../docs/profile-archives.md).
+
+Plugin API 73 adds ordered native Bundle imports to `ProfileManagementClient`. Requests
+carry temporary archive locators/digests and a catalogue revision; hosts verify code and
+create isolated drafts without activation. Locators remain caller-owned until return and
+are not persisted in portable definitions. See [Bundle archives](../../docs/profile-bundle-archives.md).
+
 This module defines the types that the native host and independently loaded plugins
 share. It consolidates the former `shared` contracts with Cordis service keys,
 extension events, host bridges, and the reserved Harness APIs.
@@ -22,8 +43,73 @@ and FileProvider components. Core's legacy `android.support` binder/parcelizer c
 already use the Android host namespace; their corresponding Core/Parcelable types must
 retain the same host identity.
 
-This shared boundary is Plugin API 63; older
+This shared boundary is Plugin API 72; older
 external packages must be rebuilt against its generated SDK ABI.
+
+API 72 adds `ProfilePortableImport` and `ProfilePortableExport` requests and neutral client
+`importPortable`/`exportPortable` methods in the existing shared Profile namespace. Import
+publishes a create-only, revision-checked draft with independent data scopes and frozen bundle/
+package intent; it does not allocate or activate product code. Export reads a committed or
+historical recipe at the requested repository revision. Opaque values require host-side feature
+review, with default denial; clients cannot supply approval callbacks. Withdrawal cancels owned
+metadata calls and rejects subsequent calls. Explicit activation still uses host-owned handles.
+The portable JSON envelope and repository implementations stay private. No export namespace
+was broadened; external packages require the regenerated API 72 fingerprint.
+
+API 71 adds `KcodeDefaultDesignTokens` in the existing shared `ai.meteor.kcode.ui.design`
+boundary. The reusable UI library now owns these defaults; both the default theme and the
+independent native recovery surface consume them. Package exports retain the same shared
+namespace, and externally loaded packages require the regenerated API 71 fingerprint.
+
+API 65 exports portable Profile definitions, entries, bundle declarations and operations under
+`ai.meteor.kcode.plugin.api.profiles`. `AgentPluginManager.currentProfile` reads committed intent;
+`editProfile` checks active Profile identity and generation before transactional instance editing.
+Context operations distinguish omitted fields from empty maps that clear explicit configuration.
+The existing `ai.meteor.kcode.plugin.api` export covers these types and their serializers; Profile
+repositories, native activations and host coordinators remain implementation-private.
+
+API 66 adds neutral catalogue, draft, clone, target and preview contracts, and native manager
+commands for metadata management and explicit activation. Revisions protect draft/delete and
+activation decisions; a historical target appends a new successful generation. Catalogue state
+distinguishes saved selection from the active runtime. Preview verifies package preparation,
+not provider allocation or service readiness. Implementations stay in profiles/runtime/platform
+modules; the existing SDK namespace export retains shared identity.
+
+API 67 adds the injected `KcodeProfiles` service and neutral command handles/statuses, host
+management state and module catalogue summaries. Declare `inject = dependencies(KcodeProfiles.Key)`
+and use its `client`. `submit` accepts a detached command synchronously into a bounded host-owned
+queue; awaiting a handle is observation, so cancelling that observer or withdrawing its plugin
+does not cancel accepted work. Use `handle.cancel()` for explicit cancellation. Cancellation
+after durable publication reports the committed result. A withdrawn client rejects new requests.
+During initial allocation the service reports Starting and rejects queries/submissions until
+the host binds; await readiness from owned background work rather than blocking plugin apply.
+Ready clients can read/edit drafts, clone, preview, inspect history/modules and submit activation,
+active edits or module selection. RecoveryRequired retains host metadata and explicit activation;
+active composition and module queries still require a live product runtime. No UI is implicit.
+
+API 68 adds `ProfileOperation.Move` and the optional `Insert.position`. Null move parent selects
+the root; null position appends. Positions are evaluated after removing a moved entry: positive
+indexes start at zero, negative indexes count from the remaining list's end, and bounds clamp.
+Cross-parent movement recreates the branch in the new context; same-parent ordering retains
+resources. Groups keep their children. Missing/non-group parents and cycles fail composition.
+The existing SDK namespace shares the new operation and serializer identities. Existing insert
+documents decode with append positioning; rebuild packages for the changed SDK/framework ABI.
+
+API 70 adds `TreeRestorationException` within the existing shared `org.cordis.loader`
+framework boundary. Hosts distinguish successful rollback from incomplete retirement/restoration.
+No new shared package identity is introduced; external packages must be rebuilt against the
+generated API 70 SDK/framework fingerprint.
+
+API 69 adds optional default-UI navigation deferral through `SettingsSection.onLeave` and
+the component sheet's pre-animation `onDismissAttempt`. Public identities stay in the
+existing default-UI/component exports; implementation session state remains private.
+External packages must be rebuilt against the new generated SDK fingerprint.
+
+API 64 adds lazy `KcodePluginMount.export` for declarative Profile instances.
+Exports preserve typed defaults and ConfigValidator checks while deferring resource
+allocation to apply. Existing opaque host mounts support default configuration only.
+The existing exact KcodePluginMount/KcodePluginCompositionKt exports retain shared identity;
+rebuild external packages against the generated API 69 ABI fingerprint.
 Product tool implementations remain private to their plugin packages.
 
 API 43 introduced `ShellModePolicy` and `KcodeShellMode`. Native Shell consumers declare this
@@ -54,7 +140,7 @@ Provider implementations remain independently loaded and replaceable.
 
 The move retains package names and public signatures, including existing product
 compatibility fields and localization keys. It does not turn those contracts into
-implementation plugins or generalize all existing product schemas. Current Plugin API is 42;
+implementation plugins or generalize all existing product schemas. Current Plugin API is 64;
 no `:shared` Gradle dependency is required. Package imports and composition batches use
 `AgentPluginManager.importPackages` / `applyChanges`. `PluginPackageInstallation` locks archive,
 variant, SDK ABI and package dependencies in the same persisted snapshot as native descriptors.
@@ -207,3 +293,15 @@ and live in independent `plugins/llm/*` modules. Rebuild external packages for A
 
 API 63 also makes `KcodeLlm` an abstract SDK service. Registry state and client lifetime
 wrappers live privately in `llm-core` and close with their owning provider.
+
+
+API 76 makes `ConversationExecution.startResponse` suspending so runtime execution admission
+can precede message-ID allocation, generation flags and response preparation. Rebuild external
+consumers/providers against ABI 76. Existing exported chat/SDK namespaces cover this contract;
+no new implementation package is shared. The default executor also admits send, command
+feedback, setup feedback and regeneration before their state/persistence side effects.
+
+The current host API is 79 with a supported range of 76–79. Native package variants declare
+the host API range they support, in addition to the API used to compile them. Legacy manifests
+without that range use the host’s reviewed supported API window (currently 76–79). Publishers must test every API
+they claim to support; current-API packages still require the host's shared SDK ABI fingerprint.

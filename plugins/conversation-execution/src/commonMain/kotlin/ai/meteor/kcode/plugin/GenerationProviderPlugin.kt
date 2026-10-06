@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.plugin.execution.OwnedChatGenerationRunner
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.KcodeGeneration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +19,7 @@ class GenerationProviderPlugin : Plugin<Unit> {
     override val name = "kcode-generation-provider"
     override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
         val job = SupervisorJob()
-        val runner = OwnedChatGenerationRunner(scope = CoroutineScope(job + Dispatchers.Main.immediate))
+        val runner = OwnedChatGenerationRunner(scope = CoroutineScope(job + Dispatchers.Main.immediate), admission = ctx.root[KcodeExecution.Key]?.admission)
         effect.collect {
             runner.requireCanClose()
             withContext(NonCancellable) { job.cancelAndJoin() }

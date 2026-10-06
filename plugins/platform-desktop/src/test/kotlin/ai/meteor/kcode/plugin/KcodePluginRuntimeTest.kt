@@ -304,7 +304,7 @@ class KcodePluginRuntimeTest {
             assertFailsWith<IllegalArgumentException> {
                 runtime.pluginManager.replace(
                     spec(secondJar, DynamicFixturePluginV2::class.qualifiedName!!, "old-api")
-                        .copy(apiVersion = CurrentPluginApiVersion - 1),
+                        .copy(apiVersion = MinimumCompatiblePluginApiVersion - 1),
                 )
             }
             assertEquals("1", runtime.pluginManager.installed().single().version)

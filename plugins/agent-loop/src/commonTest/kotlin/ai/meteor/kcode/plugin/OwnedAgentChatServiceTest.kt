@@ -5,6 +5,7 @@ import ai.meteor.kcode.model.ChatMessage
 import ai.meteor.kcode.model.ModelConfiguration
 import ai.meteor.kcode.model.ModelProvider
 import ai.meteor.kcode.plugin.api.PluginOperationOwner
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -17,6 +18,28 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 
 class OwnedAgentChatServiceTest {
+    @Test
+    fun directAgentCallsCheckProductAdmissionBeforeEnteringTheDelegate() = runTest {
+        var calls = 0
+        val owner = PluginOperationOwner("test agent")
+        val delegate = object : ChatService {
+            override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String {
+                calls++
+                return "response"
+            }
+        }
+        val admission = object : ExecutionAdmission {
+            override suspend fun <T> run(block: suspend () -> T): T = error("Product admission closed")
+        }
+        val service = OwnedAgentChatService(delegate, owner, admission)
+        val config = ModelConfiguration(ModelProvider.Ollama, "fixture", "", temperature = 0.6)
+        try {
+            assertFailsWith<IllegalStateException> { service.reply(config, emptyList(), "prompt") }
+            assertFailsWith<IllegalStateException> { service.replyStreaming(config, emptyList(), "prompt", onDelta = {}) }
+            kotlin.test.assertEquals(0, calls)
+        } finally { owner.close() }
+    }
+
     @Test
     fun withdrawalJoinsReplyAndStreamingCleanupAndRejectsTheOldService() = runTest {
         for (streaming in listOf(false, true)) {

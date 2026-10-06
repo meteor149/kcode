@@ -81,3 +81,13 @@ in integration tests; interactive FileDialog behavior still has a separate nativ
 The optional UI child contributes an Export row to the conversation More popup via
 `MoreActions`. It opens save/share choices inside that popup; selection mode retains a
 direct share control. The feature owns export state, text, dispatch and withdrawal guards.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.conversation-export
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

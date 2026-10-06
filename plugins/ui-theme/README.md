@@ -28,3 +28,21 @@ the theme leaves the application slot empty; enabling an installed package resto
 
 
 Verify with `gradlew.bat :plugins:ui-theme:desktopTest` and platform private rendering tests.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.ui.theme
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.
+
+The verified release also permits JSON theme configuration with explicit color/extended-color
+roles, spacing, radius, size, glass, overlay and fontScale fields. Colors use the bounded
+hex-color string format, accepting only six-digit RGB or eight-digit ARGB. Numeric bounds
+match the deployment configuration ranges; arbitrary text, unknown roles/properties and
+out-of-range values are denied, including values hidden beneath later overrides. ConfigValidator
+still checks relationships such as bubble minimum/maximum widths before allocation. Policies
+are selected from the locked release; a newer schema does not review an older generation.

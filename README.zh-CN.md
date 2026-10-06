@@ -16,14 +16,11 @@
   </p>
 </div>
 
-> [!IMPORTANT]
-> kcode 仍在快速演进中。版本间可能存在破坏性变更；请核对 Agent 执行的重要操作，并在启用高权限工具前阅读安全模型。
-
 ## 认识 kcode
 
-kcode 是 Kotlin Multiplatform 生态中首个开源插件化 AI Harness，原生支持 Android 与桌面。它基于 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/)、[Koog](https://docs.koog.ai/) 与 Cordis 构建，将原生界面、可扩展的 Agent 运行时和本地数据存储融为一体。
+kcode 是原生支持 Android 与桌面的 AI 助手，基于 Kotlin Multiplatform、Compose Multiplatform、Koog 与 [Cordis](https://github.com/meteor149/cordis-kotlin) 构建。它将对话、工具调用和本地工作区结合起来，让 Agent 能够从回答问题进一步完成实际任务。
 
-**一切皆插件。** 按需组合模型、工具、提示词、权限策略与 UI，替换 Agent 循环、切换存储 Provider，或构建全新的根界面。kcode 借鉴 DeepSeek Harness 的插件模型，将同一套架构带到移动端与桌面端。
+**一切皆插件。** 模型、工具、Agent 运行流程、存储和界面都可以按需组合与替换。插件架构借鉴 DeepSeek Harness，在移动端与桌面端使用相同的配置与管理方式。
 
 <table>
   <tr>
@@ -40,144 +37,87 @@ kcode 是 Kotlin Multiplatform 生态中首个开源插件化 AI Harness，原�
 
 ## 核心能力
 
-### 使用工具完成工作
-
-- 流式输出 Markdown，展示工具进度并保存会话历史。
-- 通过 Google、Exa 或 Bright Data 联网搜索，并返回来源链接。
-- 读取、浏览、写入和局部修改工作区文件，在支持的平台读取媒体。
-- 执行桌面 Shell 命令，或使用 Android 原生 Shell 与内置 Ubuntu 24.04 ARM64 环境。
-- 停止或重新生成回复，将会话导出为长图。
-- 在 Android 后台继续生成，并可通过会话浮窗查看进度。
-
-### Goal 与多 Agent 协作
-
-使用 `/goal <目标>` 创建持久任务。Goal 跨应用重启保存，记录状态、运行时间与可选 Token 预算，并跨回合持续推进。你可以在会话中暂停、恢复、编辑或取消目标。
-
-明确要求派发子任务后，主 Agent 可以分配工作、交换消息并等待结果。默认组合支持五个 Agent 并发，包括主 Agent；点击会话中的子 Agent 即可查看活动与输出。
-
-### 定时任务
-
-直接要求创建单次或周期任务。每次运行使用独立会话，结果可加入历史或丢弃；平台支持时可发送后台通知。周期任务的最小间隔为一分钟。
-
-任务依赖应用进程运行。重启后会恢复逾期任务，周期任务跳过错过的时间段，不会集中执行补偿任务。
-
-### Skill
-
-在 `/workspace/.agents/skills` 或 `/workspace/.kcode/skills` 下添加 `SKILL.md` 包，为 Agent 提供可复用的指令与工作流。
-
-### 自由选择模型
-
-内置适配器支持 OpenAI、Azure OpenAI、Anthropic、Google Gemini、DeepSeek、OpenRouter、Mistral AI、阿里云 DashScope / Qwen、Ollama、智谱 GLM，以及 Amazon Bedrock（桌面端）。
-
-在设置中填写凭据、服务地址与供应商选项，在输入区选择模型与 Temperature。Ollama 支持无需 API Key 的本地服务；插件可扩展更多模型供应商。
-
-## 平台支持
-
-Android 与桌面共用对话、历史、Goal、调度、多 Agent、Skill、文件工具、联网搜索与会话长图导出。平台差异如下：
-
-| 能力 | Android | 桌面 |
-| --- | --- | --- |
-| 外部插件 | APK/dex | JAR |
-| 原生 Shell | 应用 UID / Shizuku / root | 工作区 Shell |
-| 内置 Ubuntu 24.04 | ARM64，通过 PRoot 运行 | — |
-| 原生 Web 能力桥 | 支持的设备 API | — |
-| 后台会话浮窗 | 需要悬浮窗权限 | — |
-| Amazon Bedrock 适配器 | — | 支持 |
-
-实际能力取决于已安装插件、所选模型与平台权限。真实 Shizuku 授权和 root 执行仍需独立验证，详见[验证指南](docs/verification.md)。
+- **对话与工具调用**：流式 Markdown、工具执行进度、会话历史、重新生成和长图导出；支持联网搜索、文件读写与 Shell 执行。
+- **模型自由选择**：内置 OpenAI、Azure OpenAI、Anthropic、Gemini、DeepSeek、OpenRouter、Mistral、Qwen、Ollama 与 GLM 等适配器；桌面端还支持 Amazon Bedrock。可配置凭据和服务地址，插件也能扩展模型来源。
+- **持续目标**：使用 `/goal <目标>` 创建跨轮次、跨重启的任务，查看状态、用时和可选的 Token 预算，随时暂停或继续。
+- **多 Agent 协作**：让 Agent 分派子任务、交换消息和汇总结果，在会话中查看各个工作 Agent 的进度。
+- **定时任务**：创建一次性或周期任务，独立保存每次运行的会话与结果。任务在应用进程可用时运行，重启后恢复调度。
+- **Skills**：通过 `SKILL.md` 包添加可复用的知识、指令和工作流程。
+- **插件管理与恢复**：导入新的插件包，调整配置与启用状态；独立管理入口用于切换配置方案和修复启动问题。
 
 ## 快速开始
 
-从 [GitHub Releases](https://github.com/meteor149/kcode/releases) 下载 Android APK、Windows MSI、macOS DMG 或 Linux DEB。
+从 [GitHub Releases](https://github.com/meteor149/kcode/releases) 下载 Android APK 或对应系统的桌面安装包。
 
-1. 打开**设置 → 大模型供应商**，选择服务并填写凭据与连接选项。
-2. 返回会话，选择模型与 Temperature。
-3. 要求 Agent 使用工具完成工作，通过 `/goal <目标>` 创建持久任务，或明确要求并行子任务与定时任务。
+1. 打开 **设置 → 模型提供商**，填写服务凭据与连接选项。
+2. 返回会话，在输入区选择模型。
+3. 提出任务，例如搜索资料、修改工作区文件，或用 `/goal` 创建持续目标。
 
-### 从源码运行
+### 平台能力
 
-使用 JDK 21 与仓库自带的 Gradle Wrapper，JVM 字节码目标为 Java 17。Android 构建需要 SDK 35，运行需要 API 35+ 的设备或模拟器。Windows 下将 `./gradlew` 替换为 `.\gradlew.bat`。
+Android 需要 **Android 15（API 35）或更新版本**。桌面支持 Windows、macOS 和 Linux。
+
+| 能力 | Android | 桌面 |
+| --- | --- | --- |
+| 对话、文件、搜索、Goal、Skills、定时任务与多 Agent | 支持 | 支持 |
+| 外部插件代码 | APK / dex | JAR |
+| Shell 执行 | App、Shizuku（ADB）或 root 模式 | 工作区 Shell |
+| 内置 Ubuntu 环境 | ARM64，通过 PRoot 运行 | — |
+| 后台会话浮窗 | 需授予悬浮窗权限 | — |
+| Amazon Bedrock | — | 支持 |
+
+具体能力取决于已启用的插件、所选模型和系统授权。Shizuku 与 root 模式需要相应授权，PRoot 不会额外提升 Android 权限。
+
+## 管理插件
+
+在 **设置 → 插件管理** 中选择“安装插件”，导入单个 `.kplugin` 文件。检查插件信息、配置与依赖后，点击“应用修改”激活；已有插件的配置和启用状态也通过同一流程更新。
+
+“添加实例”用于复用已经安装的插件，例如为同一提供商配置不同连接；安装新的插件使用文件导入。
+
+### 独立管理入口
+
+独立入口由宿主提供，打开时不加载产品插件树，因此插件配置错误导致主界面无法启动时，仍可进入管理界面修复。
+
+- **Android**：打开启动器中的 **kcode 插件管理** 图标。
+- **桌面**：使用 `kcode --plugin-manager` 启动。
+
+独立入口还提供 Profile 的创建、切换、导入导出、历史版本和恢复能力。Profile 保存一套插件组合与配置，修改先保存为草稿，激活后成为新的版本。详见 [Profile 指南](docs/profiles.md)、[插件包格式](docs/plugin-package-format.md)和 [Bundle 导入](docs/profile-bundle-archives.md)。
+
+## 权限与数据
+
+- 工具权限支持拒绝、询问与直接执行；系统权限仍按平台规则生效。
+- 会话与配置保存在本地。使用远程模型或搜索服务时，相关请求会发送给所选服务商。
+- Android 凭据使用加密 MMKV 与 Keystore 存储；桌面配置保存在应用数据目录。
+
+## 从源码构建
+
+使用 **JDK 21** 和仓库自带的 Gradle Wrapper。Android 构建还需要 **SDK 35**。Windows 下将 `./gradlew` 替换为 `.\gradlew.bat`。
 
 ```bash
 # 运行桌面应用
 ./gradlew :apps:desktopApp:run
 
-# 安装 Android Debug 构建
+# 安装 Android 调试版本
 ./gradlew :apps:androidApp:installDebug
-```
 
-在对应操作系统上，使用 `:apps:desktopApp` 的 `packageMsi`、`packageDmg` 或 `packageDeb` 任务构建桌面安装包。发布工作流会根据 Tag 构建 Android 与桌面产物。
-
-### Android Shell 与 Ubuntu
-
-`execute_shell_command` 执行 Android 原生 Shell；`execute_ubuntu_command` 在首次使用时安装内置 Ubuntu 根文件系统，并通过 PRoot 运行。Ubuntu 需要 ARM64 设备，运行时位置需至少保留 384 MiB 可用空间。
-
-两个工具都遵循所选 Shell 模式：
-
-- **应用**：使用应用 UID 与私有工作区。
-- **ADB**：需要通过 adb 启动 Shizuku，以 UID 2000 运行，在 `/data/local/tmp/ai.meteor.kcode/ubuntu` 下使用独立运行时与工作区。
-- **Root**：需要经过校验的 `su` 授权，与应用模式共用运行时与工作区。
-
-ADB 工作区与应用文件工具的工作区分离。Root 创建的文件可能因属主或权限限制而无法在应用模式下访问。PRoot 提供 Linux 用户空间，不是虚拟机，也不额外授予 Android 权限。安装方式、产物来源与限制见 [Android Ubuntu 指南](docs/android-ubuntu-runtime.md)。
-
-通过 adb 配置模型与搜索供应商时，请先启动 kcode，再按 [ADB 设置指南](docs/adb-settings.md)操作。保存成功返回 `result=-1`，不能只看 adb 退出码。
-
-## 插件架构
-
-原生 Host 提供平台基础能力，`plugins/runtime` 管理 Cordis 插件树，`plugins/bundle-native` 选择默认产品组合。只有清单与加载器是固定启动组件。功能插件声明服务依赖；必需 Provider 缺失时暂停 Consumer，恢复后重新绑定。
-
-| 模块 | 职责 |
-| --- | --- |
-| `plugins/api` | 中立的领域、持久化、Agent、生命周期与开放 UI 贡献契约 |
-| `plugins/default-ui-api` | 默认布局、页面、设置与展示组件的可选契约 |
-| `libraries/ui` | 可复用 Compose 控件、设计契约与矢量图标 |
-| `plugins/runtime` | 插件组合、生命周期所有权与已提交渲染快照 |
-| `plugins/bundle-native` | 默认原生产品组合 |
-| `plugins/installation-store` | 已安装包与启用状态持久化 |
-| `apps/*`、`plugins/platform-*` | 应用 Host、Loader 与平台适配 |
-
-产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 拥有可选的默认 UI 注册表与投影，`application` 协调默认应用根；`ui-pages`、`ui-messages`、`ui-shell` 和 `ui-theme` 分别提供会话页面、消息展示、布局与设置页面以及主题；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
-
-设置 schema、校验和表单由对应功能模块拥有：权限设置在 `interaction`，执行设置在 `native-execution`，模型设置在 `llm-core`；`settings` 模块负责通用存储与命令分发。
-
-Web Search、Goal、Subagent、Localization、Markdown、Conversation Export 各自将相关 Provider 与贡献项包含在一个功能发布包中，内部子插件仍根据可用服务独立响应。
-
-通过插件管理器加载、启用、禁用、替换或卸载外部包，修改组合前先结束或取消活动 Agent 回合。安装状态跨重启保留，替换或清单发布失败时恢复已提交组合。撤销插件时先取消并等待其拥有的操作，再释放资源；切换存储 Provider 不会自动迁移数据。
-
-外部包共享公开 SDK 类型，产品实现与私有依赖独立加载。当前 ABI 为 **Plugin API 63**，旧包需重新编译。自定义根渲染器可以自行选择服务，无需采用默认 UI 契约。
-
-实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
-
-[跨平台插件包格式](docs/plugin-package-format.md)按平台和架构声明变体。原生构建从可独立替换的 `.kplugin` 包加载默认实现，并保留配置、禁用状态、用户替换和卸载选择。Web 搜索、Goal、Schedule、Subagent、本地化、Markdown 和对话导出各自作为一个功能包，包含相关工具、命令、设置和可选界面贡献；模型适配器与可复用基础设施保留独立发布边界。Cordis Gradle 打包插件直接从 KMP 源码模块生成独立 JAR/APK，`:stageBundledPlugins` 消费这些包产物并导出可信清单及包文件；当前模块和平台变体以 `settings.gradle.kts` 及清单为准。宿主保留 SDK 契约、组合／安装基础设施及仅依赖 SDK 的输入适配器。iOS 当前仅支持元数据；运行时支持桌面 JAR 和 Android APK 变体导入、SDK 校验、依赖批次事务和重启恢复。
-
-显式交互回调通过仅依赖 SDK 的宿主输入适配器接入。生产宿主不再链接旧 interaction 实现模块；默认设置策略从独立插件包运行。
-
-## 权限与数据
-
-- **工具策略**：`Deny`、`Ask`、`Bypass` 决定工具是否需要批准。`Bypass` 跳过 kcode 的确认，系统权限仍然生效。定时任务使用执行时配置的模型，遵循与交互任务相同的权限策略。
-- **文件**：桌面路径限制在托管 `/workspace` 内，拒绝路径穿越与符号链接逃逸。Android 还可接受真实绝对路径，但受文件系统权限限制。Skill 资源受各自托管包边界约束。
-- **凭据**：Android 使用加密 MMKV，密钥由 Keystore 保护；桌面设置保存在应用数据目录。ADB Receiver 要求系统 `DUMP` 权限，通过设置命令校验更新，命令执行期间参数对可信 Host 可见。
-- **Android 执行**：Shizuku/root 不可用时直接失败，不静默切换身份；后台会话浮窗需要“显示在其他应用上层”权限。
-
-安全问题请私下联系维护者。不要提交凭据、`local.properties`、设备截图或生成的数据库。
-
-## 构建与测试
-
-```bash
-# 多平台测试与两个应用 Host
+# 运行测试并构建两个宿主
 ./gradlew allTests :apps:desktopApp:compileKotlin :apps:androidApp:assembleDebug
-
-# SDK 与默认 UI 专项测试
-./gradlew :plugins:api:allTests :plugins:default-ui-api:desktopTest
-
-# 桌面组合与真实外部 JAR 加载
-./gradlew :plugins:platform-desktop:test
-
-# Android 外部 APK/dex 加载，需要 API 35+ 设备或模拟器
-./gradlew :plugins:platform-android:connectedDebugAndroidTest
 ```
 
-`allTests` 不包含连接设备的仪器测试。设备、Shizuku 与 root 检查的独立要求见[验证指南](docs/verification.md)。
+桌面安装包通过 `:apps:desktopApp:packageMsi`、`packageDmg` 或 `packageDeb` 在对应系统上构建。
+
+## 开发与贡献
+
+| 入口 | 内容 |
+| --- | --- |
+| [文档索引](docs/README.md) | 各专题指南 |
+| [插件架构](docs/plugin-architecture.md) | SDK、服务依赖与生命周期 |
+| [插件开发](docs/plugin-development.md) | 插件实现、打包与接入 |
+| [插件包格式](docs/plugin-package-format.md) | 元数据、平台变体与 API 兼容范围 |
+| [Profile 指南](docs/profiles.md) | 配置方案、激活与恢复 |
+| [AGENTS.md](AGENTS.md) | 项目结构、代码规范与贡献约定 |
+
+欢迎提交问题、功能建议和 Pull Request。界面改动请附前后对比，行为改动请提供对应测试。
 
 ## 致谢
 
@@ -190,30 +130,12 @@ Web Search、Goal、Subagent、Localization、Markdown、Conversation Export 各
 | [Koog](https://github.com/JetBrains/koog) 与 [Ktor](https://github.com/ktorio/ktor) | 构成 Agent、工具、模型供应商、流式响应与网络访问的核心基础。 |
 | [Room](https://github.com/androidx/androidx/tree/androidx-main/room) 与 [SQLite](https://www.sqlite.org/) | 支撑 Android 与桌面端的本地会话持久化。 |
 | [MMKV](https://github.com/Tencent/MMKV) 与 [Shizuku](https://github.com/RikkaApps/Shizuku) | 分别支持移动端设置存储，以及 Android 上边界明确的 ADB shell 执行。 |
-| [Operit](https://github.com/AAswordman/Operit)、[OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore)、[PRoot](https://github.com/proot-me/proot)、[PRoot-Distro](https://github.com/termux/proot-distro) 与 [Ubuntu](https://ubuntu.com/) | Operit 的运行时设计与 TerminalCore 的产物链路为 Android Ubuntu 实现提供了参考；随包 PRoot 二进制、Loader 和 Ubuntu 根文件系统的准确来源见[运行时说明](docs/android-ubuntu-runtime.md)与 [NOTICE](NOTICE)。 |
+| [Operit](https://github.com/AAswordman/Operit)、[OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore)、[PRoot](https://github.com/proot-me/proot)、[PRoot-Distro](https://github.com/termux/proot-distro) 与 [Ubuntu](https://ubuntu.com/) | 为 Android Ubuntu 环境提供实现基础与设计参考，组件归属见 [NOTICE](NOTICE)。 |
 
 第三方协议与归属信息记录在 [NOTICE](NOTICE) 和 Gradle 依赖中。
-
-## 参与贡献
-
-欢迎提交 Issue 与 Pull Request。请先阅读 [AGENTS.md](AGENTS.md)，了解项目结构、代码规范、测试命令和 PR 要求。提交应保持职责单一、覆盖可观察行为；涉及 UI 时请附上前后对比截图或录屏。
 
 ## 开源协议
 
 Copyright 2026 The kcode Authors.
 
-本项目基于 [Apache License 2.0](LICENSE) 开源。第三方组件继续遵循各自协议，归属信息见 [NOTICE](NOTICE)。
-
-工具权限配置与聊天输入区控件归交互功能插件所有。默认聊天页面提供通用配置编辑接口与扩展插槽；禁用功能插件会移除其控件并保留已保存的配置。
-
-配置存储保存不透明的功能命名空间和历史迁移原始值。功能插件拥有配置结构与默认值；
-v2 快照保留未知数据，不再持续写入各功能的旧标量字段。
-
-UI SDK 模块保留共享服务身份和展示契约，私有注册表实现位于 `ui-contributions` 与
-`default-ui-bridge`。撤销注册表后，已持有的服务引用拒绝调用，注册贡献失效。默认导航
-presenter 在帧准备阶段解析页面依赖，并复用内核已准备的 UI、模型与命令快照。
-默认界面实现模块拆分后仍保留原有插件包 ID 和独立启停状态。
-
-`skills` 模块统一维护技能发现、运行与技能工具；`filesystem` 模块统一维护原生文件系统、技能工作区与文件工具。源码模块合并后，提供者和消费者仍保留各自插件 ID 与独立生命周期。
-
-各模型厂商在 `plugins/llm` 下拥有独立 Gradle 模块，分别维护客户端、模型目录、连接元数据和本地化。`llm-core` 维护公共注册、配置及可选标准界面；设置与会话选项读取同一份已提交模型目录。
+项目采用 [Apache License 2.0](LICENSE)。第三方组件遵循各自的许可证，相关声明见 [NOTICE](NOTICE)。

@@ -8,14 +8,19 @@ import org.cordis.EffectScope
 import org.cordis.Plugin
 
 /** Allocates and releases native storage for each activation. */
-class AndroidNativeSettingsPlugin : Plugin<Unit> {
-    override val config = ConfigValidator<Unit> { it }
+class AndroidNativeSettingsPlugin : Plugin<Any?> {
+    override val config = ConfigValidator<Any?> { value ->
+        require(value == Unit || value is String && value.matches(Regex("[a-zA-Z0-9._-]{1,160}"))) { "Invalid Android settings scope" }
+        value
+    }
     override val name = "android-native-settings"
 
-    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+    override suspend fun apply(ctx: Context, config: Any?, effect: EffectScope) {
         val inputs = requireNotNull(PluginHostInputs.current(ctx, effect) as? AndroidPluginHostInputs) {
             "Android settings requires native host inputs"
         }
-        FactorySettingsProviderPlugin.apply(ctx, androidSettingsStoreFactory(inputs.applicationContext()), effect)
+        val factory = if (config is String) androidSettingsStoreFactory(inputs.applicationContext(), config)
+            else androidSettingsStoreFactory(inputs.applicationContext())
+        FactorySettingsProviderPlugin.apply(ctx, factory, effect)
     }
 }

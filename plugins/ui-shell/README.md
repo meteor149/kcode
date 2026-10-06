@@ -11,3 +11,15 @@ preserving settings/navigation. Each provider registers its compiled English def
 The shell archive contains no conversation renderer or product theme implementation.
 
 Verify with `gradlew.bat :plugins:ui-shell:desktopTest` and platform private rendering tests.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.ui.layout
+- provider.ui.sidebar
+- provider.ui.settings
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

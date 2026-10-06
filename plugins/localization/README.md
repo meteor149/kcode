@@ -28,6 +28,12 @@ the provider's list. Headless Goal/schedule calls and export status use the inje
 
 The provider accepts `Unit` for existing defaults, or a JSON object:
 
+The package's `src/profile-export/feature.localization.json` declares portable Unit and
+dictionary JSON configuration. Export permits only default/fallback language, language
+labels and translation maps with bounded string values. Unknown root fields and non-text
+dictionary values are denied. Runtime validation still checks locale declarations and
+translation placeholders; schema review does not start a localization provider.
+
 ```json
 {
   "defaultLanguage": "fr",
@@ -97,3 +103,13 @@ Withdrawal rejects subsequent edits of this namespace while preserving its saved
 other active settings owners remain usable. Validation is independent of settings-command
 and default UI availability. Feature rules validate types and newly selected values while
 retaining unchanged future identities and unknown document fields.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.localization
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

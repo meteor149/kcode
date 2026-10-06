@@ -20,6 +20,37 @@ import org.cordis.plugin
 
 class DefaultUiSlotsTest {
     @Test
+    fun settingsLeaveGateDefersNavigationAndWithdrawnSnapshotsCannotBlockIt(): Unit = runTest {
+        val context = Context()
+        val slots = OwnedUiSlots(context)
+        try {
+            var gateCalls = 0
+            var deferred: (() -> Unit)? = null
+            var navigations = 0
+            val section = SettingsSection("editor", 0, KcodeIconAsset.Settings, { "" }, { "" }, UiRenderer { },
+                onLeave = { proceed -> gateCalls++; deferred = proceed })
+            val original = slots.registerSettings(section)
+            val held = slots.snapshot().settingsSections.single()
+            held.onLeave { navigations++ }
+            assertEquals(1, gateCalls)
+            assertEquals(0, navigations)
+            deferred!!.invoke()
+            assertEquals(1, navigations)
+            original.dispose()
+            assertEquals(1, gateCalls)
+            val replacement = slots.registerSettings(section)
+            original.dispose()
+            held.onLeave { navigations++ }
+            assertEquals(2, navigations)
+            assertEquals(1, gateCalls)
+            slots.snapshot().settingsSections.single().onLeave { navigations++ }
+            assertEquals(2, gateCalls)
+            assertEquals(2, navigations)
+            replacement.dispose()
+        } finally { context.fiber.dispose() }
+    }
+
+    @Test
     fun textDefaultsWithdrawIndependentlyAndOldCleanupKeepsReplacement() = runTest {
         val context = Context()
         val slots = OwnedUiSlots(context)

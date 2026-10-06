@@ -91,3 +91,13 @@ The root consumes the UI, model catalog and conversation command snapshots alrea
 the runtime. It prepares navigation presenters once before committing a frame and retains their
 renderers. Conversation-specific request construction lives in the conversation page provider,
 while this module coordinates navigation, the shared conversation workspace and settings drafts.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.ui.compose
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

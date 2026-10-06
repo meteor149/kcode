@@ -101,7 +101,7 @@ class CapabilityCompositionTest {
     }
 
     @Test
-    fun subagentProviderDisposalWaitsForChildrenAndReEnablingCreatesANewFactory() = runTest {
+    fun subagentAdmissionRequiresJoinedShutdownBeforeDisableAndReEnableCreatesANewFactory() = runTest {
         lateinit var factory: ai.meteor.kcode.SubagentCoordinatorFactory
         val capture = kcodePlugin(descriptor("test.subagent-owner"),
             plugin<Unit>(name = "subagent-owner", inject = dependencies(ai.meteor.kcode.plugin.api.KcodeSubagents.Key)) { ctx, _ ->
@@ -121,13 +121,16 @@ class CapabilityCompositionTest {
             }, {})
             coordinator.spawn("/root", "worker", "task", null)
             entered.await()
-            val disabling = async { runtime.pluginManager.setEnabled("feature.subagents", false) }
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("feature.subagents", false) }
+            val stopping = async { coordinator.shutdown() }
             cleaning.await()
-            assertFalse(disabling.isCompleted)
-            assertFailsWith<IllegalStateException> { staleFactory.create(backgroundScope, "old", { "unused" }, {}) }
+            assertFalse(stopping.isCompleted)
+            assertFailsWith<IllegalStateException> { runtime.pluginManager.setEnabled("feature.subagents", false) }
             assertFailsWith<IllegalStateException> { coordinator.list("/root", null) }
             release.complete(Unit)
-            disabling.await()
+            stopping.await()
+            runtime.pluginManager.setEnabled("feature.subagents", false)
+            assertFailsWith<IllegalStateException> { staleFactory.create(backgroundScope, "old", { "unused" }, {}) }
             assertEquals(PluginState.Active, runtime.diagnostics().plugins.first { it.id == "provider.agent-loop.koog" }.state)
             assertFalse("core/subagent" in runtime.diagnostics().toolContributions)
             runtime.pluginManager.setEnabled("feature.subagents", true)

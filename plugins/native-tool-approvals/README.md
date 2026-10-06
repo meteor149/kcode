@@ -28,3 +28,13 @@ API 59 localized approval requests resolve the committed snapshot through
 configuration policy. The provider never decodes a persisted language key. Rendering-only
 catalogs use their declared default. Private JAR/APK assertions distinguish a namespace
 language from a conflicting historical preference while preserving withdrawal/recovery.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.tool-approvals.native
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

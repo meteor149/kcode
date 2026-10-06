@@ -2,6 +2,7 @@ package ai.meteor.kcode.plugin.execution
 
 import ai.meteor.kcode.chat.ChatGenerationRunner
 import ai.meteor.kcode.chat.GenerationCall
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Runs model responses independently from the lifetime of a Compose page.
@@ -26,6 +28,7 @@ import kotlinx.coroutines.launch
 class OwnedChatGenerationRunner(
     private val onActiveChanged: (Boolean) -> Unit = {},
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+    private val admission: ExecutionAdmission? = null,
 ) : ChatGenerationRunner {
     private val taskCount = MutableStateFlow(0)
     override val activeTasks: StateFlow<Int> = taskCount.asStateFlow()
@@ -34,12 +37,15 @@ class OwnedChatGenerationRunner(
         check(scope.coroutineContext[Job]?.isActive != false) { "Generation runner is closed" }
         return scope.launch(context = GenerationCall(this), start = CoroutineStart.UNDISPATCHED) {
             currentCoroutineContext().ensureActive()
-            taskStarted()
-            try {
-                block()
-            } finally {
-                taskFinished()
+            suspend fun execute() {
+                taskStarted()
+                try {
+                    coroutineScope { block() }
+                } finally {
+                    taskFinished()
+                }
             }
+            if (admission == null) execute() else admission.run { execute() }
         }
     }
 

@@ -1,8 +1,43 @@
 package ai.meteor.kcode.plugin
 
-const val CurrentPluginApiVersion = 63
+import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
+import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
+
+const val MinimumCompatiblePluginApiVersion = 76
+const val CurrentPluginApiVersion = 79
 
 interface AgentPluginManager {
+    suspend fun profileCatalogue(): ProfileCatalogue =
+        error("This manager does not support Profile management")
+    suspend fun profileDraft(id: String): ProfileDefinition? =
+        error("This manager does not support Profile management")
+    suspend fun writeProfileDraft(write: ProfileDraftWrite): ProfileCatalogue =
+        error("This manager does not support Profile management")
+    suspend fun cloneProfile(request: ProfileCloneRequest): ProfileCatalogue =
+        error("This manager does not support Profile management")
+    suspend fun deleteProfile(id: String, expectedRevision: Long): ProfileCatalogue =
+        error("This manager does not support Profile management")
+    suspend fun previewProfile(target: ProfileTarget): ProfilePreview =
+        error("This manager does not support Profile management")
+    suspend fun profileHistory(id: String): List<ProfileCompositionState> =
+        error("This manager does not support Profile management")
+    suspend fun activateProfile(request: ProfileActivationRequest, cancelActive: Boolean = false): ProfileCompositionState =
+        error("This manager does not support Profile management")
+
+    /** Null when this runtime does not use declarative Profiles. */
+    suspend fun currentProfile(): ProfileCompositionState? = null
+
+    /** Edit instances of the active Profile through the same managed publication boundary. */
+    suspend fun editProfile(edit: ProfileCompositionEdit): ProfileCompositionState =
+        error("This manager does not support Profile editing")
+
     /** Resolve platform packages and commit the complete dependency set as one composition. */
     suspend fun importPackages(packages: List<PluginPackageImport>): Unit =
         error("This manager does not support plugin package archives")

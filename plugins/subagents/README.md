@@ -26,6 +26,23 @@ Tests cover coordination, capacity, tool schemas, retained handles, joined child
 replacement failure, withdrawal/recovery, and real desktop JAR/Android APK identities.
 Android test compilation alone does not establish device execution.
 
+## Profile execution admission
+
+The standard factory captures the root `KcodeExecution` admission boundary during apply.
+Coordinator calls enter that boundary before state changes or callbacks, and each child
+turn enters it independently even when its caller supplied a separate coroutine scope.
+Structured child work finishes before the turn reports completion or releases its slot;
+admission remains held through callbacks and cancellation cleanup. A handoff rejected
+before entry marks the child interrupted without invoking product callbacks and permits
+retry after admission reopens. Bare Cordis contexts without KcodeExecution retain the
+standalone coordinator behavior.
+
+Active children must finish or be explicitly shut down and joined before ordinary plugin
+composition changes. Profile switching with explicit cancellation joins admitted cleanup
+before preparing the target. Shutdown remains available while execution is paused, and
+retired factory/coordinator references reject new work. Alternative autonomous providers
+must implement the same execution contract for their own detached work.
+
 Running status cards and detail sheets live in `subagentui` here. The feature registers
 one `subagents` conversation decoration using the generic `AboveComposer` anchor;
 `ui-pages` owns placement/measurement and contains no Subagent filtering or status UI.
@@ -39,3 +56,15 @@ and shared API 48 anchor identity, renders actual presenter preparation, checks 
 completed updates hide stale running states, and tests optional UI and whole-feature
 withdrawal/recovery. The corresponding real APK test source compiles; source compilation
 is not device execution evidence.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.subagents
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.
+
+feature.subagents also permits JSON maxConcurrency as an integer in 1..64.

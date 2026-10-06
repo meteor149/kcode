@@ -16,8 +16,8 @@ import kotlinx.serialization.json.Json
 
 /** Manifest is app-private; artifact trust is checked again by the native loader at every boot. */
 class FilePluginCompositionStore(directory: File) : PluginCompositionStore {
-    private val root = Files.createDirectories(directory.toPath()).toRealPath()
-    private val manifest = root.resolve("plugin-installations.json")
+    private val root by lazy { Files.createDirectories(directory.toPath()).toRealPath() }
+    private val manifest get() = root.resolve("plugin-installations.json")
     private val mutex = Mutex()
     private val json = Json { prettyPrint = true }
 

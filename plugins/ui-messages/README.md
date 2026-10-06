@@ -10,3 +10,17 @@ The SDK and component library retain shared identity across independent JAR/APK 
 Transcript and message archives contain no shell, settings page or theme implementation.
 
 Verify with `gradlew.bat :plugins:ui-messages:desktopTest` and platform private loading tests.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.ui.conversation.transcript
+- provider.ui.message.user
+- provider.ui.message.assistant
+- provider.ui.message.error
+- provider.ui.tool.default
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

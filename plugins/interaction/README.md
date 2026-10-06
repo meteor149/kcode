@@ -71,3 +71,13 @@ retaining unchanged future identities and unknown document fields.
 
 This module also owns permission settings schemas, mutation validation, composer controls
 and the optional settings form. Implementation packages and persisted namespace IDs remain stable.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.interaction.platform
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

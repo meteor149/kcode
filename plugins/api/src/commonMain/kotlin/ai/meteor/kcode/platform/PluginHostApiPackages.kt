@@ -35,6 +35,8 @@ val PluginHostApiPackages: Set<String> = setOf(
     "ai.meteor.kcode.ui.resources",
     "ai.meteor.kcode.ui.component",
     "ai.meteor.kcode.ui.design",
+    "ai.meteor.kcode.ui.defaulttheme.KcodeDefaultThemeKt",
+    "ai.meteor.kcode.ui.defaulttheme.KcodeDefaultTypographyKt",
     "ai.meteor.kcode.ui.state.ConversationState",
     "kotlinx.io",
     "kotlinx.serialization",

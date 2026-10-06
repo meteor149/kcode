@@ -27,6 +27,7 @@ import ai.meteor.kcode.skill.SkillRuntime
 import ai.meteor.kcode.plugin.messagecodec.MessageCodecProviderPlugin
 import ai.meteor.kcode.plugin.markdown.MarkdownFeaturePlugin
 import ai.meteor.kcode.plugin.modelsettings.ModelSettingsProviderPlugin
+import ai.meteor.kcode.plugin.profileui.DefaultProfileUiPlugin
 import ai.meteor.kcode.plugin.localization.LocalizationFeaturePlugin
 import org.cordis.Plugin
 
@@ -107,6 +108,7 @@ fun nativePluginBundle(config: NativePluginServices): List<KcodePluginMount> = l
     if ("provider.ui.chat" !in config.packagedProviderIds) builtin("provider.ui.chat", DefaultChatUiPlugin, Unit, "uiSlots", "page.chat") else null,
     if ("provider.ui.conversation.standalone" !in config.packagedProviderIds) builtin("provider.ui.conversation.standalone", DefaultStandaloneConversationUiPlugin, Unit, "uiSlots", "conversation.standalone") else null,
     if ("provider.ui.settings" !in config.packagedProviderIds) builtin("provider.ui.settings", DefaultSettingsUiPlugin, Unit, "uiSlots", "page.settings") else null,
+    if ("provider.ui.settings.profiles" !in config.packagedProviderIds) builtin("provider.ui.settings.profiles", DefaultProfileUiPlugin, Unit, "uiSlots", "profiles") else null,
     if ("provider.ui.theme" !in config.packagedProviderIds) builtin("provider.ui.theme", DefaultThemeUiPlugin, Unit, "uiSlots", "theme") else null,
     if ("provider.ui.navigation.chat" !in config.packagedProviderIds) builtin("provider.ui.navigation.chat", DefaultChatNavigationPlugin, Unit, "uiSlots", "navigation") else null,
     if ("provider.ui.message.user" !in config.packagedProviderIds) builtin("provider.ui.message.user", DefaultUserMessagePresentationPlugin, Unit, "uiSlots", "message.renderer") else null,

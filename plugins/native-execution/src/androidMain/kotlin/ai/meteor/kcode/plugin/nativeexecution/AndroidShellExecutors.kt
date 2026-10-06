@@ -33,6 +33,7 @@ class AndroidShellExecutors(
     context: Context,
     private val modeProvider: suspend () -> ShellExecutionMode,
     private val codeOrigin: PluginCodeOrigin? = null,
+    private val workspaceRoot: Path? = null,
 ) : AgentShellExecutor {
     constructor(activity: Activity, modeProvider: suspend () -> ShellExecutionMode) : this(
         activity.applicationContext, modeProvider, null,
@@ -50,6 +51,7 @@ class AndroidShellExecutors(
     ): AgentShellExecutor.ExecutionResult {
         val request = normalizeAndroidShellCommandRequest(command, workingDirectory)
         val mode = modeProvider()
+        require(workspaceRoot == null || mode != ShellExecutionMode.Adb) { "ADB shell cannot access the Profile's app-private workspace" }
         return execute(mode, request)
     }
 
@@ -60,7 +62,7 @@ class AndroidShellExecutors(
         ShellExecutionMode.App -> executeLocal(
             commandLine = listOf("/system/bin/sh", "-c", request.command),
             workingDirectory = resolveAppWorkingDirectory(request.workingDirectory),
-            reportedWorkingDirectory = request.workingDirectory ?: appContext.filesDir.absolutePath,
+            reportedWorkingDirectory = request.workingDirectory ?: workspaceRoot?.toString() ?: appContext.filesDir.absolutePath,
             requestedMode = mode,
             identityLine = "uid=${Process.myUid()}",
         )
@@ -68,10 +70,10 @@ class AndroidShellExecutors(
             commandLine = listOf(
                 "su",
                 "-c",
-                rootVerifiedCommand(request.command, request.workingDirectory ?: ROOT_DEFAULT_DIRECTORY),
+                rootVerifiedCommand(request.command, scopedWorkingDirectory(request.workingDirectory) ?: ROOT_DEFAULT_DIRECTORY),
             ),
             workingDirectory = appContext.filesDir.toPath(),
-            reportedWorkingDirectory = request.workingDirectory ?: ROOT_DEFAULT_DIRECTORY,
+            reportedWorkingDirectory = scopedWorkingDirectory(request.workingDirectory) ?: ROOT_DEFAULT_DIRECTORY,
             requestedMode = mode,
             identityLine = "requiredUid=0",
         )
@@ -227,9 +229,9 @@ class AndroidShellExecutors(
 
     private fun resolveAppWorkingDirectory(requestedPath: String?): Path {
         val candidate = when {
-            requestedPath == null -> appContext.filesDir.toPath()
+            requestedPath == null -> workspaceRoot ?: appContext.filesDir.toPath()
             requestedPath == "/workspace" || requestedPath.startsWith("/workspace/") -> {
-                val root = appContext.filesDir.toPath().resolve("agent_workspace")
+                val root = workspaceRoot ?: appContext.filesDir.toPath().resolve("agent_workspace")
                 val relative = requestedPath.removePrefix("/workspace").trimStart('/')
                 relative.split('/').filter(String::isNotEmpty).fold(root, Path::resolve)
             }
@@ -238,6 +240,14 @@ class AndroidShellExecutors(
         val directory = candidate.toRealPath()
         require(Files.isDirectory(directory)) { "Working directory does not exist: $directory" }
         return directory
+    }
+
+    private fun scopedWorkingDirectory(requested: String?): String? {
+        val root = workspaceRoot ?: return requested
+        if (requested == null) return root.toString()
+        return if (requested == "/workspace" || requested.startsWith("/workspace/")) {
+            root.resolve(requested.removePrefix("/workspace").trimStart('/')).normalize().toString()
+        } else requested
     }
 
     private fun parsePrivilegedResult(output: String): AgentShellExecutor.ExecutionResult {

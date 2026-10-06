@@ -38,7 +38,11 @@ class ConversationOverlayLifecycleTest {
             lateinit var controller: AgentConversationOverlayController
             val runtime = waitForRuntime(scenario)
             scenario.onActivity { activity ->
-                val pluginRuntime = requireNotNull(runtime.owner)
+                val owner = requireNotNull(runtime.owner)
+                val pluginRuntime = if (owner is ai.meteor.kcode.plugin.KcodeProfileHost) {
+                    val product = owner.javaClass.getDeclaredField("current").apply { isAccessible = true }.get(owner) as KcodeAgentRuntime
+                    requireNotNull(product.owner)
+                } else owner
                 val contextField = pluginRuntime.javaClass.getDeclaredField("context").apply { isAccessible = true }
                 val pluginContext = contextField.get(pluginRuntime) as org.cordis.Context
                 val owned = runBlocking { pluginContext.require(ai.meteor.kcode.plugin.api.KcodeConversationOverlays.Key).current() }!!

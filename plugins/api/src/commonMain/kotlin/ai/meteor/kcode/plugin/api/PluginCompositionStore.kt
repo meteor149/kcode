@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin.api
 
 import ai.meteor.kcode.plugin.CurrentPluginApiVersion
+import ai.meteor.kcode.plugin.MinimumCompatiblePluginApiVersion
 import ai.meteor.kcode.plugin.DynamicPluginSpec
 import ai.meteor.kcode.plugin.PluginPackageInstallation
 import kotlinx.serialization.Serializable
@@ -132,7 +133,9 @@ data class StoredPluginConfiguration(val kind: String, val value: JsonElement = 
 
 fun DynamicPluginSpec.validatePluginApi() {
     validatePluginDescriptor()
-    require(apiVersion == CurrentPluginApiVersion) { "Plugin '$id' requires API $apiVersion; host API is $CurrentPluginApiVersion" }
+    require(apiVersion in MinimumCompatiblePluginApiVersion..CurrentPluginApiVersion) {
+        "Plugin '$id' requires API $apiVersion; host supports APIs $MinimumCompatiblePluginApiVersion..$CurrentPluginApiVersion"
+    }
 }
 
 private fun DynamicPluginSpec.validatePluginDescriptor() {

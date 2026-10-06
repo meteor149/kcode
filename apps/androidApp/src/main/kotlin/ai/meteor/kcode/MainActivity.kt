@@ -5,7 +5,8 @@ import android.content.IntentFilter
 import android.content.Intent
 import android.content.Context
 import android.content.BroadcastReceiver
-import ai.meteor.kcode.createAndroidKoogChatRuntime
+import ai.meteor.kcode.plugin.recovery.ProfileHostContent
+import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.api.AndroidPermissionRequestBroker
 import ai.meteor.kcode.plugin.api.AndroidConfirmationDialogHost
 import android.graphics.Color
@@ -13,6 +14,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.SystemBarStyle
@@ -27,7 +30,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
+    protected open val managementEntry: Boolean = false
     private val settingsChanged = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == SettingsChangedAction) recreate()
@@ -38,6 +42,7 @@ class MainActivity : ComponentActivity() {
         (application as KcodeApplication).hostActivities.current() ?: this
     }
     private lateinit var agentRuntime: KcodeAgentRuntime
+    private var profileHost: KcodeProfileHost? = null
     private val permissionBroker: AndroidPermissionRequestBroker = AndroidPermissionRequestBroker(
         context = { this },
         launch = { permission -> permissionLauncher.launch(arrayOf(permission)) },
@@ -73,28 +78,41 @@ class MainActivity : ComponentActivity() {
             var pendingRuntime: KcodeAgentRuntime? = null
             var adopted = false
             try {
-                val runtime = createAndroidKoogChatRuntime(
+                val host = createAndroidProfileHost(
+                    profileId = intent?.getStringExtra("profile"),
                     activity = this@MainActivity,
                     settingsBackedShell = true,
                     permissionHost = permissionBroker,
                     settingsBackedInteraction = true,
                     confirmationDialogs = confirmationDialogs,
+                    managementOnly = managementEntry,
                 )
+                val runtime = host.runtime
                 pendingRuntime = runtime
                 currentCoroutineContext().ensureActive()
+                profileHost = host
                 runtime.conversationOverlayController?.setHostForeground(
                     ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
                 )
                 agentRuntime = runtime
-                (application as KcodeApplication).attachContent(checkNotNull(agentRuntime.applicationContent))
+                if (!managementEntry) {
+                    (application as KcodeApplication).apply {
+                        registerPrimaryProfileHost(host)
+                        attachContent(checkNotNull(agentRuntime.applicationContent))
+                    }
+                }
                 adopted = true
                 ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
                 setContent {
-                    checkNotNull(agentRuntime.applicationContent).Render(
+                    val primaryHost by (application as KcodeApplication).primaryProfileHost.collectAsState()
+                    ProfileHostContent(host,
                         ApplicationHostOptions(
                             shellSettingsAvailable = true,
                             conversationSettingsControlsAvailable = true,
                         ),
+                        resources.configuration.locales[0].language,
+                        managementMode = managementEntry,
+                        managementClient = if (managementEntry) primaryHost?.profileCommands else null,
                     )
                 }
             } finally {
@@ -109,10 +127,19 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(settingsChanged)
         ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
         if (::agentRuntime.isInitialized) {
-            agentRuntime.applicationContent?.let { (application as KcodeApplication).detachContent(it) }
+            if (!managementEntry) {
+                (application as KcodeApplication).apply {
+                    profileHost?.let(::unregisterPrimaryProfileHost)
+                    agentRuntime.applicationContent?.let(::detachContent)
+                }
+            }
             (application as KcodeApplication).retireRuntime(agentRuntime)
         }
         super.onDestroy()
     }
 
+}
+
+class PluginManagerActivity : MainActivity() {
+    override val managementEntry: Boolean = true
 }

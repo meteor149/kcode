@@ -12,3 +12,13 @@ conditional on the exact job assigned by that lease, so delayed old cleanup cann
 newer job. Background and UI consumers require no presentation bridge to synchronize.
 
 Tests cover restore, standalone results, recent/floating lists, pinning, write failure consistency, provider disposal and dependency behavior. This is the history-backed projection seam; an append-only event log and model-visible context projection remain further session data-plane work.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.sessions.history
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

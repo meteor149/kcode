@@ -1,0 +1,435 @@
+{
+  "formatVersion": 1,
+  "fields": {
+    "config": {
+      "unit": {
+        "type": "null"
+      },
+      "json": {
+        "type": "object",
+        "properties": {
+          "colors": {
+            "type": "object",
+            "properties": {
+              "primary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onPrimary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "primaryContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onPrimaryContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "inversePrimary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "secondary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onSecondary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "secondaryContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onSecondaryContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "tertiary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onTertiary": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "tertiaryContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onTertiaryContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "background": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onBackground": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surface": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onSurface": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceVariant": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onSurfaceVariant": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceTint": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "inverseSurface": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "inverseOnSurface": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "error": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onError": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "errorContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "onErrorContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "outline": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "outlineVariant": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "scrim": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceBright": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceDim": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceContainer": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceContainerHigh": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceContainerHighest": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceContainerLow": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "surfaceContainerLowest": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              }
+            }
+          },
+          "extendedColors": {
+            "type": "object",
+            "properties": {
+              "translucentControl": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "panel": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "navigationSurface": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              },
+              "selectedSurface": {
+                "type": "string",
+                "maxLength": 9,
+                "format": "hex-color"
+              }
+            }
+          },
+          "spacing": {
+            "type": "object",
+            "properties": {
+              "hair": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "xs": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "sm": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "md": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "lg": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "xl": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "xxl": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              }
+            }
+          },
+          "radius": {
+            "type": "object",
+            "properties": {
+              "control": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "card": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "panel": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              }
+            }
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "touchTarget": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "compactControl": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "compactPermissionControl": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "compactModelControl": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "narrowModelControl": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "floatingShadowGutter": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              }
+            }
+          },
+          "glass": {
+            "type": "object",
+            "properties": {
+              "blurRadius": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 512.0
+              },
+              "tintOpacity": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              },
+              "noiseFactor": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            }
+          },
+          "overlay": {
+            "type": "object",
+            "properties": {
+              "floatingSize": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "floatingShadow": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleMinWidth": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleMaxWidth": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleMaxHeight": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleGap": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleMargin": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleShadow": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleShadowHorizontalPadding": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleShadowTopPadding": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "bubbleShadowBottomPadding": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "sheetMaxWidth": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "sheetMaxHeight": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "sheetCompactBreakpoint": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "sheetCompactRadius": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "sheetRadius": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              },
+              "sheetShadow": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 2048.0
+              }
+            }
+          },
+          "fontScale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 3
+          }
+        }
+      }
+    }
+  }
+}

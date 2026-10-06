@@ -57,3 +57,36 @@ The actual module JAR test covers cancellation/join, waiting for task cleanup, s
 runner rejection, reenabling, persisted restore, uninstall, and runtime-mutation/close
 reentry. Explicit `ApplicationHostOptions.generationRunner` overrides remain available
 for custom compositions, whose caller owns their runner and background policy.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- core.conversation-commands
+- provider.generation
+- provider.conversation-execution.history
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.
+
+
+The generation provider captures root-context `KcodeExecution`. A denied launch cancels without running the body or requesting background execution allowance. Admission and active-task accounting include structured child work and cleanup; finish or explicitly cancel/join work before composition changes.
+
+
+With SDK 76 the executor captures root `KcodeExecution` before allocating a conversation,
+reserving IDs, clearing failures, resolving command snapshots or writing history. Send and
+regenerate requests use provider-owned scopes; command/history cleanup remains admitted until
+it settles. `startResponse` is suspending and rejects closed admission before preparation.
+Generation handoff enters the same boundary even for a caller-supplied runner. A launch rejected
+before its body clears prepared flags and empty assistant projections. Responses retain the
+runner's independent lifetime when the requesting page withdraws; provider withdrawal and
+Profile cancellation still cancel and join them. Setup feedback does not start generation or
+request its background allowance.
+
+A retained runner that has been withdrawn may reject synchronously before returning a Job.
+The executor reports the failure, completes the response callback with false while retaining
+request admission through cleanup, and clears prepared generation flags/empty projections.
+Send and regeneration preserve existing history; response preparation returns false for an
+ordinary launch rejection and propagates cancellation after cleanup. Reenabling generation
+allows a fresh runner to serve the same conversation.

@@ -7,9 +7,8 @@ until a replacement is available.
 
 Native builds distribute this consumer as a dual-target `.kplugin`. The entry is
 `ai.meteor.kcode.plugin.feature.FilesystemToolConsumerPlugin` with `Unit` configuration.
-The implementation and its adapters remain private to the package. Native hosts load
-the package even when `profile.includeDefaults` is false, preserving platform feature
-composition; service availability still controls activation.
+The implementation and its adapters remain private to the package. Native Profiles select
+the package through their declared instance tree; service availability controls activation.
 
 Production-classpath JAR and real APK distribution tests prove host class absence and
 contribution removal/re-registration. The desktop fixture also withdraws/restores the
@@ -52,9 +51,25 @@ adapter with deterministic entry order and duplicate class rejection. The Androi
 includes that same private project explicitly, with shared SDK/framework code excluded.
 The host no longer links this module or its `capability-providers` implementation adapter
 into its production classpath; legacy adapter fixtures remain test dependencies. Default composition
-profiles retain filesystem as a native feature package, even when other defaults are disabled.
+profiles select filesystem through their declared bundles and operations.
 
 
 Provider and tool consumer share this source module while retaining their existing
 package IDs, entry points and independent enable states. Tool consumers inject SDK
 services; disabling a tool consumer does not close the provider or its workspace.
+
+The Android provider accepts legacy Unit configuration or an absolute machine workspace path.
+Profile hosts supply a scoped path for explicit workspace scopes. `/workspace` and skill IO
+use that root while real absolute file paths retain the existing OS access policy. Portable
+intent carries logical scope IDs rather than app-private paths.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- consumer.tools.filesystem
+- provider.fs.platform
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

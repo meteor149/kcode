@@ -36,6 +36,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "kcode"
+providers.gradleProperty("cordisSource").orNull?.let { includeBuild(it) }
 include(":apps:androidApp")
 include(":apps:desktopApp")
 include(":plugins:agent-loop")
@@ -87,6 +88,7 @@ include(":plugins:package-provider")
 include(":plugins:conversation-overlay")
 
 include(":plugins:settings")
+include(":plugins:profiles")
 
 include(":plugins:history-repository")
 
@@ -103,5 +105,8 @@ include(":plugins:localization")
 include(":plugins:markdown")
 
 include(":plugins:default-ui-api")
+include(":plugins:ui-profiles")
 
 include(":libraries:ui")
+include(":plugins:profile-recovery-ui")
+include(":plugins:profile-management-ui")

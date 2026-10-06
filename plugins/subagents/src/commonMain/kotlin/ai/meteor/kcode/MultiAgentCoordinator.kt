@@ -3,12 +3,14 @@ package ai.meteor.kcode
 import ai.meteor.kcode.chat.SubAgentEvent
 import ai.meteor.kcode.chat.SubAgentStatus
 import ai.meteor.kcode.chat.ToolUseEvent
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -23,6 +25,7 @@ class MultiAgentCoordinator(
     private val maxConcurrency: Int = DefaultMaxAgentConcurrency,
     private val runAgent: suspend (SubAgentLaunch) -> String,
     private val onEvent: suspend (SubAgentEvent) -> Unit = {},
+    private val admission: ExecutionAdmission? = null,
 ) : SubagentCoordinator {
     private val mutex = Mutex()
     private val agents = mutableMapOf(
@@ -180,9 +183,30 @@ class MultiAgentCoordinator(
             node.turns.joinToString("\n\n")
         }
         val job = scope.launch(start = CoroutineStart.LAZY) {
-            updateStatus(node.path, SubAgentStatus.Running)
+            var entered = false
+            suspend fun execute() {
+                entered = true
+                executeTurn(node, message, inheritedContext)
+            }
             try {
-                val output = runAgent(
+                if (admission == null) execute() else admission.run { coroutineScope { execute() } }
+            } catch (cancelled: CancellationException) {
+                if (!entered) withContext(NonCancellable) {
+                    // Rejected handoff never emits product callbacks or consumes a live slot.
+                    mutex.withLock { node.status = SubAgentStatus.Interrupted; node.currentTool = null }
+                }
+                throw cancelled
+            }
+        }
+        mutex.withLock { node.job = job }
+        job.start()
+    }
+
+    private suspend fun executeTurn(node: AgentNode, message: String, inheritedContext: String) {
+        try {
+            updateStatus(node.path, SubAgentStatus.Running)
+            val output = coroutineScope {
+                runAgent(
                     SubAgentLaunch(
                         path = node.path,
                         parentPath = node.parentPath,
@@ -191,19 +215,18 @@ class MultiAgentCoordinator(
                         inheritedContext = inheritedContext,
                     ),
                 )
-                mutex.withLock { node.turns += "Agent response: $output" }
-                updateStatus(node.path, SubAgentStatus.Completed, output = output)
-                enqueueMessage(node.parentPath, MailboxMessage("FINAL_ANSWER", node.path, output))
-            } catch (_: CancellationException) {
-                updateStatus(node.path, SubAgentStatus.Interrupted)
-            } catch (error: Throwable) {
-                val detail = error.message ?: error::class.simpleName.orEmpty()
-                updateStatus(node.path, SubAgentStatus.Failed, output = detail)
-                enqueueMessage(node.parentPath, MailboxMessage("FINAL_ANSWER", node.path, "Agent failed: $detail"))
             }
+            mutex.withLock { node.turns += "Agent response: $output" }
+            updateStatus(node.path, SubAgentStatus.Completed, output = output)
+            enqueueMessage(node.parentPath, MailboxMessage("FINAL_ANSWER", node.path, output))
+        } catch (cancelled: CancellationException) {
+            withContext(NonCancellable) { updateStatus(node.path, SubAgentStatus.Interrupted) }
+            throw cancelled
+        } catch (error: Throwable) {
+            val detail = error.message ?: error::class.simpleName.orEmpty()
+            updateStatus(node.path, SubAgentStatus.Failed, output = detail)
+            enqueueMessage(node.parentPath, MailboxMessage("FINAL_ANSWER", node.path, "Agent failed: $detail"))
         }
-        mutex.withLock { node.job = job }
-        job.start()
     }
 
     private suspend fun enqueueMessage(path: String, message: MailboxMessage) {

@@ -6,6 +6,8 @@ import ai.meteor.kcode.plugin.api.ApplicationRenderer
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
 import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -50,6 +52,8 @@ class AndroidDefaultApplicationUiPrivateLoadingTest {
             assertTrue(original.javaClass.name.startsWith("ai.meteor.kcode.plugin."))
             assertNotSame(ApplicationRenderer::class.java.classLoader, original.javaClass.classLoader)
             assertNotSame(DefaultApplicationUiPlugin::class.java.classLoader, original.javaClass.classLoader)
+            assertSame(ProfilePortableImport::class.java, original.javaClass.classLoader.loadClass(ProfilePortableImport::class.java.name))
+            assertSame(ProfilePortableExport::class.java, original.javaClass.classLoader.loadClass(ProfilePortableExport::class.java.name))
             for (providerId in listOf("provider.generation", "provider.sessions.history", "provider.history.platform")) {
                 runtime.pluginManager.setEnabled(providerId, false)
                 kotlin.test.assertEquals(ai.meteor.kcode.plugin.api.PluginState.Active,

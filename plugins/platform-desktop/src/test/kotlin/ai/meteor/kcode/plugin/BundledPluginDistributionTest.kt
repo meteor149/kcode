@@ -277,7 +277,7 @@ object BundledDesktopProcess {
                 }
             }
         }
-        check(desktopEntries == 58) { "Unexpected desktop variant count: $desktopEntries" }
+        check(desktopEntries == 59) { "Unexpected desktop variant count: $desktopEntries" }
         FilePluginCompositionStore(directory).save(ai.meteor.kcode.plugin.api.PluginCompositionSnapshot(
             builtinsEnabled = mapOf("provider.llm.koog" to true, "provider.llm.koog.DeepSeek" to false),
         ))
@@ -295,7 +295,8 @@ object BundledDesktopProcess {
         }
         try {
             val packages = runtime.pluginManager.installed()
-            check(packages.size == 58)
+            check(packages.size == 59)
+            check(packages.any { it.id == "provider.ui.settings.profiles" })
             check(packages.none { it.id == "policy.notifications.permission.android" })
             check(packages.none { it.id == "provider.generation.foreground.android" })
             check(packages.none { it.id in setOf("consumer.tools.android-shell", "consumer.tools.ubuntu-shell") })

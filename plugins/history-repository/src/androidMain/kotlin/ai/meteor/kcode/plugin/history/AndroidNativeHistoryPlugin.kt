@@ -8,14 +8,17 @@ import org.cordis.EffectScope
 import org.cordis.Plugin
 
 /** Allocates and releases native storage for each activation. */
-class AndroidNativeHistoryPlugin : Plugin<Unit> {
-    override val config = ConfigValidator<Unit> { it }
+class AndroidNativeHistoryPlugin : Plugin<Any?> {
+    override val config = ConfigValidator<Any?> { value ->
+        require(value == Unit || value is String && java.io.File(value).isAbsolute) { "Invalid Android history path" }
+        value
+    }
     override val name = "android-native-history"
 
-    override suspend fun apply(ctx: Context, config: Unit, effect: EffectScope) {
+    override suspend fun apply(ctx: Context, config: Any?, effect: EffectScope) {
         val inputs = requireNotNull(PluginHostInputs.current(ctx, effect) as? AndroidPluginHostInputs) {
             "Android history requires native host inputs"
         }
-        FactoryHistoryProviderPlugin.apply(ctx, androidHistoryRepositoryFactory(inputs.applicationContext()), effect)
+        FactoryHistoryProviderPlugin.apply(ctx, androidHistoryRepositoryFactory(inputs.applicationContext(), config as? String), effect)
     }
 }

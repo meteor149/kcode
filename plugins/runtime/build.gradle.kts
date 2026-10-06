@@ -19,8 +19,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation("org.jetbrains.kotlinx:atomicfu:0.26.1")
             implementation(compose.runtime)
             api(project(":plugins:api"))
+            api(project(":plugins:profiles"))
             implementation(project(":plugins:bundle-native"))
             implementation(project(":plugins:inventory"))
             implementation(project(":plugins:installation-store"))

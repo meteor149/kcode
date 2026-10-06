@@ -55,6 +55,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":plugins:bundle-native"))
     implementation("androidx.core:core-ktx:1.15.0")
     androidTestImplementation(project(":plugins:test-support"))
     androidTestImplementation(project(":plugins:default-ui-api"))
@@ -91,6 +92,8 @@ dependencies {
     androidTestImplementation(project(":plugins:ui-pages"))
     androidTestImplementation(project(":plugins:ui-messages"))
     androidTestImplementation(project(":plugins:ui-theme"))
+    androidTestImplementation(project(":plugins:ui-profiles"))
+    androidTestImplementation(project(":plugins:profile-recovery-ui"))
     androidTestImplementation(project(":plugins:ui-shell"))
     androidTestImplementation(project(":plugins:ui-contributions"))
     androidTestImplementation(project(":plugins:default-ui-bridge"))

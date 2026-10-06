@@ -17,6 +17,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":plugins:api"))
+            api(project(":plugins:profiles"))
             implementation(project(":plugins:default-ui-api"))
             implementation(project(":libraries:ui"))
             implementation(project(":plugins:installation-store"))
@@ -29,6 +30,7 @@ kotlin {
             compileOnly(project(":plugins:ui-messages"))
             compileOnly(project(":plugins:ui-theme"))
             compileOnly(project(":plugins:ui-shell"))
+            compileOnly(project(":plugins:ui-profiles"))
             compileOnly(project(":plugins:ui-contributions"))
             compileOnly(project(":plugins:default-ui-bridge"))
             compileOnly(project(":plugins:markdown"))

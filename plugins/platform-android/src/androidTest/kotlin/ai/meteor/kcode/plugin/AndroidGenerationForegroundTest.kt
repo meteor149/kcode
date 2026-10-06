@@ -126,11 +126,23 @@ class AndroidGenerationForegroundTest {
             response.join()
             assertEquals(1, initial.activeTasks.value)
             assertEquals(1, host.acquired.get())
-            first.pluginManager.setEnabled("generation.foreground", false)
+            assertFailsWith<IllegalStateException> { first.pluginManager.setEnabled("generation.foreground", false) }
+            initial.cancelAll()
+            concurrent.join()
             awaitLeases(0)
-            assertTrue(concurrent.isActive)
+            first.pluginManager.setEnabled("generation.foreground", false)
+            val unobserved = withContext(Dispatchers.Main.immediate) { initial.launch { awaitCancellation() } }
+            assertTrue(unobserved.isActive)
+            assertEquals(0, host.active.size)
+            initial.cancelAll()
+            unobserved.join()
             first.pluginManager.setEnabled("generation.foreground", true)
+            val resumed = withContext(Dispatchers.Main.immediate) { initial.launch { awaitCancellation() } }
             awaitLeases(1)
+            assertFailsWith<IllegalStateException> { first.pluginManager.setEnabled("provider.generation", false) }
+            initial.cancelAll()
+            resumed.join()
+            awaitLeases(0)
             first.pluginManager.replace(DynamicPluginSpec(
                 id = "provider.generation", version = "apk-next", artifactPath = File(directory, "first/generation.apk").path,
                 sha256 = packageFileSha256(apk),

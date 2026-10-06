@@ -17,3 +17,13 @@ Format round trips live here; consumer tests inject alternate formats to prove d
 
 This is the current row-content codec, not the reserved Harness session event-log implementation.
 Changing formats requires the replacement provider to implement compatibility with stored data.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.message-codec.envelope
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

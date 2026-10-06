@@ -107,3 +107,17 @@ fields remain preserved, and disabling a provider retains its credentials and sa
 
 Registry withdrawal closes and joins every retained adapter/client, rejects stale registry calls,
 and awaits concurrent closes. Provider support callbacks execute outside registry locks.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- core.llm
+- provider.model-settings.catalog
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.
+
+provider.model-settings.catalog also permits JSON minimumTemperature and maximumTemperature
+as finite numbers in 0..2. ConfigValidator additionally requires minimum <= maximum.

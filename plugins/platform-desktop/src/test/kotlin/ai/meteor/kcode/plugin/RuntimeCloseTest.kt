@@ -31,7 +31,7 @@ class RuntimeCloseTest {
             entered.complete(Unit)
             release.await()
             assertFailsWith<IllegalStateException> { runtime.modelCatalog() }
-            runtime.diagnostics()
+            assertFailsWith<IllegalStateException> { runtime.diagnostics() }
             cleanups.incrementAndGet()
         })
         val first = async(Dispatchers.Default) { runtime.close() }

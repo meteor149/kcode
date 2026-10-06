@@ -8,8 +8,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import ai.meteor.kcode.settings.AppliedSettingsUpdate
 import ai.meteor.kcode.settings.SettingsUpdate
 import ai.meteor.kcode.model.ModelCatalogSnapshot
+import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.api.AndroidHostActivities
 import android.app.Application
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class KcodeApplication : Application() {
     internal lateinit var hostActivities: AndroidHostActivities
@@ -22,6 +25,12 @@ class KcodeApplication : Application() {
 
     private val retirement = AndroidRuntimeRetirement()
     internal fun retireRuntime(runtime: KcodeAgentRuntime) = retirement.retire(AgentRuntimeOwner(runtime::close))
+    private val mutablePrimaryProfileHost = MutableStateFlow<KcodeProfileHost?>(null)
+    internal val primaryProfileHost: StateFlow<KcodeProfileHost?> = mutablePrimaryProfileHost.asStateFlow()
+    internal fun registerPrimaryProfileHost(host: KcodeProfileHost) { mutablePrimaryProfileHost.value = host }
+    internal fun unregisterPrimaryProfileHost(host: KcodeProfileHost) {
+        if (mutablePrimaryProfileHost.value === host) mutablePrimaryProfileHost.value = null
+    }
     private class ContentSlot(val value: ApplicationContent)
     private val content = MutableStateFlow<ContentSlot?>(null)
     internal fun attachContent(value: ApplicationContent) { content.value = ContentSlot(value) }

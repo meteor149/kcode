@@ -20,6 +20,18 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:taskAffinity="${applicationId}.main"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".PluginManagerActivity"
+            android:exported="true"
+            android:label="@string/plugin_manager_launcher_label"
+            android:taskAffinity="${applicationId}.plugin_manager"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

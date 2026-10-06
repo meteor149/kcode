@@ -1,0 +1,80 @@
+package ai.meteor.kcode.plugin.api.profiles
+
+import ai.meteor.kcode.platform.PluginHostApiPackages
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+
+class ProfileContractTest {
+    @Test
+    fun portableRequestsUseTheSharedBoundaryAndCannotCarryAnApprovalCallback() {
+        val request = ProfilePortableImport("{}", "copy", 7)
+        assertEquals("copy", request.displayName)
+        val export = ProfilePortableExport(ProfileTarget("copy"), 7)
+        assertEquals(7L, export.expectedRevision)
+        for (type in listOf(ProfilePortableImport::class, ProfilePortableExport::class)) {
+            assertTrue(type.qualifiedName!!.startsWith("ai.meteor.kcode.plugin.api.profiles."))
+        }
+        assertTrue("ai.meteor.kcode.plugin.api" in PluginHostApiPackages)
+    }
+    @Test
+    fun moveAndPositionedInsertHaveStableWireTypesAndLegacyInsertDefaults() {
+        val definition = ProfileDefinition(id = "ordering", patches = listOf(
+            ProfileOperation.Insert(listOf(ProfileEntry("leaf", "module")), "group", -1),
+            ProfileOperation.Move("leaf", position = 0),
+        ))
+        val encoded = Json.encodeToString(ProfileDefinition.serializer(), definition)
+        assertTrue(encoded.contains("\"type\":\"move\""))
+        assertEquals(definition, Json.decodeFromString(ProfileDefinition.serializer(), encoded))
+        val legacy = Json.decodeFromString(ProfileOperation.serializer(), """{"type":"insert","entries":[],"parent":"group"}""")
+        assertEquals(ProfileOperation.Insert(emptyList(), "group"), legacy)
+        val root = Json.decodeFromString(ProfileOperation.serializer(), """{"type":"move","target":"leaf","parent":null}""")
+        assertEquals(ProfileOperation.Move("leaf"), root)
+    }
+
+    @Test
+    fun activationTargetsDistinguishSavedDraftAndHistoricalIntent() {
+        ProfileTarget("coding").validate()
+        ProfileTarget("coding", ProfileSource.Draft).validate()
+        ProfileTarget("coding", ProfileSource.History, 1).validate()
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("coding", ProfileSource.History).validate() }
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("coding", ProfileSource.Draft, 1).validate() }
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("coding", ProfileSource.History, 0).validate() }
+        assertFailsWith<IllegalArgumentException> { ProfileTarget("../coding").validate() }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    @Test
+    fun omittedConfigurationAndExplicitNullHaveDistinctWireMeaningAndCompleteDescriptors() {
+        val json = Json { encodeDefaults = true }
+        val absent = ProfileEntry("entry", "package")
+        val explicit = absent.copy(config = JsonNull)
+        val encodedAbsent = json.encodeToString(ProfileEntry.serializer(), absent)
+        val encodedExplicit = json.encodeToString(ProfileEntry.serializer(), explicit)
+        assertTrue(!encodedAbsent.contains("\"config\""))
+        assertTrue(encodedExplicit.contains("\"config\":null"))
+        assertNull(json.decodeFromString(ProfileEntry.serializer(), encodedAbsent).config)
+        assertEquals(JsonNull, json.decodeFromString(ProfileEntry.serializer(), encodedExplicit).config)
+        val descriptor = ProfileEntry.serializer().descriptor
+        assertEquals("ai.meteor.kcode.plugin.api.profiles.ProfileEntry", descriptor.serialName)
+        assertTrue(descriptor.getElementIndex("config") >= 0)
+        assertTrue(descriptor.isElementOptional(descriptor.getElementIndex("config")))
+    }
+
+    @Test
+    fun contextChangesRoundTripAndAllPortableTypesUseTheSharedSdkNamespace() {
+        val definition = ProfileDefinition(id = "coding", patches = listOf(
+            ProfileOperation.Context("group", inject = emptyMap(), intercept = mapOf("answer" to JsonPrimitive(false)),
+                isolate = mapOf("answer" to "realm")),
+        ))
+        assertEquals(definition, Json.decodeFromString(ProfileDefinition.serializer(), Json.encodeToString(ProfileDefinition.serializer(), definition)))
+        assertTrue("ai.meteor.kcode.plugin.api" in PluginHostApiPackages)
+        assertEquals(emptyMap(), (definition.patches.single() as ProfileOperation.Context).inject)
+    }
+}

@@ -23,3 +23,15 @@ registration withdrawal/recovery. The desktop test decodes private tool argument
 the shared serializer, invokes a harmless echo command through the real native executor,
 rejects a retained tool after disable and executes through the restored consumer. Android
 activation checks do not establish Shizuku/root permission or execute an Ubuntu command.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- consumer.tools.shell
+- consumer.tools.android-shell
+- consumer.tools.ubuntu-shell
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

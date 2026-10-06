@@ -1,0 +1,199 @@
+package ai.meteor.kcode.plugin.recovery
+
+import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
+import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
+import ai.meteor.kcode.plugin.api.profiles.ProfileCommand
+import ai.meteor.kcode.plugin.api.profiles.ProfileCommandPhase
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
+import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
+import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
+import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
+import ai.meteor.kcode.plugin.api.profiles.ProfileSource
+import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRecoveryReview
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairMode
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairRequest
+import ai.meteor.kcode.plugin.profiles.ProfileRepositoryRepairResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.serialization.json.Json
+
+internal data class RecoveryState(
+    val catalogue: ProfileCatalogue? = null,
+    val target: ProfileTarget? = null,
+    val document: String = "",
+    val savedDocument: String = "",
+    val revision: Long? = null,
+    val busy: Boolean = false,
+    val failure: String? = null,
+    val history: List<ProfileCompositionState> = emptyList(),
+    val historyFailure: String? = null,
+    val repositoryRecovery: ProfileRepositoryRecoveryReview? = null,
+    val evidenceId: String? = null,
+) {
+    val dirty: Boolean get() = document != savedDocument
+}
+
+/** Host metadata remains usable without product services or a loadable module tree. */
+internal class RecoverySession(
+    private val client: ProfileManagementClient,
+    private val inspectRepository: suspend () -> ProfileRepositoryRecoveryReview? = { null },
+    private val repairRepository: (suspend (ProfileRepositoryRepairRequest) -> ProfileRepositoryRepairResult)? = null,
+    private val prepareMetadata: suspend () -> Unit = {},
+) {
+    private val mutex = Mutex()
+    private val json = Json { prettyPrint = true; encodeDefaults = true }
+    private val mutableState = MutableStateFlow(RecoveryState())
+    val state = mutableState.asStateFlow()
+
+    fun edit(document: String) {
+        if (!state.value.busy && state.value.target != null && state.value.target?.source != ProfileSource.History) {
+            mutableState.value = state.value.copy(document = document, failure = null)
+        }
+    }
+
+    fun discard() {
+        if (!state.value.busy) mutableState.value = state.value.copy(document = state.value.savedDocument, failure = null)
+    }
+
+    suspend fun refresh() = operation {
+        val catalogue = try { client.catalogue() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            val review = inspectRepository()
+            mutableState.value = state.value.copy(catalogue = null, repositoryRecovery = review,
+                failure = error.message ?: error.toString())
+            return@operation
+        }
+        refresh(catalogue)
+    }
+
+    private suspend fun refresh(catalogue: ProfileCatalogue) {
+        val preparationFailure = try { prepareMetadata(); null }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { error.message ?: error.toString() }
+        // A broken definition must not hide other saved choices or host templates.
+        mutableState.value = state.value.copy(catalogue = catalogue, repositoryRecovery = null, failure = preparationFailure)
+        if (state.value.dirty) {
+            // Updating catalogue metadata cannot authorize overwriting intervening edits.
+            mutableState.value = state.value.copy(catalogue = catalogue)
+        } else {
+            val target = state.value.target?.takeIf { value -> catalogue.profiles.any { it.id == value.profileId } }
+                ?: catalogue.profiles.firstOrNull { it.id == catalogue.selectedProfileId }
+                    ?.let { ProfileTarget(it.id, if (it.generation == null) ProfileSource.Draft else ProfileSource.Committed) }
+                ?: catalogue.profiles.firstOrNull()
+                    ?.let { ProfileTarget(it.id, if (it.generation == null) ProfileSource.Draft else ProfileSource.Committed) }
+            if (target == null) mutableState.value = RecoveryState(catalogue = catalogue, revision = catalogue.revision, busy = true,
+                failure = preparationFailure, evidenceId = state.value.evidenceId)
+            else load(catalogue, target)
+        }
+    }
+
+    suspend fun repair(mode: ProfileRepositoryRepairMode) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val review = requireNotNull(state.value.repositoryRecovery) { "missing" }
+        require(mode != ProfileRepositoryRepairMode.RestoreCheckpoint || review.checkpoint != null) { "missing" }
+        val result = checkNotNull(repairRepository) { "Repository recovery is unavailable" }(
+            ProfileRepositoryRepairRequest(review.fingerprint, mode),
+        )
+        mutableState.value = RecoveryState(busy = true, evidenceId = result.evidenceId)
+        refresh(result.catalogue)
+    }
+
+    suspend fun select(target: ProfileTarget) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val catalogue = client.catalogue()
+        mutableState.value = state.value.copy(catalogue = catalogue)
+        load(catalogue, target)
+    }
+
+    private suspend fun load(catalogue: ProfileCatalogue, target: ProfileTarget) {
+        target.validate()
+        var historyFailure: String? = null
+        val history = try { client.history(target.profileId) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            if (target.source != ProfileSource.Draft) throw error
+            historyFailure = error.message ?: error.toString()
+            emptyList()
+        }
+        val definition = when (target.source) {
+            ProfileSource.Draft -> requireNotNull(client.draft(target.profileId)) { "missing" }
+            ProfileSource.Committed -> {
+                val generation = requireNotNull(catalogue.profiles.single { it.id == target.profileId }.generation) { "missing" }
+                history.single { it.generation == generation }.definition
+            }
+            ProfileSource.History -> history.single { it.generation == target.generation }.definition
+        }
+        check(client.catalogue().revision == catalogue.revision) { "changed" }
+        val document = json.encodeToString(ProfileDefinition.serializer(), definition)
+        mutableState.value = state.value.copy(catalogue = catalogue, target = target, document = document,
+            savedDocument = document, revision = catalogue.revision, history = history, historyFailure = historyFailure)
+    }
+
+    suspend fun createFromTemplate(template: ProfileDefinition, id: String) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val definition = template.copy(id = id, displayName = id, dataScope = ProfileDataScope(workspace = "profile"))
+        definition.validate()
+        val catalogue = client.writeDraft(ProfileDraftWrite(definition, requireNotNull(state.value.catalogue).revision, createOnly = true))
+        load(catalogue, ProfileTarget(id, ProfileSource.Draft))
+    }
+
+    suspend fun copySelected(id: String) = operation {
+        check(!state.value.dirty) { "unsaved" }
+        val current = state.value
+        val catalogue = client.clone(ProfileCloneRequest(requireNotNull(current.target), id,
+            requireNotNull(current.revision)))
+        load(catalogue, ProfileTarget(id, ProfileSource.Draft))
+    }
+
+    suspend fun save() = operation { saveDocument() }
+
+    private suspend fun saveDocument() {
+        val current = state.value
+        check(current.target?.source != ProfileSource.History) { "history_readonly" }
+        val definition = json.decodeFromString(ProfileDefinition.serializer(), current.document)
+        definition.validate()
+        require(definition.id == current.target?.profileId) { "identity" }
+        val catalogue = client.writeDraft(ProfileDraftWrite(definition, requireNotNull(current.revision)))
+        val document = json.encodeToString(ProfileDefinition.serializer(), definition)
+        mutableState.value = current.copy(catalogue = catalogue, target = ProfileTarget(definition.id, ProfileSource.Draft),
+            document = document, savedDocument = document, revision = catalogue.revision)
+    }
+
+    suspend fun activate(saveFirst: Boolean = false) = operation {
+        if (saveFirst && state.value.dirty) saveDocument() else check(!state.value.dirty) { "unsaved" }
+        val current = state.value
+        val handle = client.submit(ProfileCommand.Activate(ProfileActivationRequest(
+            requireNotNull(current.target), requireNotNull(current.revision),
+        )))
+        // Cancellation of this observer must not cancel the host-owned accepted command.
+        val result = handle.await()
+        if (result.phase != ProfileCommandPhase.Succeeded) {
+            mutableState.value = state.value.copy(failure = result.failure ?: "activation_failed")
+        }
+    }
+
+    private suspend fun operation(block: suspend () -> Unit) {
+        if (!mutex.tryLock()) return
+        mutableState.value = state.value.copy(busy = true, failure = null)
+        try {
+            val phase = client.state.first { it.phase != ProfileManagementPhase.Starting && it.phase != ProfileManagementPhase.Transitioning }.phase
+            check(phase != ProfileManagementPhase.Closed) { "closed" }
+            block()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            mutableState.value = state.value.copy(failure = error.message ?: error.toString())
+        } finally {
+            mutableState.value = state.value.copy(busy = false)
+            mutex.unlock()
+        }
+    }
+}

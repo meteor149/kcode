@@ -96,3 +96,15 @@ The host must still declare its permissions; an imported package cannot grant th
 API 59 localized channel/foreground configuration uses the neutral catalog language
 projection on committed settings. Language schema/defaults stay in the localization feature;
 notification providers do not read fixed settings fields or decode feature JSON.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.notifications.platform
+- policy.notifications.permission.android
+- provider.generation.foreground.android
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

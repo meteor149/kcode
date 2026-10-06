@@ -83,7 +83,16 @@ class FormalUiContributionPrivateLoadingTest {
                     }
                 }
                 if (id == "provider.ui.theme") {
-                    for (part in listOf("DefaultPaletteKt", "DefaultTypographyKt", "DefaultDesignTokensKt")) {
+                    for (part in listOf("KcodeDefaultThemeKt", "KcodeDefaultTypographyKt")) {
+                        val sharedDefaults = Class.forName(
+                            "ai.meteor.kcode.ui.defaulttheme.$part",
+                            true,
+                            uiImplementation(renderer).javaClass.classLoader,
+                        )
+                        assertSame(ai.meteor.kcode.ui.component.KcodeIconAsset::class.java.classLoader, sharedDefaults.classLoader, part)
+                        assertNotSame(uiImplementation(renderer).javaClass.classLoader, sharedDefaults.classLoader, part)
+                    }
+                    for (part in listOf("DefaultPaletteKt", "DefaultThemeRendererKt", "DefaultTypographyKt", "DefaultDesignTokensKt")) {
                         val implementation = Class.forName("ai.meteor.kcode.plugin.pages.ui.design.$part", false, uiImplementation(renderer).javaClass.classLoader)
                         assertSame(uiImplementation(renderer).javaClass.classLoader, implementation.classLoader, part)
                     }
