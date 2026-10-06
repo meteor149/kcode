@@ -57,3 +57,15 @@ The actual module JAR test covers cancellation/join, waiting for task cleanup, s
 runner rejection, reenabling, persisted restore, uninstall, and runtime-mutation/close
 reentry. Explicit `ApplicationHostOptions.generationRunner` overrides remain available
 for custom compositions, whose caller owns their runner and background policy.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- core.conversation-commands
+- provider.generation
+- provider.conversation-execution.history
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

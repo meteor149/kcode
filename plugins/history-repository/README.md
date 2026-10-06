@@ -53,3 +53,13 @@ Desktop configures the existing `~/.kcode/history.db` path; Android uses the exi
 outside immutable plugin generations. The shared SQLite/JNI peer was introduced in SDK API 39 (current API 43);
 the schema remains version 6. Explicit caller inputs bind through an SDK-only bridge
 with owned operation cancellation and resource closure, without importing Room.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.history.platform
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

@@ -1197,3 +1197,23 @@ APK and exported frozen intent. Logs: `profile-archive-validation.log`,
 This proves the native backend and this cross-host transfer. Complete archive management/UI
 commands, selected-file OS picker acceptance, additional feature export schemas, early startup
 recovery and the full execution-admission audit remain outstanding. The overall goal remains active.
+
+## Shipped configuration export declarations
+
+The subsequent API 74 archive-command phase wired neutral SDK commands, owned export leases
+and native picker actions (see profile-archives.md); selected-file OS acceptance remains distinct.
+All 66 shipped provider releases now own explicit Unit export declarations. Model settings
+permit finite minimumTemperature/maximumTemperature JSON numbers in 0..2; subagents permit
+integer maxConcurrency in 1..64. The private export dialect supports bounded numbers and
+integers without changing SDK 74. Feature ConfigValidator still owns relational/runtime rules.
+Unknown codecs/properties, machine bindings and credentials gain no implicit permission.
+
+Concentrated validation passed 74 Profiles desktop tests and two actual native JAR schema
+tests, zero failures/errors/skips, plus both application builds and the Android test APK.
+Two physical Android schema tests passed (`OK (2 tests)`, instrumentation code -1), including
+the full default APK composition with explicit Unit and numeric overrides. Both platforms
+preserved layers and authority on export, and rejected unknown fields hidden beneath a later
+valid override. Desktop additionally compared complete archive and JSON frozen intent.
+Logs: profile-default-export-validation.log and profile-default-export-device-validation.log
+(ignored local evidence). This does not establish native selected-file roundtrip acceptance,
+all feature JSON configurations, early startup recovery or the full background admission audit.

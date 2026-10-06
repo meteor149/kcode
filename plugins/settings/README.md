@@ -101,3 +101,14 @@ the complete update before any transform/save. Values and field lists are reques
 snapshots; feature callbacks cannot mutate the caller's admitted envelope. This command
 extensibility does not yet remove the legacy fixed storage fields or route UI differences
 through feature validation; those migrations remain in the remediation plan.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.settings.platform
+- consumer.settings.commands
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

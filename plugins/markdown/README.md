@@ -20,3 +20,13 @@ pure and own no IO, threads or coroutines. Remembered UI state retires with its 
 
 The default parser preserves the existing lightweight Markdown subset. This is not a full
 CommonMark parser; replacements may provide a different grammar through the same contract.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.markdown
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

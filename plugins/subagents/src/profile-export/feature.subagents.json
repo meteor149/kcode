@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "fields": {
+    "config": {
+      "unit": { "type": "null" },
+      "json": {
+        "type": "object",
+        "properties": {
+          "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 64 }
+        }
+      }
+    }
+  }
+}

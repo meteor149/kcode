@@ -75,3 +75,14 @@ rendering or user permission consent.
 The desktop/device presentation tests compile their shared scenario from `src/uiTestFixtures`.
 Android instrumentation does not depend across source-set trees on `commonTest`; its test
 runtime dependencies are explicit. Shared ownership tests remain in the regular common tree.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- core.conversation-overlays
+- provider.conversation-overlay.platform
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

@@ -103,3 +103,13 @@ Withdrawal rejects subsequent edits of this namespace while preserving its saved
 other active settings owners remain usable. Validation is independent of settings-command
 and default UI availability. Feature rules validate types and newly selected values while
 retaining unchanged future identities and unknown document fields.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.localization
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

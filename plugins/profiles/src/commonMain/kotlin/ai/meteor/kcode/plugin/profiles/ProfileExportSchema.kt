@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.doubleOrNull
 
 /** Selected by the host from the exact frozen generation, before reviewing any values. */
 fun interface ProfileExportReviewFactory {
@@ -44,9 +45,17 @@ class ProfileExportSchema private constructor(
         val required: Set<String> = emptySet(),
         val additionalProperties: Rule? = null,
         val maxLength: Int? = null,
+        val minimum: Double? = null,
+        val maximum: Double? = null,
     ) {
         fun validate(depth: Int = 0) {
-            require(depth <= 16 && type in setOf("null", "boolean", "integer", "enum", "object", "string")) { "Invalid export schema rule" }
+            require(depth <= 16 && type in setOf("null", "boolean", "integer", "number", "enum", "object", "string")) { "Invalid export schema rule" }
+            require(if (type == "number" || type == "integer" && (minimum != null || maximum != null)) {
+                minimum != null && maximum != null && minimum.isFinite() && maximum.isFinite() && minimum <= maximum
+            } else minimum == null && maximum == null) { "Invalid export number bounds" }
+            require(type != "integer" || minimum == null ||
+                minimum >= -9007199254740991.0 && requireNotNull(maximum) <= 9007199254740991.0 &&
+                minimum % 1.0 == 0.0 && requireNotNull(maximum) % 1.0 == 0.0) { "Invalid export integer bounds" }
             require(if (type == "enum") !values.isNullOrEmpty() && values.distinct().size == values.size else values == null) {
                 "Invalid export schema enumeration"
             }
@@ -60,7 +69,12 @@ class ProfileExportSchema private constructor(
         fun accepts(value: JsonElement): Boolean = when (type) {
             "null" -> value == JsonNull
             "boolean" -> value is JsonPrimitive && !value.isString && value.booleanOrNull != null
-            "integer" -> value is JsonPrimitive && !value.isString && value.longOrNull != null
+            "integer" -> value is JsonPrimitive && !value.isString && value.longOrNull?.let { number ->
+                minimum == null || number in minimum.toLong()..requireNotNull(maximum).toLong()
+            } == true
+            "number" -> value is JsonPrimitive && !value.isString && value.doubleOrNull?.let { number ->
+                number.isFinite() && number in requireNotNull(minimum)..requireNotNull(maximum)
+            } == true
             "enum" -> value in values.orEmpty()
             "string" -> value is JsonPrimitive && value.isString && value.content.length <= requireNotNull(maxLength)
             "object" -> value is JsonObject && required.all { it in value } && value.all { (key, item) ->

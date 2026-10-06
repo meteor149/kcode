@@ -11,3 +11,13 @@ Default UI reads the committed catalog; this provider requires no UI services.
 The native distribution publishes independent desktop JAR and Android APK variants.
 
 Verify with `gradlew.bat :plugins:llm:deepseek:desktopTest` and private package loading tests.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.llm.koog.DeepSeek
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

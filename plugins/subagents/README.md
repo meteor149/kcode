@@ -39,3 +39,15 @@ and shared API 48 anchor identity, renders actual presenter preparation, checks 
 completed updates hide stale running states, and tests optional UI and whole-feature
 withdrawal/recovery. The corresponding real APK test source compiles; source compilation
 is not device execution evidence.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.subagents
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.
+
+feature.subagents also permits JSON maxConcurrency as an integer in 1..64.

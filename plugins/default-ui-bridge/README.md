@@ -11,3 +11,13 @@ calls, revokes all contributions and waits for cleanup, including concurrent clo
 Withdrawing this bridge preserves unrelated neutral projections used by alternative roots.
 
 Verify with `gradlew.bat :plugins:default-ui-bridge:desktopTest` and platform JAR/APK tests.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- core.ui-slots
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

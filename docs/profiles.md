@@ -351,8 +351,13 @@ requests until host binding; plugin apply must not wait for readiness. Native ho
 `profileCommands` for metadata/activation in RecoveryRequired when no product tree is available.
 The initial default catalogue UI consumes this service through the optional ui-profiles package.
 
-External bundle import, credential-safe export and
-rendered management acceptance and independent recovery UI remain incomplete.
+External Bundle and complete Profile archive exchange are implemented; see
+[Bundle archives](profile-bundle-archives.md) and [Profile archives](profile-archives.md).
+Export reviews the exact locked package's feature-owned schema, including overridden values
+in preserved layers. Shipped providers permit explicit Unit configuration; model temperature
+bounds and subagent concurrency additionally permit bounded JSON fields. Unknown fields,
+credentials and machine paths have no implicit export permission. Broader feature JSON
+schemas and complete native selected-file management acceptance remain outstanding.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
 actual package startup, switching, persistence, rollback and restart. Android tests on
 an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, App and Ubuntu

@@ -62,3 +62,14 @@ The Android provider accepts legacy Unit configuration or an absolute machine wo
 Profile hosts supply a scoped path for explicit workspace scopes. `/workspace` and skill IO
 use that root while real absolute file paths retain the existing OS access policy. Portable
 intent carries logical scope IDs rather than app-private paths.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- consumer.tools.filesystem
+- provider.fs.platform
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

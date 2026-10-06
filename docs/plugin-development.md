@@ -59,10 +59,17 @@ historical values. Missing schema does not authorize opaque configuration.
 ```
 
 Field keys are `config`, `inject/<service>` or `intercept/<service>`, followed by explicit
-configuration codec rules. Supported rules are null, boolean, integer, enum (`values`),
+configuration codec rules. Supported rules are null, boolean, integer, number, enum (`values`),
 string (`maxLength`, 1..65536) and object. Objects deny undeclared properties unless their
 `additionalProperties` explicitly contains another rule. Nested rules are limited to 16
 levels. Unknown schema members/types and invalid required properties reject export.
+Numbers require finite inclusive `minimum` and `maximum` bounds. Integers may declare both
+bounds; bounded integer endpoints must be whole numbers within the exact JSON integer range
+(-9007199254740991..9007199254740991). Numeric strings are never coerced.
+Every shipped provider declares explicit Unit export permission in its owning module.
+Model temperature bounds and subagent concurrency additionally declare bounded JSON fields;
+other JSON configuration requires its own feature declaration. Implicit defaults do not
+contain opaque configuration and do not need to be converted to explicit Unit patches.
 This is export permission, not a replacement for ConfigValidator. Do not declare credentials,
 host paths or arbitrary implementation graphs portable. Feature fields that contain text
 are the author's responsibility; the host does not infer confidentiality from key names.

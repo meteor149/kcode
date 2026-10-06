@@ -12,6 +12,26 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class ProfileExportSchemaTest {
+    @Test
+    fun boundedNumbersPreserveDecimalsAndDenyStringsOverflowAndInvalidBounds() {
+        val schema = parse("""{"formatVersion":1,"fields":{"config":{"json":{"type":"object","properties":{"temperature":{"type":"number","minimum":0,"maximum":2},"concurrency":{"type":"integer","minimum":1,"maximum":64}}}}}}""")
+        val value = Json.parseToJsonElement("""{"temperature":0.25,"concurrency":64}""")
+        assertEquals(value, schema.review(input(value)))
+        for (text in listOf("""{"temperature":"0.25"}""", """{"temperature":2.01}""",
+            """{"temperature":-0.01}""", """{"temperature":1e400}""",
+            """{"concurrency":1.5}""", """{"concurrency":0}""", """{"concurrency":65}""",
+            """{"temperature":true}""", """{"concurrency":9223372036854775807}""")) {
+            assertNull(schema.review(input(Json.parseToJsonElement(text))))
+        }
+        for (rule in listOf("""{"type":"number"}""", """{"type":"number","minimum":2,"maximum":1}""",
+            """{"type":"number","minimum":0,"maximum":1e400}""",
+            """{"type":"string","maxLength":4,"minimum":0,"maximum":1}""",
+            """{"type":"integer","minimum":1.5,"maximum":3}""",
+            """{"type":"integer","minimum":0,"maximum":1e20}""")) {
+            assertFailsWith<IllegalArgumentException> { parse("""{"formatVersion":1,"fields":{"config":{"json":$rule}}}""") }
+        }
+    }
+
     private fun parse(text: String) = ProfileExportSchema.decode(Json.parseToJsonElement(text))
     private fun input(value: JsonElement, kind: String = "json", field: String = "config") =
         ProfileExportValue("feature", "entry", kind, "profile", field, value)

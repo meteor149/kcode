@@ -33,3 +33,13 @@ coordinators and sessions retained from a disposed generation reject further acc
 re-enabling or replacing history creates a fresh generation. Tests block repository
 operations, verify teardown waits for their cancellation cleanup, and verify stale
 handles both directly and through Cordis dependency rebinding.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- feature.goal
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

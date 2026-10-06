@@ -220,3 +220,15 @@ and alias as well. App-private paths are not accessible to ADB UID worlds: scope
 currently reject before authorization rather than reuse global state. App-UID instrumentation
 does not prove actual Root/Shizuku execution. Older locked Unit-only releases require an explicit
 code upgrade before accepting the new scoped configuration; hosts do not silently upgrade locks.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.shell.platform
+- policy.shell-mode.platform
+- provider.shell.ubuntu
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

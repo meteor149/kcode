@@ -22,3 +22,15 @@ on their concrete providers. UI defaults are compiled from `src/main/ui-texts`.
 
 Verify with `gradlew.bat :plugins:ui-pages:desktopTest` and real JAR/APK rendering tests in the
 platform modules.
+
+## Profile export policy
+
+The release-owned schemas under "src/profile-export" declare portable configuration for:
+
+- provider.ui.chat
+- provider.ui.conversation.standalone
+- provider.ui.navigation.chat
+
+Explicit Unit configuration is portable. Other codecs and undeclared fields are rejected
+unless the corresponding schema explicitly permits them. Machine bindings and persisted
+credentials are outside these configuration declarations.

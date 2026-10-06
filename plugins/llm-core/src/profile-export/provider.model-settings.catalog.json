@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "fields": {
+    "config": {
+      "unit": { "type": "null" },
+      "json": {
+        "type": "object",
+        "properties": {
+          "minimumTemperature": { "type": "number", "minimum": 0, "maximum": 2 },
+          "maximumTemperature": { "type": "number", "minimum": 0, "maximum": 2 }
+        }
+      }
+    }
+  }
+}
