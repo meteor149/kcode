@@ -57,6 +57,12 @@ interface ProfileManagementClient {
     suspend fun preview(target: ProfileTarget): ProfilePreview
     suspend fun history(id: String): List<ProfileCompositionState>
     suspend fun modules(): List<ProfileModuleSummary>
+    /** Metadata-only publication; activation requires a separate explicit command. */
+    suspend fun importPortable(request: ProfilePortableImport): ProfileCatalogue =
+        error("This client does not support portable Profile import")
+    /** Host feature policies review opaque configuration; callers cannot bypass that review. */
+    suspend fun exportPortable(request: ProfilePortableExport): String =
+        error("This client does not support portable Profile export")
     /** Acceptance is synchronous; this does not await withdrawal of the submitting plugin. */
     fun submit(command: ProfileCommand): ProfileCommandHandle
 }

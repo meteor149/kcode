@@ -1,5 +1,14 @@
 # Profiles
 
+SDK 72 exposes portable exchange through `KcodeProfiles.client.importPortable` and
+`exportPortable`. Requests carry the catalogue revision. Import creates a new draft, retains
+frozen bundle/package intent and resets data scopes; it never activates code. Export accepts
+committed/historical targets and requires host feature-schema review for opaque values. The
+default host policy denies explicit configuration values; consumers cannot bypass it. These
+metadata calls work in Ready and RecoveryRequired, follow bridge operation ownership and reject
+calls after withdrawal. Activation remains a separate host-owned command. Native file dialogs,
+feature-schema export policies and real portable archive acceptance are still being integrated.
+
 Profiles describe plugin instances as portable data. Compilation applies ordered bundle
 layers over an empty root, then Profile operations, machine configuration and launch
 overrides. Compilation and runtime Include use the same Cordis composition semantics.

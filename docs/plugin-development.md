@@ -37,6 +37,16 @@ change composition. Acceptance is synchronous and execution belongs to the host,
 from a provider callback cannot unload that provider within its own owned call. Observe the
 handle from owned UI/background work; observer cancellation does not cancel accepted work.
 Use `handle.cancel()` for explicit cancellation. After publication the result remains Succeeded.
+
+SDK 72 metadata exchange uses `client.importPortable(ProfilePortableImport(document, newId,
+revision))` and `client.exportPortable(ProfilePortableExport(target, revision))`. Read the
+catalogue revision first. Import creates an independent draft and must be activated separately;
+it does not resolve packages or allocate providers. Export accepts committed/history targets,
+keeps frozen bundles and excludes machine deployment state. Explicit opaque values are denied
+unless the host has vetted feature-schema review; a consumer cannot provide its own approval.
+Observe normal bridge operation ownership for these suspend calls, and do not expect an export
+request to activate or snapshot unsaved editor changes. Native file UI remains separate from
+the neutral data/command contract.
 Initial apply sees Starting; defer queries/submission until readiness without blocking apply.
 Withdrawn clients reject new requests, but accepted handles remain observable across switches.
 

@@ -61,9 +61,14 @@ class ProfileManagement(
         return catalogue()
     }
 
-    suspend fun exportPortable(target: ProfileTarget, review: ProfileExportReview = ProfileExportReview { _, _, _ -> null }): String {
+    suspend fun exportPortable(
+        target: ProfileTarget,
+        review: ProfileExportReview = ProfileExportReview { _, _, _ -> null },
+        expectedRevision: Long? = null,
+    ): String {
         require(target.source != ProfileSource.Draft) { "Activate a draft before exporting its verified package recipe" }
         val revision = repository.state().revision
+        require(expectedRevision == null || expectedRevision == revision) { "Profile repository changed; refresh before exporting" }
         val source = requireNotNull(loadProfileIntent(repository, target).base)
         val text = ProfilePortableExporter(review).export(source)
         check(repository.state().revision == revision) { "Profile repository changed; refresh before exporting" }

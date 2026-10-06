@@ -1,5 +1,35 @@
 # Profile implementation
 
+## Neutral portable exchange client phase
+
+Plugin API 72 adds `ProfilePortableImport`/`ProfilePortableExport` and neutral management client
+methods. The request types remain in the existing shared Profile namespace; the portable JSON
+envelope and review implementation remain private. Client import publishes a new revision-checked
+draft with isolated data scopes. Export requires the requested catalogue revision and reads only
+committed/historical recipes. Consumers cannot supply approval callbacks; explicit unknown
+configuration still fails closed until feature-schema review policies are integrated.
+
+Both methods use the host's metadata admission boundary, including RecoveryRequired. The injected
+bridge owns its suspend calls, cancels/joins them on withdrawal and rejects stale clients. Import
+never changes the running composition; explicit activation retains the existing host-owned queue
+and command handles. Tests verify import/activation/export through a real Cordis management bridge,
+stale revision rejection, withdrawn clients and metadata import after failed runtime restoration.
+
+Concentrated validation passed 110 local tests: 44 SDK, 50 Profiles, 8 command gateway, 6 native
+startup recovery, 1 actual private default JAR and 1 shipped archive/production-classpath case.
+Desktop compilation, Android application assembly and instrumentation APK assembly passed.
+SDK/framework ABI fingerprints and shipped archives were regenerated for 72. Actual JAR and APK
+loaders retain host identity for both new request classes. The shipped archive test initially had
+two stale assertions for 58 packages; these now require 59 and explicitly require the Profile UI
+package. Its existing Active checks remain intact; the optional settings child waits for management
+without making the packaged root inactive. The failed initial package run is not passing evidence.
+
+Five cases passed on the physical ARM64/API 36 device (`OK (5 tests)`, completion -1): private APK
+identity/loading, private Profile settings rendering and three recovery cases. These exercise the
+rebuilt SDK 72 boundary, not file import/export UI or real portable package exchange. Native file
+operations/UI, feature-schema policies, verified external Bundle import, corrupt-authority recovery,
+desktop rendering and the execution-admission/resource-ownership audit remain outstanding.
+
 ## Imported frozen draft phase
 
 Host-side management can now import a portable document into a create-only, revision-checked

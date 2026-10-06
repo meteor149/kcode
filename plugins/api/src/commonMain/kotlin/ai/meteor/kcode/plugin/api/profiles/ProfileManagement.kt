@@ -39,6 +39,17 @@ data class ProfileDraftWrite(
     val createOnly: Boolean = false,
 )
 
+/** Import publishes a new draft only; the exchange document carries no local archive addresses. */
+data class ProfilePortableImport(
+    val document: String,
+    val id: String,
+    val expectedRevision: Long,
+    val displayName: String = id,
+)
+
+/** Only committed or historical recipes have verified package locks suitable for export. */
+data class ProfilePortableExport(val target: ProfileTarget, val expectedRevision: Long)
+
 /** Copy composition/code intent into a new draft; business data is never copied. */
 data class ProfileCloneRequest(
     val source: ProfileTarget,

@@ -80,8 +80,10 @@ archive hashes and complete version/variant/ABI/dependency identities, and canno
 same-name builtin. Edited intent may add new packages through ordinary verified offers or remove
 unused locked packages. Frozen Bundle contents survive installed catalogue changes. Host-side
 export accepts committed/historical targets and rejects unverified legacy local descriptors.
-Neutral SDK commands, feature review policies, file dialogs and real package exchange acceptance
-still need integration; these host-side methods are not yet exposed by the management client.
+SDK 72 exposes this boundary through neutral client requests with catalogue revisions. The host
+metadata admission boundary works in Ready/RecoveryRequired; a plugin bridge owns its calls and
+rejects them after withdrawal. Clients cannot supply export approval callbacks. Feature review
+policies, file dialogs and real portable package exchange acceptance still need integration.
 
 `ProfileResolver` collects only referenced package releases and their dependency archive
 hints. The existing native package resolver verifies the actual graph, platform variant and

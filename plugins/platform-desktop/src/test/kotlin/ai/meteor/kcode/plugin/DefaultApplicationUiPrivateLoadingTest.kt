@@ -4,6 +4,8 @@ import ai.meteor.kcode.plugin.api.ApplicationRenderer
 import ai.meteor.kcode.plugin.api.InteractionPolicy
 import ai.meteor.kcode.plugin.api.KcodeApplicationUi
 import ai.meteor.kcode.plugin.api.PluginDescriptor
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import java.io.File
 import java.security.MessageDigest
@@ -47,6 +49,8 @@ class DefaultApplicationUiPrivateLoadingTest {
             assertTrue(original.javaClass.name.startsWith("ai.meteor.kcode.plugin."))
             assertNotSame(ApplicationRenderer::class.java.classLoader, original.javaClass.classLoader)
             assertNotSame(DefaultApplicationUiPlugin::class.java.classLoader, original.javaClass.classLoader)
+            assertSame(ProfilePortableImport::class.java, original.javaClass.classLoader.loadClass(ProfilePortableImport::class.java.name))
+            assertSame(ProfilePortableExport::class.java, original.javaClass.classLoader.loadClass(ProfilePortableExport::class.java.name))
             // A host renderer is not a deployment configuration for the default entry.
             assertFailsWith<IllegalStateException> {
                 runtime.pluginManager.replace(spec.copy(version = "host-object", config = DefaultApplicationRenderer))

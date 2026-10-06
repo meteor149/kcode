@@ -19,6 +19,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileManagementState
 import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSummary
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CancellationException
@@ -131,6 +133,8 @@ class ProfileCommandGateway : ProfileManagementClient {
     override suspend fun preview(target: ProfileTarget) = backend().pluginManager.previewProfile(target)
     override suspend fun history(id: String) = backend().pluginManager.profileHistory(id)
     override suspend fun modules() = backend().profileModules()
+    override suspend fun importPortable(request: ProfilePortableImport) = backend().importPortableProfile(request)
+    override suspend fun exportPortable(request: ProfilePortableExport) = backend().exportPortableProfile(request)
 
     override fun submit(command: ProfileCommand): ProfileCommandHandle {
         val detached = detach(command)
@@ -212,6 +216,8 @@ class ProfileCommandGateway : ProfileManagementClient {
                 override suspend fun preview(target: ProfileTarget): ai.meteor.kcode.plugin.api.profiles.ProfilePreview { requireLive(); return operations.run { this@ProfileCommandGateway.preview(target) } }
                 override suspend fun history(id: String): List<ProfileCompositionState> { requireLive(); return operations.run { this@ProfileCommandGateway.history(id) } }
                 override suspend fun modules(): List<ProfileModuleSummary> { requireLive(); return operations.run { this@ProfileCommandGateway.modules() } }
+                override suspend fun importPortable(request: ProfilePortableImport): ProfileCatalogue { requireLive(); return operations.run { this@ProfileCommandGateway.importPortable(request) } }
+                override suspend fun exportPortable(request: ProfilePortableExport): String { requireLive(); return operations.run { this@ProfileCommandGateway.exportPortable(request) } }
                 override fun submit(command: ProfileCommand): ProfileCommandHandle = synchronized(liveLock) {
                     check(live) { "Profile management bridge was withdrawn" }
                     this@ProfileCommandGateway.submit(command)

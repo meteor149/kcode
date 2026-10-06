@@ -9,6 +9,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileDraftWrite
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.AgentConversationOverlayController
 import ai.meteor.kcode.AgentConversationOverlayTurn
@@ -303,6 +305,14 @@ class KcodeProfileHost(
 
     suspend fun profileModules() = call {
         checkNotNull(it.owner as? KcodePluginRuntime) { "Native module catalogue is unavailable" }.profileModuleCatalogue()
+    }
+
+    suspend fun importPortableProfile(request: ProfilePortableImport): ProfileCatalogue = metadata {
+        it.importPortable(request.document, request.id, request.displayName, request.expectedRevision).withActive()
+    }
+
+    suspend fun exportPortableProfile(request: ProfilePortableExport): String = metadata {
+        it.exportPortable(request.target, expectedRevision = request.expectedRevision)
     }
     @Composable
     override fun Render(options: ApplicationHostOptions) {

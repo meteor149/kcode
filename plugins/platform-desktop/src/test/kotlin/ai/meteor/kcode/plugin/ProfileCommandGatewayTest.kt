@@ -20,6 +20,9 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileManagementPhase
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
+import ai.meteor.kcode.plugin.profiles.ProfilePortableExporter
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.CommittedProfileGeneration
 import ai.meteor.kcode.plugin.profiles.ProfileGenerationRepository
@@ -49,6 +52,66 @@ import org.cordis.plugin
 
 class ProfileCommandGatewayTest {
     private val configuration = ModelConfiguration(ModelProvider("test"), "test", "", 0.0)
+
+    private val portable = """{"definition":{"id":"portable","patches":[{"type":"insert","entries":[{"id":"agent","packageId":"example.agent"},{"id":"listener","packageId":"example.listener"}]}]},"bundles":[],"lock":{}}"""
+
+    @Test
+    fun neutralExchangePublishesOnlyDraftAndSurvivesThroughExplicitActivation(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val oldClient = fixture.client
+            val revision = oldClient.catalogue().revision
+            val catalogue = oldClient.importPortable(ProfilePortableImport(portable, "imported", revision))
+            assertEquals("old", catalogue.activeProfileId)
+            assertEquals("old", fixture.repository.selected())
+            assertEquals(1L, fixture.repository.loadCommitted("old")!!.generation)
+            assertEquals(null, fixture.repository.loadCommitted("imported"))
+            assertEquals("old", host.chatService.reply(configuration, emptyList(), "test"))
+            assertFailsWith<IllegalArgumentException> {
+                oldClient.importPortable(ProfilePortableImport(portable, "imported", catalogue.revision))
+            }
+            assertFailsWith<IllegalArgumentException> {
+                oldClient.exportPortable(ProfilePortableExport(ProfileTarget("imported", ProfileSource.Draft), catalogue.revision))
+            }
+            val ticket = oldClient.submit(ProfileCommand.Activate(ProfileActivationRequest(
+                ProfileTarget("imported", ProfileSource.Draft), catalogue.revision)))
+            assertEquals(ProfileCommandPhase.Succeeded, withTimeout(10_000) { ticket.await() }.phase)
+            assertEquals("default", host.chatService.reply(configuration, emptyList(), "test"))
+            val current = fixture.client.catalogue()
+            val export = ProfilePortableExport(ProfileTarget("imported"), current.revision)
+            val text = fixture.client.exportPortable(export)
+            assertEquals("imported", ProfilePortableExporter.decode(text).definition.id)
+            assertEquals(current, fixture.client.catalogue())
+            assertFailsWith<IllegalStateException> { oldClient.exportPortable(export) }
+            assertFailsWith<IllegalStateException> { oldClient.importPortable(ProfilePortableImport(portable, "stale", current.revision)) }
+            assertFailsWith<IllegalArgumentException> {
+                fixture.client.exportPortable(export.copy(expectedRevision = revision))
+            }
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun unknownConfigurationCannotBeApprovedByAnExportCallerAndRecoveryRetainsImport(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            assertFailsWith<IllegalArgumentException> {
+                fixture.client.exportPortable(ProfilePortableExport(ProfileTarget("old"), fixture.repository.state().revision))
+            }
+            fixture.fail += setOf("old", "target")
+            val ticket = fixture.client.submit(ProfileCommand.Activate(ProfileActivationRequest(
+                ProfileTarget("target", ProfileSource.Draft), fixture.repository.state().revision)))
+            assertEquals(ProfileCommandPhase.Failed, withTimeout(10_000) { ticket.await() }.phase)
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            val client = host.profileCommands!!
+            val catalogue = client.importPortable(ProfilePortableImport(portable, "repair", client.catalogue().revision))
+            assertEquals(null, catalogue.activeProfileId)
+            assertEquals("old", fixture.repository.selected())
+            assertEquals("repair", client.draft("repair")!!.id)
+            assertEquals(null, fixture.repository.loadCommitted("repair"))
+        } finally { fixture.close() }
+    }
 
     @Test
     fun activationCancellationAtPublicationReportsCommittedSuccess(): Unit = runBlocking {

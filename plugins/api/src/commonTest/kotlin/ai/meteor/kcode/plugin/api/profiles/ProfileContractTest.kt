@@ -13,6 +13,17 @@ import kotlin.test.assertFailsWith
 
 class ProfileContractTest {
     @Test
+    fun portableRequestsUseTheSharedBoundaryAndCannotCarryAnApprovalCallback() {
+        val request = ProfilePortableImport("{}", "copy", 7)
+        assertEquals("copy", request.displayName)
+        val export = ProfilePortableExport(ProfileTarget("copy"), 7)
+        assertEquals(7L, export.expectedRevision)
+        for (type in listOf(ProfilePortableImport::class, ProfilePortableExport::class)) {
+            assertTrue(type.qualifiedName!!.startsWith("ai.meteor.kcode.plugin.api.profiles."))
+        }
+        assertTrue("ai.meteor.kcode.plugin.api" in PluginHostApiPackages)
+    }
+    @Test
     fun moveAndPositionedInsertHaveStableWireTypesAndLegacyInsertDefaults() {
         val definition = ProfileDefinition(id = "ordering", patches = listOf(
             ProfileOperation.Insert(listOf(ProfileEntry("leaf", "module")), "group", -1),
