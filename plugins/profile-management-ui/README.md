@@ -13,9 +13,10 @@ loads the selected plugin tree. On Android, when the main activity is already al
 host-owned client receives manager commands so activation follows the active runtime's
 cancellation and publication lifecycle.
 
-Edits publish revision-checked drafts. Package imports are verified Bundle imports that create
-a draft Profile; users preview and explicitly activate it. Enable, disable, configure, add, and
-remove operations use the same Profile compiler and activation transaction. Removing an
+Edits publish revision-checked drafts. Single `.kplugin` imports add verified packages to the
+selected editable draft; Bundle imports create a new draft Profile. Users preview and explicitly
+activate either kind of import. Enable, disable, configure, add, and remove operations use the
+same Profile compiler and activation transaction. Removing an
 instance does not erase a package archive that may still be referenced by another Profile or
 historical generation.
 
