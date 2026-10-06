@@ -1,5 +1,10 @@
 # Native plugin package provider
 
+`cachedRelease(sha256)` locates a locked native archive by its validated digest. It does
+not verify or execute the file; ordinary resolver verification remains mandatory. First
+imported Profile drafts use this locator to preserve frozen code selection independently
+of source paths or newer bundled offers. See [Bundle archives](../../docs/profile-bundle-archives.md).
+
 `NativePluginPackageResolver.profileExportSchema(spec)` returns the selected release's
 `ai.meteor.kcode.profile-export` manifest data only after deployment, artifact, SDK and
 descriptor verification. It uses the immutable generation in the stored specification;

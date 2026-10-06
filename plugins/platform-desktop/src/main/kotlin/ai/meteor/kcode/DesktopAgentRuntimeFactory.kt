@@ -3,6 +3,7 @@ package ai.meteor.kcode
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
+import ai.meteor.kcode.plugin.profiles.profileImportedOffers
 
 import ai.meteor.kcode.plugin.packages.NativePluginPackagesPlugin
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
@@ -97,9 +98,11 @@ suspend fun createDesktopProfileHost(
         .filter { it.id != "provider.history.platform" || historyRepository == null }
     suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
         val bundles = nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList())
+        val resolver = NativePluginPackageResolver(pluginDirectory, desktopPackageHost())
+        val offers = profileImportedOffers(repository, requestedId ?: repository.selected() ?: "native", request?.target,
+            bundled.associate { it.id to ProfilePackageOffer(it.release) }, resolver::cachedRelease)
         return prepareNativeProfileActivation(repository, nativeProfileTemplate(bundles, profile.includeDefaults), bundles,
-            NativePluginPackageResolver(pluginDirectory, desktopPackageHost()),
-            bundled.associate { it.id to ProfilePackageOffer(it.release) }, catalogue,
+            resolver, offers, catalogue,
             legacyStore, NativeBuiltinAliases + NativeProfileInfrastructureAliases, requestedId,
             machineOverrides = { definition, frozen ->
                 fun dataFile(scope: String, filename: String): String {

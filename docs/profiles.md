@@ -1,5 +1,11 @@
 # Profiles
 
+Native hosts can prepare [external Bundle archives](profile-bundle-archives.md) as ordered
+data layers with verified embedded native packages. Preparation returns frozen metadata;
+revision-checked import creates a draft and activation remains separate. First imported
+drafts prefer their locked code digest in the native cache over newer offers. The binary
+Bundle command and native file-picker integration remain outstanding.
+
 SDK 72 exposes portable exchange through `KcodeProfiles.client.importPortable` and
 `exportPortable`. Requests carry the catalogue revision. Import creates a new draft, retains
 frozen bundle/package intent and resets data scopes; it never activates code. Export accepts

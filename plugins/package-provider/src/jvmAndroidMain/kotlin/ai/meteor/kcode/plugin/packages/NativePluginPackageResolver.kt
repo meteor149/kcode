@@ -132,6 +132,12 @@ class NativePluginPackageResolver(
     suspend fun profileExportSchema(spec: DynamicPluginSpec): JsonElement? =
         verifiedManifest(spec).extensions["ai.meteor.kcode.profile-export"]
 
+    /** A locator only: resolve/verify must still establish release, platform and ABI identities. */
+    fun cachedRelease(sha256: String): PluginPackageImport {
+        require(sha256.matches(Regex("[a-f0-9]{64}"))) { "Invalid cached package identity" }
+        return PluginPackageImport(root.resolve(sha256).resolve("release.kplugin").toString(), sha256)
+    }
+
     private suspend fun verifiedManifest(spec: DynamicPluginSpec): PluginPackageManifest = withContext(Dispatchers.IO) {
         val lock = requireNotNull(spec.packageInstallation) { "Missing package installation" }
         require(!Files.isSymbolicLink(root)) { "Invalid package root" }

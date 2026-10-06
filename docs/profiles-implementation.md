@@ -1,5 +1,43 @@
 # Profile implementation
 
+## External Bundle preparation phase
+
+`ProfileBundleArchive` implements pure-data Cordis archives with the
+`ai.meteor.kcode.profile-bundle` extension and `kcode-profile-bundle` data runtime.
+Outer container validation is reused from Cordis; the native resolver separately verifies
+embedded JAR/APK packages, actual dependencies and SDK/ABI identities. Ordered Bundle
+inputs share identical code releases, reject conflicting declarations and compile through
+the existing Profile compiler before staging native code. Preparation creates no provider,
+draft or committed metadata. Its returned portable document enters the existing create-only
+revision-checked import boundary; activation remains separate.
+
+Both native factories resolve first imported drafts through locked SHA-256 cache locators,
+ahead of newer bundled offers. The resolver still verifies those files and imported-lock
+checks remain in force. Committed/history offers retain their existing semantics. Frozen
+definitions and code caches allow startup without original archive paths or outer Bundle
+deployments. Bundle metadata does not create a fake code module in the lock. SDK API is 72.
+
+Concentrated verification passed 81 local cases (64 Profiles and 17 native Desktop cases),
+Desktop application compilation, Android application assembly and instrumentation APK
+assembly. The real JAR case combines two layers sharing Localization code, verifies the
+second layer's configuration, deletes both input archives and outer deployment, starts
+twice and exports frozen intent through the verified feature schema. Invalid digest,
+mismatched code version, unknown metadata version and duplicate Bundle inputs are rejected.
+An additional case proves imported digest precedence over newer offers without rewriting
+committed/history offers.
+
+Physical ARM64/API 36 verification passed seven related cases before the ordered-input
+refactor, including actual Bundle APK preparation/restart, export schema, private default
+UI loading, Profile UI and recovery. The latest test APK then passed the isolated Bundle
+APK case again with `OK (1 test)` and `INSTRUMENTATION_CODE: -1`. Both native builds and
+the local ordered-input test cover the final implementation. Device proof currently covers
+a single Bundle; it does not establish the binary picker or archive export user flow.
+
+Neutral binary Bundle commands, native picker integration, archive publishing/export tools,
+cross-platform portable-lock adaptation and other feature export schemas remain open.
+Pre-catalogue/corrupt-authority recovery and the execution/resource ownership audit also
+remain outstanding. See the [archive guide](profile-bundle-archives.md) for format details.
+
 ## Verified feature export schema phase
 
 Native hosts now select export reviews from the exact generation's verified package
