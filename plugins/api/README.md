@@ -1,8 +1,11 @@
 # Plugin SDK
 
+Plugin API 79 shares the default palette and typography helpers from the UI library with isolated plugins.
+Theme implementation classes remain private; the host exports name only those two file facades.
+
 Plugin API 78 adds `ProfilePluginImport` and `ProfileManagementClient.importPlugin` for
 verified native package imports into existing Profile drafts. Plugin API 77 remains binary compatible with API 76. Native package variants can declare host
-API compatibility ranges (currently 76–78), similar to DeepSeek Harness peer dependency ranges.
+API compatibility ranges (currently 76–79), similar to DeepSeek Harness peer dependency ranges.
 Current-API packages must match the host SDK fingerprint; older API packages in a declared range
 keep their fingerprint bound to the release lock, and the publisher owns testing that compatibility.
 Raise the minimum only when a reviewed API change requires it.
@@ -298,7 +301,7 @@ consumers/providers against ABI 76. Existing exported chat/SDK namespaces cover 
 no new implementation package is shared. The default executor also admits send, command
 feedback, setup feedback and regeneration before their state/persistence side effects.
 
-The current host API is 78 with a supported range of 76–78. Native package variants declare
+The current host API is 79 with a supported range of 76–79. Native package variants declare
 the host API range they support, in addition to the API used to compile them. Legacy manifests
-without that range use the host’s reviewed supported API window (currently 76–78). Publishers must test every API
+without that range use the host’s reviewed supported API window (currently 76–79). Publishers must test every API
 they claim to support; current-API packages still require the host's shared SDK ABI fingerprint.

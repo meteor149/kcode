@@ -147,7 +147,7 @@ When changing a shared public ABI, review exports and package tests, update
 `CurrentPluginApiVersion`, regenerate package metadata and document the change. This applies
 to callbacks, default methods and configuration types as well as service keys.
 
-The current host API is 77 and its supported plugin range is 76–77. Native package variants
+The current host API is 79 and its supported plugin range is 76–79. Native package variants
 declare `pluginApi` (the API used to compile the package) and `pluginApiRange` (the host API
 range the package supports), similar to DeepSeek Harness peer dependency ranges. The host
 requires its current API to fall inside that declared range. This does not relax the SDK runtime

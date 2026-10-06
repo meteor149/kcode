@@ -90,7 +90,7 @@ packages when the publisher declares and validates that range, without republish
 package for each host API increment.
 
 Legacy manifests without `pluginApiRange` use the host’s reviewed supported API window
-(currently 76–78). Explicit publisher ranges remain authoritative and are never widened. New releases should always include the range. A matching
+(currently 76–79). Explicit publisher ranges remain authoritative and are never widened. New releases should always include the range. A matching
 API number alone does not establish compiler or binary compatibility.
 
 ## Native payloads
