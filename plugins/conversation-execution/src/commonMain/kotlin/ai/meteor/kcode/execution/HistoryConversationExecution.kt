@@ -358,7 +358,7 @@ private fun prepareStreamingResponse(target: ConversationState, assistantId: Lon
     target.messages += ChatMessage(assistantId, MessageRole.Assistant, "")
 }
 
-private fun launchStreamingResponse(
+private suspend fun launchStreamingResponse(
     target: ConversationState,
     assistantId: Long,
     configuration: ModelConfiguration,
@@ -378,7 +378,7 @@ private fun launchStreamingResponse(
     onResponseFinished: suspend (completed: Boolean) -> Unit = {},
 ): Job {
     var started = false
-    val job = generationRunner.launch {
+    val response: suspend CoroutineScope.() -> Unit = {
         started = true
         var responseFinished = false
         var requestPrepared = false
@@ -477,6 +477,29 @@ private fun launchStreamingResponse(
                 target.runningJob = null
             }
         }
+    }
+    val job = try {
+        generationRunner.launch(response)
+    } catch (error: Throwable) {
+        // A withdrawn runner can reject synchronously, before the body owns cleanup.
+        if (started) throw error
+        try {
+            if (error !is CancellationException) target.recordFailure(error, configuration, failureMessages)
+            withContext(NonCancellable) {
+                try {
+                    onResponseFinished(false)
+                } catch (failure: Throwable) {
+                    target.recordFailure(failure, configuration, failureMessages)
+                }
+            }
+        } finally {
+            target.messages.removeAll { it.id == assistantId && it.role == MessageRole.Assistant && it.content.isEmpty() }
+            target.isGenerating = false
+            target.isAwaitingFirstToken = false
+            target.runningJob = null
+        }
+        if (error is CancellationException) throw error
+        return Job().apply { cancel() }
     }
     target.runningJob = job.takeUnless { it.isCompleted }
     job.invokeOnCompletion {

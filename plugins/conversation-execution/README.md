@@ -83,3 +83,10 @@ before its body clears prepared flags and empty assistant projections. Responses
 runner's independent lifetime when the requesting page withdraws; provider withdrawal and
 Profile cancellation still cancel and join them. Setup feedback does not start generation or
 request its background allowance.
+
+A retained runner that has been withdrawn may reject synchronously before returning a Job.
+The executor reports the failure, completes the response callback with false while retaining
+request admission through cleanup, and clears prepared generation flags/empty projections.
+Send and regeneration preserve existing history; response preparation returns false for an
+ordinary launch rejection and propagates cancellation after cleanup. Reenabling generation
+allows a fresh runner to serve the same conversation.

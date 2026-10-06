@@ -403,6 +403,13 @@ APIs rather than exported plugin SDK contracts.
 
 ## Product-internal execution admission
 
+Conversation handoff also handles a retained runner's synchronous launch rejection. Before
+the generation body starts, failure cleanup stays inside the admitted request, calls response
+completion with false, then clears prepared generation flags and empty assistant projections.
+Ordinary rejection does not discard saved history and permits retry with a fresh runner;
+cancellation propagates after cleanup. This is distinct from an asynchronous admission denial
+that returns a cancelled Job without starting the generation body.
+
 SDK 75 adds the neutral `KcodeExecution` coordination boundary. Each native product runtime
 owns its implementation. The standard agent provider and conversation generation runner enter
 it, including calls from inside the plugin tree that do not pass through a host facade.

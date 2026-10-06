@@ -5,6 +5,30 @@ source/package compatibility, not successful activation, platform authorization 
 Record the exact source commit, targets, test counts and relevant limitations in the topic guide.
 Do not include credentials, device identifiers or private data in committed evidence.
 
+## Synchronous generation handoff rejection
+
+The retained-runner reproduction failed both new cases before the fix: startResponse threw
+from an actual closed OwnedChatGenerationRunner, and send retained isGenerating. The private
+handoff now owns failure/completion cleanup before clearing prepared state. Cancellation is
+propagated after cleanup, and a normal rejected response reports false rather than leaving
+the conversation busy. Public ABI remains 76.
+
+`profile-runner-rejection-validation.log` passed 23 conversation tests, 18 Goal tests and 12
+Schedule tests, with zero failures/errors/skips, plus desktop compilation and Android app
+assembly. New cases cover send/regeneration history preservation, response rejection and
+fresh-runner retry, and synchronous cancellation with completion cleanup holding admission.
+
+`profile-runner-rejection-private-validation.log` passed the actual-JAR conversation-policy
+case and two generation lifecycle cases. Both executor and generation provider load privately;
+withdrawing generation, using its retained runner, reenabling and completing a new response
+preserves SDK identities and existing transcript. The response service is a deterministic
+fixture, not a model network request. The initial red test log is
+`profile-runner-rejection-reproduction.log`. Logs remain local ignored evidence.
+
+This phase does not establish Android device behavior for the new path or desktop native
+dialog rendering. The execution audit, remaining feature schemas and complete Profile
+acceptance remain outstanding.
+
 ## Plugin lifecycle and identity
 
 Use real JAR/APK packages to verify shared SDK/framework identity, private implementation

@@ -207,6 +207,132 @@ class ConversationExecutionLifecycleTest {
     }
 
     @Test
+    fun synchronousRunnerCancellationKeepsCompletionCleanupAdmittedBeforeClearingFlags() = runTest {
+        var admitted = 0
+        val admission = object : ExecutionAdmission {
+            override suspend fun <T> run(block: suspend () -> T): T {
+                admitted++
+                try { return block() } finally { admitted-- }
+            }
+        }
+        val execution = HistoryConversationExecution(EmptyHistoryFixture(), EnvelopeChatMessageCodec(), admission)
+        val conversation = HistoryConversationState(1, "test")
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val runner = object : ChatGenerationRunner by OwnedChatGenerationRunner(scope = backgroundScope) {
+            override fun launch(block: suspend CoroutineScope.() -> Unit): Job = throw CancellationException("Withdrawn")
+        }
+        val service = object : ChatService {
+            override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = error("Denied model")
+        }
+        val request = async {
+            execution.startResponse(conversation, ConversationResponseRequest("scheduled"), configuration,
+                service, runner, failures, onResponseFinished = {
+                    assertFalse(it)
+                    entered.complete(Unit)
+                    release.await()
+                })
+        }
+        entered.await()
+        assertEquals(1, admitted)
+        assertTrue(conversation.isGenerating)
+        request.cancel()
+        testScheduler.runCurrent()
+        assertFalse(request.isCompleted)
+        assertEquals(1, admitted)
+        release.complete(Unit)
+        assertFailsWith<CancellationException> { request.await() }
+        request.join()
+        assertEquals(0, admitted)
+        assertFalse(conversation.isGenerating)
+        assertFalse(conversation.isAwaitingFirstToken)
+        assertEquals(null, conversation.executionFailure)
+        assertEquals(null, conversation.runningJob)
+        execution.close()
+    }
+
+    @Test
+    fun closedRunnerRejectsResponseWithoutLeavingGeneratingStateAndAllowsRetry() = runTest {
+        var writes = 0
+        var completions = 0
+        val repository = object : ConversationHistoryRepository by EmptyHistoryFixture() {
+            override suspend fun appendMessage(conversationId: Long, title: String, messageId: Long,
+                role: String, content: String, isError: Boolean) { writes++ }
+        }
+        val execution = HistoryConversationExecution(repository, EnvelopeChatMessageCodec())
+        val conversation = HistoryConversationState(1, "test")
+        val saved = ChatMessage(1, MessageRole.User, "saved")
+        conversation.messages += saved
+        val retiredScope = CoroutineScope(backgroundScope.coroutineContext + SupervisorJob())
+        retiredScope.coroutineContext[Job]!!.cancelAndJoin()
+        val retiredRunner = OwnedChatGenerationRunner(scope = retiredScope)
+        val service = object : ChatService {
+            override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = "answer"
+        }
+        assertFalse(execution.startResponse(conversation, ConversationResponseRequest("scheduled", userMessage = "new"),
+            configuration, service, retiredRunner, failures, onResponseFinished = {
+                assertFalse(it)
+                completions++
+            }))
+        assertEquals(1, completions)
+        assertEquals(0, writes)
+        assertEquals(listOf(saved), conversation.messages.toList())
+        assertFalse(conversation.isGenerating)
+        assertFalse(conversation.isAwaitingFirstToken)
+        assertEquals(null, conversation.runningJob)
+        assertEquals("Generation runner is closed", conversation.executionFailure)
+        val runner = OwnedChatGenerationRunner(scope = backgroundScope)
+        assertTrue(execution.startResponse(conversation, ConversationResponseRequest("retry"),
+            configuration, service, runner, failures))
+        testScheduler.runCurrent()
+        assertEquals("answer", conversation.messages.last().content)
+        assertEquals(null, conversation.executionFailure)
+        execution.close()
+    }
+
+    @Test
+    fun closedRunnerDoesNotLeaveSendOrRegenerationStuckOrChangeSavedHistory() = runTest {
+        var writes = 0
+        var deletes = 0
+        val repository = object : ConversationHistoryRepository by EmptyHistoryFixture() {
+            override suspend fun appendMessage(conversationId: Long, title: String, messageId: Long,
+                role: String, content: String, isError: Boolean) { writes++ }
+            override suspend fun deleteMessagesFrom(conversationId: Long, messageIdInclusive: Long) { deletes++ }
+        }
+        val execution = HistoryConversationExecution(repository, EnvelopeChatMessageCodec())
+        val retiredScope = CoroutineScope(backgroundScope.coroutineContext + SupervisorJob())
+        retiredScope.coroutineContext[Job]!!.cancelAndJoin()
+        val runner = OwnedChatGenerationRunner(scope = retiredScope)
+        val service = object : ChatService {
+            override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = error("Retired runner must not execute")
+        }
+        for (regenerate in listOf(false, true)) {
+            val conversation = HistoryConversationState(1, "test")
+            val user = ChatMessage(1, MessageRole.User, "saved")
+            val answer = ChatMessage(2, MessageRole.Assistant, "answer")
+            conversation.messages.addAll(listOf(user, answer))
+            if (regenerate) {
+                execution.regenerateMessage(answer, configuration, conversation, service, runner,
+                    UnavailableGoalSessions, backgroundScope, failures, shouldFollowLatest = true,
+                    onFollowLatestChange = {}, followBottom = {})
+            } else {
+                execution.sendMessage("new", configuration, conversation, { error("Existing conversation") },
+                    service, runner, UnavailableGoalSessions, backgroundScope, failures, language,
+                    onUserMessageAdded = { _, _ -> }, followBottom = {})
+            }
+            testScheduler.runCurrent()
+            assertEquals(listOf(user, answer), conversation.messages.toList())
+            assertFalse(conversation.isGenerating)
+            assertFalse(conversation.isAwaitingFirstToken)
+            assertEquals(null, conversation.runningJob)
+            assertEquals("Generation runner is closed", conversation.executionFailure)
+        }
+        assertEquals(0, writes)
+        assertEquals(0, deletes)
+        execution.close()
+    }
+
+    @Test
     fun rejectedGenerationHandoffClearsPreparedFlagsAndRetainsTheTranscript() = runTest {
         var entries = 0
         val admission = object : ExecutionAdmission {

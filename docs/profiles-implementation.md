@@ -1,5 +1,23 @@
 # Profile implementation
 
+## Synchronous generation handoff failure
+
+A closed real generation runner can throw before returning a Job, after response preparation
+has set generation flags. Reproduction confirmed that the old path left send busy and threw
+from startResponse. The private suspending handoff now owns this failure path, records safe
+ordinary failure details, completes the response callback with false under NonCancellable
+cleanup, then removes empty projections and clears flags. It returns a cancelled handoff for
+ordinary rejection and propagates cancellation after cleanup. Existing saved history remains
+available for retry with a fresh runner. No public ABI changes; SDK remains 76.
+
+Concentrated validation passed 53 conversation/Goal/Schedule tests, both native app builds,
+and three private-JAR policy/generation cases. New behavior cases cover send/regeneration,
+response retry and admission retained while cancelled completion cleanup is suspended.
+The real-JAR fixture loads both executor and generation provider privately, withdraws the
+runner, verifies rejection state/transcript, reenables and completes a deterministic response.
+See verification.md for logs and evidence limits. No physical Android or native desktop
+window/dialog acceptance was performed in this phase; the full Profile goal remains active.
+
 ## Early native startup recovery
 
 Native factories now build directory/catalogue configuration inside the Profile host startup

@@ -27,7 +27,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -84,6 +86,7 @@ class ConversationPolicyPrivateLoadingTest {
             for ((id, entry) in listOf(
                 "provider.sessions.history" to SessionHistoryProviderPlugin::class.java,
                 "provider.conversation-execution.history" to ConversationExecutionProviderPlugin::class.java,
+                "provider.generation" to GenerationProviderPlugin::class.java,
                 "provider.agent-loop.koog" to KoogAgentLoopPlugin::class.java,
             )) {
                 val artifact = artifactFor(entry)
@@ -177,6 +180,36 @@ class ConversationPolicyPrivateLoadingTest {
                     switching.await()
                 }
                 assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+                val retiredGeneration = generation
+                assertNotSame(ChatGenerationRunner::class.java.classLoader, retiredGeneration.javaClass.classLoader)
+                val responseConfiguration = ModelConfiguration(ModelProvider.DeepSeek, "test", "", 0.4)
+                val failureMessages = ChatFailureMessages("setup", "connection")
+                runtime.pluginManager.setEnabled("provider.generation", false)
+                var refusedCompletions = 0
+                assertFalse(execution.startResponse(conversation, ConversationResponseRequest("retired", userMessage = "input"),
+                    responseConfiguration, chat, retiredGeneration, failureMessages, onResponseFinished = {
+                        assertFalse(it)
+                        refusedCompletions++
+                    }))
+                assertEquals(1, refusedCompletions)
+                assertEquals(committedTranscript, conversation.messages.toList())
+                assertFalse(conversation.isGenerating)
+                assertFalse(conversation.isAwaitingFirstToken)
+                assertEquals(null, conversation.runningJob)
+                assertEquals("Generation runner is closed", conversation.executionFailure)
+                runtime.pluginManager.setEnabled("provider.generation", true)
+                assertNotSame(retiredGeneration, generation)
+                val finished = CompletableDeferred<Boolean>()
+                val reply = object : ChatService {
+                    override suspend fun reply(configuration: ModelConfiguration, history: List<ChatMessage>, prompt: String): String = "recovered response"
+                }
+                assertTrue(withContext(Dispatchers.Main.immediate) {
+                    execution.startResponse(conversation, ConversationResponseRequest("retry"), responseConfiguration,
+                        reply, generation, failureMessages, onResponseFinished = { finished.complete(it) })
+                })
+                assertTrue(withTimeout(5_000) { finished.await() })
+                assertEquals("recovered response", conversation.messages.last().content)
+                assertEquals(null, conversation.executionFailure)
                 val previous = factory
                 runtime.pluginManager.setEnabled("provider.sessions.history", false)
                 assertFailsWith<IllegalStateException> { session.ensureConversation("stale") }
