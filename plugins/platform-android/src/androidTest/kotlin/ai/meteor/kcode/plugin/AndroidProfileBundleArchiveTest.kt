@@ -15,6 +15,8 @@ import ai.meteor.kcode.plugin.packages.androidPackageVerifier
 import ai.meteor.kcode.plugin.packages.stageBundledPackageCatalog
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchive
+import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveWriter
+import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveCode
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveExtension
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveMetadata
@@ -82,7 +84,8 @@ class AndroidProfileBundleArchiveTest {
             ))),
         )
         val archive = File(directory, "dictionary.kbundle")
-        val digest = PluginPackageArchive().pack(outer, source, archive)
+        val digest = ProfileBundleArchiveWriter().pack(bundle,
+            listOf(ProfileBundleArchiveInput(File(release.archivePath), release.sha256)), outer.variants.single().targets, archive)
         try {
             val imported = ProfileBundleArchive(packages, platform, NativePluginPackageResolver(packages, platform,
                 artifactVerifier = androidPackageVerifier(isolated))).prepare(archive, digest, "imported")

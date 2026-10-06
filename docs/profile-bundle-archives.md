@@ -6,7 +6,8 @@ The extension `.kbundle` is a distribution convention; validation uses contents 
 SDK 73 exposes `ProfileManagementClient.importBundles(ProfileBundleImport(...))` through
 the host and the owned Cordis bridge. The optional Profile screen has a separate Bundle
 archive action; its JSON import/export actions retain their document format. A shipping
-archive builder and self-contained archive export remain outstanding.
+archive builder is available through [publishing tooling](profile-bundle-publishing.md);
+self-contained committed Profile archive export remains outstanding.
 
 ## Format
 

@@ -7,5 +7,7 @@
 - [Profiles](profiles.md): native startup, committed state, package locks and data scopes.
 - [External Profile Bundle archives](profile-bundle-archives.md): verified data layers,
   embedded native code, ordered preparation and current exchange limits.
+- [Publishing Profile Bundles](profile-bundle-publishing.md): writer API, Gradle command,
+  author inputs, deterministic output and native import boundaries.
 - [Profile implementation](profiles-implementation.md): ownership, implementation phases,
   verification evidence and remaining work.

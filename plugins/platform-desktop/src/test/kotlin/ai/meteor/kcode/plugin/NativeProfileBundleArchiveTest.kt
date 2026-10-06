@@ -20,6 +20,7 @@ import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchive
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveCode
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
+import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveWriter
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveExtension
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveMetadata
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveRuntime
@@ -82,7 +83,8 @@ class NativeProfileBundleArchiveTest {
             ))),
         )
         val archive = File(home, "dictionary.kbundle")
-        val digest = PluginPackageArchive().pack(manifest, source, archive)
+        val digest = ProfileBundleArchiveWriter().pack(bundle,
+            listOf(ProfileBundleArchiveInput(File(release.archivePath), release.sha256)), manifest.variants.single().targets, archive)
         try {
             val importer = ProfileBundleArchive(packages, host, NativePluginPackageResolver(packages, host))
             val before = repository.state()
@@ -105,9 +107,8 @@ class NativeProfileBundleArchiveTest {
             ))
             definition.writeText(Json.encodeToString(overlay))
             val overlayArchive = File(home, "overlay.kbundle")
-            val overlayDigest = PluginPackageArchive().pack(manifest.copy(id = overlay.id, files = manifest.files.map {
-                if (it.path == "bundle.json") PackageFile(it.path, definition.length(), packageFileSha256(definition)) else it
-            }), source, overlayArchive)
+            val overlayDigest = ProfileBundleArchiveWriter().pack(overlay,
+                listOf(ProfileBundleArchiveInput(File(release.archivePath), release.sha256)), manifest.variants.single().targets, overlayArchive)
             val inputs = listOf(ProfileBundleArchiveInput(archive, digest), ProfileBundleArchiveInput(overlayArchive, overlayDigest))
             assertFailsWith<IllegalArgumentException> { importer.prepare(inputs + inputs.first(), "duplicate") }
             val imported = importer.prepare(inputs, "imported")

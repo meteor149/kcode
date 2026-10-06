@@ -8,8 +8,6 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import java.io.File
 import java.io.InterruptedIOException
-import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -97,10 +95,7 @@ class ProfileBundleArchive(
                 require(files.keys == metadata.packages.map { it.path }.toSet() + "bundle.json") { "Undeclared Bundle payload" }
                 require(metadata.packages.map { it.id }.toSet() == manifest.dependencies.map { it.id }.toSet()) { "Bundle dependencies differ from embedded code" }
                 val bundleFile = deployed.artifact(variant)
-                val bytes = bundleFile.inputStream().use { it.readNBytes(2 * 1024 * 1024 + 1) }
-                require(bytes.size <= 2 * 1024 * 1024) { "Bundle definition is too large" }
-                val text = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
+                val text = readBundleArchiveJson(bundleFile)
                 val bundle = Json.decodeFromString(ProfileBundle.serializer(), text)
                 require(bundle.id == manifest.id && bundle.version == manifest.version && bundle.formatVersion == 1) { "Bundle identity differs from archive" }
                 val releases = metadata.packages.associate { item ->
@@ -113,7 +108,7 @@ class ProfileBundleArchive(
         }
 }
 
-private suspend fun <T> interruptibleBundleIo(block: () -> T): T = try {
+internal suspend fun <T> interruptibleBundleIo(block: () -> T): T = try {
     runInterruptible(block = block)
 } catch (failure: InterruptedIOException) {
     currentCoroutineContext().ensureActive()

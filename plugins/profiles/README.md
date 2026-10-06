@@ -1,5 +1,11 @@
 # Profiles
 
+`ProfileBundleArchiveWriter` and the Desktop `packProfileBundle` Gradle task generate
+Bundle containers from definitions, declared targets and verified code archives. Temporary
+code snapshots are bounded and input ordering does not change deterministic code metadata.
+Packing does not load native code; host SDK/ABI and combined layer/dependency checks remain
+import responsibilities. See [publishing](../../docs/profile-bundle-publishing.md).
+
 Native `ProfileBundleArchive` prepares independent data archives and ordered Bundle stacks
 using Cordis container verification and the native package resolver. It returns frozen
 portable metadata without mounting code or publishing a draft. Imported drafts locate code

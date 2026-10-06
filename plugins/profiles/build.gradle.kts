@@ -33,3 +33,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
+
+val bundlePackCompilation = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    as org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmCompilation
+
+tasks.register<JavaExec>("packProfileBundle") {
+    group = "distribution"
+    description = "Build a native Profile Bundle archive from a JSON request"
+    dependsOn(bundlePackCompilation.compileTaskProvider)
+    classpath(bundlePackCompilation.output.allOutputs, bundlePackCompilation.runtimeDependencyFiles)
+    mainClass.set("ai.meteor.kcode.plugin.profiles.ProfileBundlePackCliKt")
+    doFirst { args(providers.gradleProperty("profileBundleRequest").get()) }
+}

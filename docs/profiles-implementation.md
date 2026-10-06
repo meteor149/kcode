@@ -1,5 +1,41 @@
 # Profile implementation
 
+## Bundle publishing tooling phase
+
+`ProfileBundleArchiveWriter` generates pure-data Bundle manifests from frozen SDK Bundle
+definitions, declared native targets and code archive/digest inputs. It streams owned code
+snapshots with Cordis entry/expanded-size bounds, verifies copied container identities and
+derives dependency versions and content-addressed file records. Duplicate code identities
+are rejected, code declarations are sorted for deterministic output, and Bundle operation
+order is preserved. Cordis validates/inspects the completed archive before atomic output
+replacement. Invalid input preserves existing output. Temporary payload cleanup attempts
+all releases. The writer allocates no product services and SDK API remains 73.
+
+The Desktop `packProfileBundle` Gradle task runs the shipping CLI from a strict bounded
+UTF-8 JSON request. Relative paths use the request directory, data-only layers are supported,
+and request/definition/code input paths cannot be selected as the normalized output path.
+Target compatibility, SDK/ABI, complete layered structure and combined code dependency
+checks remain native import responsibilities; a layer can depend on earlier layers.
+
+Concentrated verification passed 69 local cases: 68 Profiles and the actual native Bundle
+JAR case. New cases cover deterministic code ordering, generated metadata, frozen definition
+round trips, invalid digests, duplicate package IDs, unknown Bundle formats, output/input
+protection and CLI-relative paths/data-only output. The existing real JAR case now publishes
+both ordered archives with the writer before bridge import/restart/export. Both application
+builds and instrumentation APK assembly passed. The actual Gradle task produced a data-only
+archive whose root manifest/runtime and entry set were independently inspected.
+
+Physical ARM64/API 36 validation passed the actual Bundle APK case with `OK (1 test)` and
+`INSTRUMENTATION_CODE: -1`. It publishes its archive with the shared writer, imports through
+the host SDK client, preserves bootstrap activation, deletes source/outer deployment, restarts
+twice and exports through verified schema review. Unchanged UI/recovery cases were not repeated
+in this phase. See [publishing](profile-bundle-publishing.md) for command examples.
+
+Self-contained committed Profile archive export, cross-platform exact-lock adaptation and
+selected-file OS picker acceptance still remain open, as do other feature export schemas,
+pre-catalogue/corrupt-authority recovery and execution/resource ownership audit. The writer
+is publisher tooling and does not replace host-reviewed Profile export.
+
 ## Native Bundle import command phase
 
 SDK 73 adds `ProfileBundleArchiveReference`, `ProfileBundleImport` and
