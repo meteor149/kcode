@@ -18,8 +18,8 @@ missing rules and unknown fields/codecs deny export, and consumers cannot bypass
 metadata calls work in Ready and RecoveryRequired, follow bridge operation ownership and reject
 calls after withdrawal. Activation remains a separate host-owned command. The optional settings
 screen provides native file dialogs. Goal and Web Search declare Unit configuration rules;
-Localization also declares portable dictionary JSON. Other feature schemas and real portable
-archive acceptance are still being integrated.
+Localization also declares portable dictionary JSON. All shipped releases declare Unit export
+rules; supported JSON schemas and verified native archive exchange are described below.
 
 Profiles describe plugin instances as portable data. Compilation applies ordered bundle
 layers over an empty root, then Profile operations, machine configuration and launch
@@ -87,8 +87,9 @@ in an actual Android window on a physical ARM64/API 36 device under SDK 71. This
 case does not establish desktop rendering or every touch/keyboard route.
 If the repository itself is unavailable, metadata commands report that error until its path
 is repaired; the host and recovery surface still exist. No repair silently removes an
-obstruction or resets persisted authority. Explicit repair of corrupt repository authority
-remains outstanding.
+obstruction or resets persisted authority. Corrupt repository authority supports explicit,
+fingerprint-checked checkpoint restoration or empty-authority repair with retained evidence;
+see the repository recovery section below.
 
 In `RecoveryRequired`, host-owned catalogue/draft/clone/delete/preview/history commands remain
 available without the product tree. The catalogue reports no active Profile; the durable selection
@@ -111,8 +112,8 @@ cleanup failures are terminal for that Fiber: every disposer is attempted, its f
 and subsequent disposal reports the failure without rerunning releases. Runtime closure likewise
 retains its completion result. Recovery therefore cannot certify a failed provider's retirement
 simply by calling close again; a process restart or explicit resource recovery mechanism is needed.
-This differs from a retryable host adapter failure after a successful runtime close. This host command path does not
-yet provide an independent recovery UI or recover failures before initial host construction.
+This differs from a retryable host adapter failure after a successful runtime close. The native
+host-linked recovery surface also handles startup failures before any product is available.
 
 Portable definitions, entries, bundles and operations are shared SDK contracts under
 `ai.meteor.kcode.plugin.api.profiles` (introduced in Plugin API 65). The stable `AgentPluginManager` exposes
@@ -149,8 +150,9 @@ composition/preparation path without mounting providers or publishing metadata. 
 structural/package preparation diagnostics, entries and field origins. `packagesVerified`
 does not establish ConfigValidator success, service readiness or provider allocation; those
 remain activation checks. Effective preview entries may contain machine paths, while its
-portable definition does not. The initial default management surface is described below;
-rendered management acceptance and independent recovery UI remain outstanding.
+portable definition does not. The optional default management surface is described below;
+independent native recovery is described under Native startup. Full native interaction
+acceptance remains distinct from command and composition acceptance.
 
 The shipped template uses `kcode.base`, `kcode.agent` and `kcode.default-ui`, in that order.
 The catalogue supplies available code independently of the instance tree. Product providers
@@ -203,8 +205,9 @@ the prompt and never invokes pending navigation. Saving keeps the prompt open un
 result. Android private-APK rendering checks cover editing, system-back confirmation, invalid
 save retention, save/discard return and live English/Chinese labels. Feature XML generates
 private text defaults rather than reading them from host APK resources. Confirmation actions
-use one measured column and their text bounds are checked for clipping. Import/export,
-independent recovery UI, desktop rendering and broader device acceptance remain outstanding.
+use one measured column and their text bounds are checked for clipping. Import/export and
+independent recovery are implemented. Full desktop rendering, selected-file round trips and
+broader device interaction acceptance remain separate evidence gaps.
 This device case does not establish all tree forms, activation, keyboard/touch navigation or
 all settings dismissal routes.
 
@@ -362,7 +365,7 @@ External Bundle and complete Profile archive exchange are implemented; see
 [Bundle archives](profile-bundle-archives.md) and [Profile archives](profile-archives.md).
 Export reviews the exact locked package's feature-owned schema, including overridden values
 in preserved layers. Shipped providers permit explicit Unit configuration; model temperature
-bounds and subagent concurrency additionally permit bounded JSON fields. Unknown fields,
+bounds, subagent concurrency and the supported theme sections additionally permit reviewed JSON fields. Unknown fields,
 credentials and machine paths have no implicit export permission. Broader feature JSON
 schemas and complete native selected-file management acceptance remain outstanding.
 Native runtime APIs support live selection/switching on both platforms. Desktop tests cover
@@ -371,9 +374,10 @@ an ARM64 API 36 device cover actual APK providers, scoped MMKV/Room/file data, A
 workspace binding, stale services, selection restart, failed allocation recovery, typed alternate
 catalogue selection/restart and scoped
 ADB rejection. They do not establish root or Shizuku authorization. See [verification](verification.md)
-for evidence boundaries; rendered management acceptance and independent recovery UI are still required. Explicit
-recovery commands are tested on Desktop and compiled for Android; device recovery-after-restoration-
-failure behavior requires its own instrumentation evidence.
+for evidence boundaries. Independent recovery is implemented, including a targeted physical
+Android window case described above. Complete native management interaction and recovery after
+each restoration-failure mode require their own instrumentation evidence. These are separate
+from the core command, composition, publication and recovery tests.
 
 
 ## Explicit repository authority repair

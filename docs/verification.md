@@ -344,3 +344,31 @@ instrumentation code -1 alone does not mean success. The fixture now allows a bo
 300 seconds for cold aggregate-APK initialization while retaining its existing 5-second
 operation/cleanup waits. This is a test deadline adjustment, not a product performance
 fix. A rebuilt APK and subsequent emulator run are required for acceptance.
+## Core integrated acceptance audit
+
+The current requirement-to-code/test map is profile-core-acceptance.md. Cordis baseline
+6a9b4e4 passed all nine selected JVM/packager tasks: 182 cases in 33 XML suites, zero
+failures/errors/skips, 39 executed tasks. The kcode allTests XML records 1,135 cases in
+279 suites with zero failures/errors. Logs: profile-core-cordis-integrated-validation.log
+in the Cordis worktree and profile-core-integrated-validation.log in the kcode worktree.
+
+The first full desktop platform run executed 222 cases with two failures. CapabilityCompositionTest
+still expected plugin disable to cancel active subagents; it now checks refusal, explicit
+shutdown, joined cleanup, then disable/re-enable and stale identities. RuntimeCloseTest
+still expected diagnostics to resolve live services during closure; it now checks refusal
+while preserving concurrent/cancelled close ownership, release joining and single cleanup.
+The final run in profile-core-integrated-final-validation.log passed all 222 desktop
+platform cases, zero failures/errors/skips, plus allTests and both app targets. It finished
+successfully in 4m 47s with 3,373 tasks (254 executed, 3,119 up-to-date). Final XML confirms
+both corrected lifecycle suites passed. These results do not close the Android gap below.
+
+The API 35 emulator's second subagent run failed process startup with an ANR. System dex
+precompilation of the same installed aggregate test APK succeeded. The subsequent run
+entered the test but exceeded its 300-second bound, with a waiting runBlocking stack.
+Logs: profile-subagent-admission-emulator-final-validation.log,
+profile-subagent-admission-emulator-exit.log,
+profile-subagent-admission-emulator-dex-compile.log and
+profile-subagent-admission-emulator-compiled-validation.log. The suspended operation is
+not yet identified; do not classify the whole failure as environment-only or infer passing
+APK behavior from successful assembly/dex compilation. Android subagent execution acceptance
+and final core completion remain open. No further unchanged blind retry was launched.

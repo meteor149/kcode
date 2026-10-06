@@ -5,6 +5,8 @@
 - [Verification evidence](verification.md): test scope, identity, device and execution-world limits.
 
 - [Profiles](profiles.md): native startup, committed state, package locks and data scopes.
+- [Profile core acceptance](profile-core-acceptance.md): current requirements, implementation
+  ownership, test mapping and integrated validation status.
 - [External Profile Bundle archives](profile-bundle-archives.md): verified data layers,
   embedded native code, ordered preparation and current exchange limits.
 - [Publishing Profile Bundles](profile-bundle-publishing.md): writer API, Gradle command,
