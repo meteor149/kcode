@@ -67,6 +67,7 @@ kotlin {
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
+        androidMain.dependencies { implementation("androidx.activity:activity-compose:1.9.3") }
     }
 }
 

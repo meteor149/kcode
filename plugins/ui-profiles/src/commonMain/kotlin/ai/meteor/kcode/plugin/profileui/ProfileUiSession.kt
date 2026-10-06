@@ -19,6 +19,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
 enum class ProfileUiFailure { InvalidDocument, OperationFailed }
+enum class ProfileExchangeResult { Imported, Exported }
 
 data class ProfileUiState(
     val catalogue: ProfileCatalogue? = null,
@@ -44,6 +47,7 @@ data class ProfileUiState(
     val command: ProfileCommandStatus? = null,
     val failure: ProfileUiFailure? = null,
     val leaveRequested: Boolean = false,
+    val exchange: ProfileExchangeResult? = null,
 )
 
 /** Presentation owns queries/observers; the native host owns accepted composition commands. */
@@ -100,6 +104,32 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
         val next = client.clone(ProfileCloneRequest(requireNotNull(current.target), id,
             requireNotNull(current.catalogue).revision, displayName))
         load(next, ProfileTarget(id, ProfileSource.Draft))
+    }
+
+    internal suspend fun importFile(files: ProfileDocumentFiles, id: String, displayName: String, title: String) = fileOperation {
+        val current = state.value
+        check(!current.dirty) { "Unsaved Profile edits" }
+        ProfileDefinition(id = id, displayName = displayName).validate()
+        val revision = requireNotNull(current.catalogue).revision
+        val document = files.read(title) ?: return@fileOperation
+        val next = client.importPortable(ProfilePortableImport(document, id, revision, displayName))
+        val definition = requireNotNull(client.draft(id)) { "Imported draft is unavailable" }
+        check(client.catalogue().revision == next.revision) { "Profile repository changed; refresh" }
+        val text = encode(definition)
+        mutableState.value = state.value.copy(catalogue = next, target = ProfileTarget(id, ProfileSource.Draft),
+            document = text, savedDocument = text, documentRevision = next.revision, dirty = false,
+            preview = null, history = emptyList(), exchange = ProfileExchangeResult.Imported)
+    }
+
+    internal suspend fun exportFile(files: ProfileDocumentFiles, title: String) = fileOperation {
+        val current = state.value
+        check(!current.dirty) { "Unsaved Profile edits" }
+        val target = requireNotNull(current.target)
+        require(target.source != ProfileSource.Draft) { "Activate a draft before export" }
+        val document = client.exportPortable(ProfilePortableExport(target, requireNotNull(current.documentRevision)))
+        if (files.write(title, "${target.profileId}.kcode-profile.json", document)) {
+            mutableState.value = state.value.copy(exchange = ProfileExchangeResult.Exported)
+        }
     }
 
     suspend fun save() = operation {
@@ -277,12 +307,19 @@ class ProfileUiSession(private val client: ProfileManagementClient) {
     private fun encode(definition: ProfileDefinition) = json.encodeToString(ProfileDefinition.serializer(), definition)
 
     private suspend fun operation(block: suspend () -> Unit) = owner.runIfOpen {
-        mutex.withLock {
-            mutableState.value = state.value.copy(busy = true, failure = null)
-            try { block() }
-            catch (error: CancellationException) { throw error }
-            catch (error: Exception) { mutableState.value = state.value.copy(failure = ProfileUiFailure.OperationFailed) }
-            finally { mutableState.value = state.value.copy(busy = false) }
-        }
+        mutex.withLock { runOperation(block) }
+    }
+
+    private suspend fun fileOperation(block: suspend () -> Unit) = owner.runIfOpen {
+        if (!mutex.tryLock()) return@runIfOpen
+        try { runOperation(block) } finally { mutex.unlock() }
+    }
+
+    private suspend fun runOperation(block: suspend () -> Unit) {
+        mutableState.value = state.value.copy(busy = true, failure = null, exchange = null)
+        try { block() }
+        catch (error: CancellationException) { throw error }
+        catch (error: Exception) { mutableState.value = state.value.copy(failure = ProfileUiFailure.OperationFailed) }
+        finally { mutableState.value = state.value.copy(busy = false) }
     }
 }

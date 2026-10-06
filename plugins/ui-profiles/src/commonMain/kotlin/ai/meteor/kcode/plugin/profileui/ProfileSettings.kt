@@ -52,6 +52,10 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_title
 import ai.meteor.kcode.plugin.profileui.resources.profile_tree
 import ai.meteor.kcode.plugin.profileui.resources.profile_unsaved
 import ai.meteor.kcode.plugin.profileui.resources.profile_verified
+import ai.meteor.kcode.plugin.profileui.resources.profile_import_file
+import ai.meteor.kcode.plugin.profileui.resources.profile_export_file
+import ai.meteor.kcode.plugin.profileui.resources.profile_imported
+import ai.meteor.kcode.plugin.profileui.resources.profile_exported
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,6 +94,9 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
     val commands by client.commands.collectAsState()
     val command = commands.lastOrNull() ?: state.command
     val scope = rememberCoroutineScope()
+    val documents = rememberProfileDocumentFiles()
+    val importTitle = profileText(Res.string.profile_import_file)
+    val exportTitle = profileText(Res.string.profile_export_file)
     var id by remember(session) { mutableStateOf("") }
     var name by remember(session) { mutableStateOf("") }
     var cancelActive by remember(session) { mutableStateOf(false) }
@@ -136,7 +143,7 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
             }
         }
         item {
-            OutlinedTextField(id, { id = it }, Modifier.fillMaxWidth(), enabled = enabled, singleLine = true,
+            OutlinedTextField(id, { id = it }, Modifier.fillMaxWidth().testTag("profile-new-id"), enabled = enabled, singleLine = true,
                 label = { Text(profileText(Res.string.profile_id)) })
             OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), enabled = enabled, singleLine = true,
                 label = { Text(profileText(Res.string.profile_name)) })
@@ -150,6 +157,22 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
                     val revision = state.documentRevision!!
                     scope.launch { session.rename(target, revision, name) }
                 }) { Text(profileText(Res.string.profile_rename)) }
+        }
+        item {
+            TextButton(enabled = enabled && !state.dirty && id.isNotBlank(), modifier = Modifier.testTag("profile-import-file"),
+                onClick = { scope.launch { session.importFile(documents, id, name.ifBlank { id }, importTitle) } }) {
+                Text(importTitle)
+            }
+            TextButton(enabled = enabled && !state.dirty && state.target != null && state.target?.source != ProfileSource.Draft,
+                modifier = Modifier.testTag("profile-export-file"),
+                onClick = { scope.launch { session.exportFile(documents, exportTitle) } }) {
+                Text(exportTitle)
+            }
+            when (state.exchange) {
+                ProfileExchangeResult.Imported -> Text(profileText(Res.string.profile_imported))
+                ProfileExchangeResult.Exported -> Text(profileText(Res.string.profile_exported))
+                null -> Unit
+            }
         }
         if (state.target != null) item {
             Text(state.target!!.profileId, style = MaterialTheme.typography.titleLarge)

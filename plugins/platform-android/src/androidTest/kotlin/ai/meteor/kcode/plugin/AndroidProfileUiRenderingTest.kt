@@ -18,6 +18,7 @@ import ai.meteor.kcode.plugin.ui.api.SettingsPageRequest
 import ai.meteor.kcode.settings.StoredAppSettings
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import android.app.Activity
+import android.accessibilityservice.AccessibilityService
 import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.os.Bundle
@@ -123,6 +124,36 @@ class AndroidProfileUiRenderingTest {
             click("Profiles")
             awaitLabel("Refresh")
             awaitLabel("Committed")
+            withContext(Dispatchers.Main.immediate) {
+                check(nodes().first { it.config.getOrNull(SemanticsActions.ScrollToIndex)?.action != null }
+                    .config[SemanticsActions.ScrollToIndex].action!!.invoke(2))
+            }
+            awaitLabel("Profile ID")
+            withContext(Dispatchers.Main.immediate) {
+                check(editor("Profile ID").config[SemanticsActions.SetText].action!!.invoke(AnnotatedString("cancelled-import")))
+            }
+            val beforePicker = client.catalogue()
+            withContext(Dispatchers.Main.immediate) {
+                check(nodes().first { it.config.getOrNull(SemanticsActions.ScrollToIndex)?.action != null }
+                    .config[SemanticsActions.ScrollToIndex].action!!.invoke(3))
+            }
+            click("Import Profile file")
+            assertTrue(kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                while (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString()?.contains("documentsui") != true) delay(50)
+                true
+            } == true, "System document picker did not open")
+            assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+            withTimeout(15_000) {
+                while (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString()?.contains("documentsui") == true) delay(50)
+            }
+            withTimeout(15_000) {
+                while (!withContext(Dispatchers.Main.immediate) {
+                    nodes().any { it.config.getOrNull(SemanticsProperties.TestTag) == "profile-import-file" &&
+                        it.config.getOrNull(SemanticsProperties.Disabled) == null }
+                }) delay(50)
+            }
+            assertEquals(beforePicker, client.catalogue())
+            assertEquals(active, host.pluginManager.currentProfile())
             scrollEditor()
             setDocument("invalid definition")
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
@@ -186,8 +217,11 @@ class AndroidProfileUiRenderingTest {
         }
     }
 
-    private suspend fun awaitLabel(label: String) = withTimeout(15_000) {
-        while (label !in labels()) delay(50)
+    private suspend fun awaitLabel(label: String) {
+        assertTrue(kotlinx.coroutines.withTimeoutOrNull(15_000) {
+            while (label !in labels()) delay(50)
+            true
+        } == true, "Missing label: $label")
     }
 
     private suspend fun awaitAbsent(label: String) = withTimeout(15_000) {
@@ -213,7 +247,7 @@ class AndroidProfileUiRenderingTest {
         withTimeout(15_000) {
             while (!withContext(Dispatchers.Main.immediate) {
                 nodes().firstOrNull { it.config.getOrNull(SemanticsActions.ScrollToIndex)?.action != null }
-                    ?.config?.get(SemanticsActions.ScrollToIndex)?.action?.invoke(3) == true
+                    ?.config?.get(SemanticsActions.ScrollToIndex)?.action?.invoke(4) == true
             }) delay(50)
         }
         awaitLabel("Profile definition")
@@ -253,7 +287,8 @@ class AndroidProfileUiRenderingTest {
             if (node.config.getOrNull(SemanticsActions.SetText)?.action != null) return node
             return node.children.firstNotNullOfOrNull(::editable)
         }
-        val field = nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == "profile-definition" }
+        val tag = if (label == "Profile ID") "profile-new-id" else "profile-definition"
+        val field = nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
         return requireNotNull(editable(field)) {
             val fieldKeys = field.config.map { it.key.name }
             val childKeys = field.children.map { child -> child.config.map { it.key.name } }

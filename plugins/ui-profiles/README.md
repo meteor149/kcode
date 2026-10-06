@@ -14,6 +14,19 @@ their original revision across refreshes; stale publication cannot overwrite ano
 Names, Bundle order, operations and scopes can be edited in the definition document.
 Creation and cloning use isolated business-data scopes and do not copy business data.
 
+File import uses a new Profile ID and optional display name, reads a bounded UTF-8 JSON
+document, and creates an isolated draft through the host's revision-checked exchange client.
+It does not prepare packages or activate the imported tree. Preview and activation remain
+explicit. Unsaved editor changes must be saved or discarded before file exchange.
+Export is available for committed and historical selections; host review completes before
+the save picker opens. Unknown opaque configuration is rejected until its feature policy
+is wired. Android uses system document providers; Desktop uses the native file dialog and
+an atomic replacement in the selected directory. Picker cancellation publishes no success
+or Profile mutation. UI withdrawal cancels/joins its pending picker operation.
+Android document-provider writes may be partial on provider failure and are not atomic;
+no rollback of an external provider's file is claimed. Blocking provider I/O cancellation
+is cooperative and may delay withdrawal until that I/O returns.
+
 Tree forms support plugin/group insertion, explicit position/parent selection, configuration
 codecs, reparenting/order, module replacement, enable/disable, removal and service scope editing.
 They append SDK operations and save a revision-checked draft, then reload the host preview;

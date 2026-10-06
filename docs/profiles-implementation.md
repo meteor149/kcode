@@ -1,5 +1,43 @@
 # Profile implementation
 
+## Native file exchange UI phase
+
+The optional private Profile settings package now exposes native file import/export.
+Android uses shared Activity Result contracts with system document providers; Desktop
+uses an AWT native file dialog. Reads accept bounded (2 MiB), strictly decoded UTF-8.
+Desktop writes force a temporary file and atomically replace the chosen target; Android
+provider output is explicitly not atomic. Cancelling a picker changes no Profile metadata.
+
+Import captures the catalogue revision before opening the picker, publishes an isolated
+draft through the neutral client and leaves preview empty. It does not implicitly prepare
+code or activate. Export requires committed/history intent and completes host review
+before showing the save picker. Dirty editors cannot exchange files. Repeated file actions
+are rejected while busy rather than queued; withdrawal cancels/joins picker operations.
+Android retains cancelled request slots until the OS callback returns, preventing a late
+result from being consumed by another request. Blocking provider I/O may delay cancellation
+until it returns; external provider failures may leave partial output.
+
+Concentrated validation passed 27 desktop UI cases (20 session, 6 form, 1 localization),
+Desktop application compilation, Android application assembly and instrumentation APK
+assembly. Session cases cover unprepared import, cancelled selection, pre-picker revision
+conflicts, dirty guards, host rejection before file selection, historical export identity,
+cancelled save, duplicate action rejection and withdrawal joining the pending picker.
+SDK ABI remains 72; platform file operations and the exchange document remain private.
+
+Physical ARM64 API 36 acceptance passed 5 related instrumentation cases with
+`OK (5 tests)` and `INSTRUMENTATION_CODE: -1`: actual private default APK loading,
+Profile settings rendering/navigation and three recovery cases. The settings case opens
+the real OS document picker, cancels it, verifies unchanged catalogue/active Profile,
+then exercises the existing bilingual edit/save/discard flow. Its first attempt timed out;
+the test helper used fixed editor/list positions. Explicit ID-field tagging, updated list
+positions and named wait failures corrected the fixture; both isolated and concentrated
+device runs then passed. This proves picker cancellation, not a full file import/export
+round trip or touchscreen/keyboard acceptance.
+
+Shipped feature schema policies/native policy wiring, verified external Bundle import,
+real archive file exchange, corrupt-authority recovery and the complete execution/resource
+ownership audit remain outstanding. Desktop native dialog rendering is not yet verified.
+
 ## Module-aware export review phase
 
 Private host reviews now receive module/package ID, entry ID, configuration kind, source field/

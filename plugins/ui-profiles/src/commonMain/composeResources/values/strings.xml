@@ -1,4 +1,12 @@
 <resources>
+    <string name="profile_import_file">Import Profile file</string>
+    <string name="profile_export_file">Export Profile file</string>
+    <string name="profile_imported">Imported as a draft. Preview and activate when ready.</string>
+    <string name="profile_exported">Profile file exported.</string>
+    <string name="profile_import_file_zh">导入 Profile 文件</string>
+    <string name="profile_export_file_zh">导出 Profile 文件</string>
+    <string name="profile_imported_zh">已导入为草稿。准备好后请预览并激活。</string>
+    <string name="profile_exported_zh">Profile 文件已导出。</string>
     <string name="profile_history_readonly">History is read-only. Activate it directly, or clone it before editing.</string>
     <string name="profile_history_readonly_zh">历史记录为只读。可以直接激活，或复制后编辑。</string>
     <string name="profile_title">Profiles</string>

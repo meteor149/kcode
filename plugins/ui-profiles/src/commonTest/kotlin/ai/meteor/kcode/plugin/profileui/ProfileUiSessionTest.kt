@@ -17,6 +17,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileManagementState
 import ai.meteor.kcode.plugin.api.profiles.ProfileModuleSummary
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileSummary
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
@@ -38,6 +40,122 @@ import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProfileUiSessionTest {
+    @Test
+    fun fileImportCreatesAnUnpreparedDraftAndCapturesRevisionBeforeSelection(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val previews = client.previewCalls
+            val files = Files()
+            session.importFile(files, "copy", "Copy", "Import")
+            assertEquals(ProfilePortableImport("portable", "copy", 1, "Copy"), client.imported)
+            assertEquals(ProfileTarget("copy", ProfileSource.Draft), session.state.value.target)
+            assertEquals(2L, session.state.value.documentRevision)
+            assertEquals(ProfileExchangeResult.Imported, session.state.value.exchange)
+            assertNull(session.state.value.preview)
+            assertEquals(previews, client.previewCalls)
+            assertEquals(0, client.writes)
+            assertNull(client.submitted)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun cancelledAndConflictingImportPreserveTheEditor(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val before = session.state.value
+            val files = Files().apply { document = null }
+            session.importFile(files, "copy", "Copy", "Import")
+            assertEquals(before, session.state.value)
+            assertNull(client.imported)
+            files.document = "portable"
+            files.onRead = { client.revision++ }
+            session.importFile(files, "copy", "Copy", "Import")
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            assertEquals(before.document, session.state.value.document)
+            assertEquals(before.target, session.state.value.target)
+            assertEquals(before.documentRevision, session.state.value.documentRevision)
+            assertNull(client.imported)
+            session.edit("unfinished")
+            val reads = files.reads
+            session.importFile(files, "copy", "Copy", "Import")
+            assertEquals(reads, files.reads)
+            assertEquals("unfinished", session.state.value.document)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun historicalExportIsReviewedBeforeChoosingAFileAndCancellationIsNotSuccess(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val target = ProfileTarget("original", ProfileSource.History, 5)
+            session.select(target)
+            val files = Files()
+            client.failExport = true
+            session.exportFile(files, "Export")
+            assertEquals(0, files.writes)
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            client.failExport = false
+            files.saved = false
+            session.exportFile(files, "Export")
+            assertEquals(ProfilePortableExport(target, 1), client.exported)
+            assertEquals("original.kcode-profile.json", files.name)
+            assertEquals("reviewed", files.written)
+            assertNull(session.state.value.exchange)
+            files.saved = true
+            session.exportFile(files, "Export")
+            assertEquals(ProfileExchangeResult.Exported, session.state.value.exchange)
+            assertEquals(0, client.writes)
+            assertNull(client.submitted)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun withdrawalJoinsThePickerAndRepeatedImportDoesNotOpenAnother(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        session.refresh()
+        val files = Files().apply { gate = CompletableDeferred() }
+        val importing = async { session.importFile(files, "copy", "Copy", "Import") }
+        runCurrent()
+        assertEquals(1, files.reads)
+        assertTrue(session.state.value.busy)
+        session.importFile(files, "other", "Other", "Import")
+        assertEquals(1, files.reads)
+        session.close()
+        assertTrue(files.finished)
+        assertFailsWith<CancellationException> { importing.await() }
+        assertNull(client.imported)
+        assertFalse(session.state.value.busy)
+    }
+
+    private class Files : ProfileDocumentFiles {
+        var document: String? = "portable"
+        var reads = 0
+        var writes = 0
+        var saved = true
+        var written: String? = null
+        var name: String? = null
+        var onRead: () -> Unit = {}
+        var gate: CompletableDeferred<Unit>? = null
+        var finished = false
+        override suspend fun read(title: String): String? {
+            reads++
+            try { gate?.await(); onRead(); return document } finally { finished = true }
+        }
+        override suspend fun write(title: String, name: String, document: String): Boolean {
+            writes++
+            this.name = name
+            written = document
+            return saved
+        }
+    }
+
     @Test
     fun rawHistoricalEditorRequiresACloneAndActivationKeepsHistoricalTarget(): Unit = runTest {
         val client = Client()
@@ -415,6 +533,10 @@ class ProfileUiSessionTest {
         var writes = 0
         var verified = true
         var failPreview = false
+        var previewCalls = 0
+        var failExport = false
+        var imported: ProfilePortableImport? = null
+        var exported: ProfilePortableExport? = null
         var queryGate: CompletableDeferred<Unit>? = null
         var queryStarted: CompletableDeferred<Unit>? = null
         var queryFinished = false
@@ -452,11 +574,24 @@ class ProfileUiSessionTest {
             return ProfileCatalogue(revision, null, emptyList())
         }
         override suspend fun preview(target: ProfileTarget): ProfilePreview {
+            previewCalls++
             check(!failPreview) { "Preview query failed" }
             return ProfilePreview(revision, definition, emptyList(), emptyList(), emptyMap(), verified)
         }
         override suspend fun history(id: String) = listOf(ProfileCompositionState(definition, 5))
         override suspend fun modules() = emptyList<ProfileModuleSummary>()
+        override suspend fun importPortable(request: ProfilePortableImport): ProfileCatalogue {
+            check(request.expectedRevision == revision)
+            imported = request
+            definition = ProfileDefinition(id = request.id, displayName = request.displayName)
+            revision++
+            return catalogue()
+        }
+        override suspend fun exportPortable(request: ProfilePortableExport): String {
+            check(request.expectedRevision == revision && !failExport)
+            exported = request
+            return "reviewed"
+        }
         override fun submit(command: ProfileCommand): ProfileCommandHandle {
             submitted = command as ProfileCommand.Activate
             return handle

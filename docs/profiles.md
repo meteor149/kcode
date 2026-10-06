@@ -6,8 +6,9 @@ frozen bundle/package intent and resets data scopes; it never activates code. Ex
 committed/historical targets and requires host feature-schema review for opaque values. The
 default host policy denies explicit configuration values; consumers cannot bypass it. These
 metadata calls work in Ready and RecoveryRequired, follow bridge operation ownership and reject
-calls after withdrawal. Activation remains a separate host-owned command. Native file dialogs,
-feature-schema export policies and real portable archive acceptance are still being integrated.
+calls after withdrawal. Activation remains a separate host-owned command. The optional settings
+screen provides native file dialogs; shipped feature-schema export policies and real portable
+archive acceptance are still being integrated.
 
 Profiles describe plugin instances as portable data. Compilation applies ordered bundle
 layers over an empty root, then Profile operations, machine configuration and launch
@@ -153,6 +154,15 @@ Bundle order, name, operations and data scopes. Refresh retains unsaved input an
 authority revision; it cannot authorize overwriting another writer. Deletion confirmation is
 bound to the selected target and revision. Activation requires a saved, verified diagnostic-free
 preview. The package follows the configured app language and owns resource fallbacks.
+
+File exchange uses native Desktop/Android pickers. Enter a new Profile ID (the display
+name defaults to that ID), then import a UTF-8 JSON document up to 2 MiB. Import captures
+the repository revision before selection and creates a draft only: it does not prepare
+packages or activate the tree. Save or discard unsaved editor text before file exchange.
+Export requires a committed or historical selection and completes host schema review
+before opening the save picker. Unreviewed opaque values are rejected; shipped feature
+policies remain outstanding. Desktop replacement is atomic; Android document-provider
+writes are not guaranteed atomic. Picker cancellation changes no Profile metadata.
 
 Structured tree forms append SDK operations for insertion/grouping, position/parent movement,
 configuration codecs, module replacement, enable/disable, removal and service scope editing.
