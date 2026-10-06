@@ -77,4 +77,16 @@
     <string name="cancel_zh">取消</string>
     <string name="evidence">Preserved evidence ID</string>
     <string name="evidence_zh">保留的证据 ID</string>
+    <string name="plugin_manager">Plugin manager</string>
+    <string name="plugin_manager_zh">插件管理</string>
+    <string name="recovery_tools">Recovery tools</string>
+    <string name="recovery_tools_zh">恢复工具</string>
+    <string name="profiles">Profiles</string>
+    <string name="profiles_zh">Profile 列表</string>
+    <string name="profiles_available">profiles</string>
+    <string name="profiles_available_zh">个 Profile</string>
+    <string name="no_profile_available">No Profiles are available yet.</string>
+    <string name="no_profile_available_zh">目前没有可用的 Profile。</string>
+    <string name="select_template">Choose a template</string>
+    <string name="select_template_zh">选择模板</string>
 </resources>

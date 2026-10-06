@@ -109,3 +109,4 @@ include(":plugins:ui-profiles")
 
 include(":libraries:ui")
 include(":plugins:profile-recovery-ui")
+include(":plugins:profile-management-ui")

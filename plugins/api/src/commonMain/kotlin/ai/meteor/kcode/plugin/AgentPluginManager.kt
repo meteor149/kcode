@@ -10,7 +10,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionState
 import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
 
-const val CurrentPluginApiVersion = 76
+const val MinimumCompatiblePluginApiVersion = 76
+const val CurrentPluginApiVersion = 77
 
 interface AgentPluginManager {
     suspend fun profileCatalogue(): ProfileCatalogue =

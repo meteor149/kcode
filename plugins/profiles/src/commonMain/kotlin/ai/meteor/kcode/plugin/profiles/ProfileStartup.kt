@@ -13,6 +13,11 @@ fun interface ProfileStartupFactory {
     suspend fun prepare(modules: List<KcodePluginMount>): ProfileActivation
 }
 
+/**
+ * [refreshBundledPackageIds] is a narrow host migration hook for first-party native bundles.
+ * User package locks and imported locks stay frozen; a refreshed package is persisted only
+ * when the prepared runtime successfully publishes its generation.
+ */
 suspend fun prepareNativeProfileActivation(
     repository: ProfileRepository,
     template: ProfileDefinition,
@@ -29,6 +34,7 @@ suspend fun prepareNativeProfileActivation(
     builtinOverrides: Set<String> = emptySet(),
     stageSwitch: Boolean = false,
     activationRequest: ProfileActivationRequest? = null,
+    refreshBundledPackageIds: Set<String> = emptySet(),
 ): ProfileActivation {
     val switchRevision = if (stageSwitch) {
         require(requestedId != null) { "A staged switch requires an explicit target Profile" }
@@ -52,7 +58,10 @@ suspend fun prepareNativeProfileActivation(
     val snapshot = prepared.session.load()
     val previous = snapshot.external.map { it.toSpec() }
     // Restart an existing generation from its lock. Newly introduced distro offers do not upgrade it.
-    val effectiveOffers = if (committed != null) offers.filterKeys { id -> previous.none { it.id == id } }
+    require(refreshBundledPackageIds.none { it.isBlank() }) { "Bundled package refresh identities must not be blank" }
+    val effectiveOffers = if (committed != null) offers.filterKeys { id ->
+        previous.none { it.id == id } || id in refreshBundledPackageIds
+    }
         else offers.filterKeys { id ->
             val existing = previous.firstOrNull { it.id == id }
             existing == null || existing.packageInstallation?.archiveSha256 == snapshot.bundledPackages[id]

@@ -21,14 +21,41 @@ import androidx.compose.ui.window.WindowPosition
 import kotlinx.coroutines.launch
 
 fun main(args: Array<String>) {
-    val profileId = when {
-        args.isEmpty() -> null
-        args.size == 2 && args[0] == "--profile" -> args[1]
-        args.size == 1 && args[0].startsWith("--profile=") -> args[0].substringAfter('=')
-        else -> error("Usage: kcode [--profile <id>]")
+    var profileId: String? = null
+    var managementMode = false
+    var index = 0
+    while (index < args.size) {
+        when {
+            args[index] == "--plugin-manager" -> {
+                check(!managementMode) { "Duplicate --plugin-manager option" }
+                managementMode = true
+                index++
+            }
+            args[index] == "--profile" -> {
+                check(profileId == null && index + 1 < args.size && !args[index + 1].startsWith("--")) {
+                    "Usage: kcode [--profile <id>] [--plugin-manager]"
+                }
+                profileId = args[index + 1]
+                index += 2
+            }
+            args[index].startsWith("--profile=") -> {
+                check(profileId == null && args[index].substringAfter('=').isNotBlank()) {
+                    "Usage: kcode [--profile <id>] [--plugin-manager]"
+                }
+                profileId = args[index].substringAfter('=')
+                index++
+            }
+            else -> error("Usage: kcode [--profile <id>] [--plugin-manager]")
+        }
     }
     val applicationWindow = AtomicReference<Frame?>()
-    val host = runBlocking { createDesktopProfileHost(applicationWindow = applicationWindow::get, profileId = profileId) }
+    val host = runBlocking {
+        createDesktopProfileHost(
+            applicationWindow = applicationWindow::get,
+            profileId = profileId,
+            managementOnly = managementMode,
+        )
+    }
     val runtime = host.runtime
     application {
         val retirementScope = rememberCoroutineScope()
@@ -59,7 +86,7 @@ fun main(args: Array<String>) {
                 }
             },
             state = state,
-            title = "kcode",
+            title = if (managementMode) "kcode Plugin Manager" else "kcode",
             icon = appIcon,
         ) {
             DisposableEffect(window) {
@@ -71,6 +98,7 @@ fun main(args: Array<String>) {
                     conversationSettingsControlsAvailable = true,
                 ),
                 Locale.getDefault().language,
+                managementMode = managementMode,
             )
         }
     }

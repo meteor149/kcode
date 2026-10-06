@@ -71,6 +71,8 @@ kcode 是 Kotlin Multiplatform 生态中首个开源插件化 AI Harness，原�
 
 在设置中填写凭据、服务地址与供应商选项，在输入区选择模型与 Temperature。Ollama 支持无需 API Key 的本地服务；插件可扩展更多模型供应商。
 
+可在**设置 → 插件**管理插件实例。若插件配置导致主界面无法启动，可单独打开 `kcode --plugin-manager`；该入口使用宿主持有的 Profile 管理服务，不加载产品 UI。Android 安装包还会提供独立的 **kcode 插件管理**启动图标。
+
 ## 平台支持
 
 Android 与桌面共用对话、历史、Goal、调度、多 Agent、Skill、文件工具、联网搜索与会话长图导出。平台差异如下：
@@ -136,7 +138,7 @@ ADB 工作区与应用文件工具的工作区分离。Root 创建的文件可�
 | `plugins/installation-store` | 已安装包与启用状态持久化 |
 | `apps/*`、`plugins/platform-*` | 应用 Host、Loader 与平台适配 |
 
-产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 拥有可选的默认 UI 注册表与投影，`application` 协调默认应用根；`ui-profiles` 提供可选 Profile 管理；`ui-pages`、`ui-messages`、`ui-shell` 和 `ui-theme` 分别提供会话页面、消息展示、布局与设置页面以及主题；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
+产品实现在各功能模块中：`ui-contributions` 提供中立 UI 注册表，`default-ui-bridge` 拥有可选的默认 UI 注册表与投影，`application` 协调默认应用根；`ui-profiles` 提供仅管理插件的设置页和独立 Profile 管理界面；`ui-pages`、`ui-messages`、`ui-shell` 和 `ui-theme` 分别提供会话页面、消息展示、布局与设置页面以及主题；各功能包拥有设置表单，禁用功能时撤回对应设置项，仓库、执行、模型、搜索与原生能力 Provider 各自拥有服务。Android 与桌面共用 Room Schema 和 Bundled SQLite。模块声明以 [settings.gradle.kts](settings.gradle.kts)为准。
 
 设置 schema、校验和表单由对应功能模块拥有：权限设置在 `interaction`，执行设置在 `native-execution`，模型设置在 `llm-core`；`settings` 模块负责通用存储与命令分发。
 
@@ -160,11 +162,11 @@ JSON 主题配置可通过精确发行包的导出规则携带，颜色角色和
 
 SDK 72 通过中立管理客户端提供带 revision 校验的可携带 Profile 导入导出。导入创建独立草稿并保留冻结的 Bundle 与包意图，激活仍须显式执行。可选 Profile 界面通过原生文件选择器导入导出。导出按对应世代的已验证包元数据审查已提交或历史配置。Goal、Web Search 和 Localization 已声明可携带配置规则，其他未经审查的配置值仍被拒绝。
 
-原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。可选 ui-profiles 包提供设置管理界面。两端应用接入独立恢复界面，支持在目录准备、Bundle 暂存、模块目录构建及产品启动失败时选择已保存或历史 Profile、修复 JSON 定义、创建独立模板副本并显式激活。当前行为与限制见 [Profile 指南](docs/profiles.md)。
+原生工厂通过有序的 Bundle、Profile、机器配置和启动覆盖层启动命名 Profile。初始 `native` Profile 保留已有设置和历史数据位置，新 Profile 默认使用独立数据作用域。Desktop 支持 `--profile <id>`，Android 支持 Activity intent 的 `profile` 字段。成功提交的 generation 冻结 Bundle 定义和经过验证的包锁；重启读取提交记录，而不是编辑草稿。插件管理器通过 Profile 事务提交安装、替换、启停和移除操作。Desktop 和 Android 运行时切换通过稳定的主机 facade 管理任务准入，并在失败时恢复锁定的 generation。Android App shell 与 Ubuntu 绑定独立工作区；使用独立工作区时，ADB 执行在申请授权前被拒绝。SDK 管理器支持带 revision 校验的草稿、复制、预览、历史和显式激活；历史恢复会追加新的 generation。恢复失败后，宿主仍允许访问元数据并显式激活；关闭失败的运行时必须清理成功后才允许重新分配。Kcode 设置仅提供当前 Profile 的插件管理；独立管理入口提供完整 Profile 编辑和启动故障恢复，包括选择历史版本、修复 JSON、创建独立模板副本并显式激活。当前行为与限制见 [Profile 指南](docs/profiles.md)。
 
 SDK 75 新增运行时拥有的 `KcodeExecution` 准入契约。直接调用 agent 服务和对话 generation 任务也参与组合变更检查；完整 Profile 切换取消任务时，须等待已准入工作的清理完成后才能准备目标。首次启动、候选切换和旧 generation 重建在宿主发布前保持执行入口关闭，内部组合恢复不会提前打开入口。SDK 76 将发送、命令反馈、未配置模型反馈及重新生成的准入提前到准备和持久化之前，回复准备入口改为挂起调用。Goal 操作和自动恢复也在取消任务或修改状态前进入准入。已撤回 runner 同步拒绝响应时，会在准入内完成清理并清除生成状态，允许使用新 runner 重试。标准 in-process subagent factory 的直接协调器调用和独立 scope 中的 child turn 也进入准入，并覆盖结构化子任务与取消清理。标准 agent、对话、Goal、Schedule 和 subagent 执行准入已通过核心验收；外部自主执行 Provider 须显式接入该边界。已执行证据及后续原生对话框、编辑器工作见 [核心验收](docs/profile-core-acceptance.md)。
 
-运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。管理界面支持树与 Bundle 草稿表单、预览和激活，完整管理渲染验收仍待完成。独立恢复界面支持经确认恢复检查点或建立空目录，保留损坏元数据证据和业务数据；修复后仍需显式激活。修复故障原因后，预览或激活会重试失败的原生准备；存储不可用时元数据访问会报告错误，不会重置数据。
+运行时支持通过 Profile 事务选择类型化替代模块，保留实例配置和作用域。重启时宿主须再次提供所选模块 ID；Desktop/Android 工厂支持延迟创建的替代模块目录，稳定宿主通过当前 Profile 和 generation 校验选择模块。插件可注入 `KcodeProfiles` 查询目录、草稿、历史和模块，并提交由宿主拥有的激活、编辑和模块选择命令。已接受的命令在发起插件撤销后继续执行，取消观察者不会取消命令。独立管理界面提供插件操作和完整 Profile 编辑，支持树与 Bundle 草稿表单、预览、历史和激活。独立恢复界面支持经确认恢复检查点或建立空目录，保留损坏元数据证据和业务数据；修复后仍需显式激活。修复故障原因后，预览或激活会重试失败的原生准备；存储不可用时元数据访问会报告错误，不会重置数据。
 
 实现规则见[架构指南](docs/plugin-architecture.md)与[插件开发指南](docs/plugin-development.md)。[功能审计](docs/plugin-feature-audit.md)记录当前覆盖范围；[Harness 规范](docs/deepseek-harness-plugin-spec.md)与[预留 API 指南](docs/harness-reserved-api.md)区分已实现功能和尚无 Provider 的契约。全部指南收录在[文档索引](docs/README.md)。
 

@@ -15,16 +15,19 @@ service realms and tree lifecycle. `plugins/runtime` owns the agent-turn boundar
 application projections and coordinated native module/tree publication.
 
 `plugins/ui-profiles` is an optional default settings contribution consuming the neutral
-KcodeProfiles management service. It owns presentation sessions and resource defaults;
-accepted composition commands remain host-owned across withdrawal. Alternative roots and
-independent recovery entry points do not depend on this package.
+KcodeProfiles management service. Kcode Settings exposes plugin operations for the active
+Profile; the full Profile editor is linked into the independent manager. Accepted composition
+commands remain host-owned across UI withdrawal. `plugins/profile-management-ui` provides a
+host-neutral plugin manager screen used both by the settings contribution and native manager
+entry. Alternative roots do not depend on either product UI package.
 
-The native applications link `plugins/profile-recovery-ui` outside the product tree. It uses
-host-owned Profile metadata/commands and independent XML text defaults when product startup
-fails. Normal roots render directly; only recovery/transitions use the shared UI design defaults.
-Native distribution templates are detached host metadata, available without product services.
-Recovery creates separate repair drafts through the existing neutral client. Historical
-activation retains the frozen recipe; editing requires cloning history to a new draft.
+The native applications link `plugins/profile-recovery-ui` outside the product tree. Android
+adds a second launcher activity, and desktop accepts `--plugin-manager`; both render the
+independent manager instead of the product root. The entry uses host-owned Profile
+metadata/commands and XML text defaults, so product startup or plugin configuration failures
+do not remove it. Normal application launches render their product root when ready. Recovery
+creates separate repair drafts through the existing neutral client. Historical activation
+retains the frozen recipe; editing requires cloning history to a new draft.
 
 Package IDs identify available code. Entry IDs identify configured instances. Multiple
 instances may borrow one release export while retaining independent configuration, context,
@@ -36,7 +39,10 @@ Native code is verified through the existing package resolver and deployment gra
 JAR/APK implementations and private dependencies are loaded independently. Shared SDK and
 framework identities are the exact exports in `PluginHostApiPackages`; copying those classes
 into private packages is not a compatible substitute. `CurrentPluginApiVersion` and the
-generated SDK/framework ABI fingerprint must both match the deployment boundary.
+generated SDK/framework ABI fingerprint define the deployment boundary. Package variants
+declare the host API range they support; current-API packages must match the host fingerprint,
+while older APIs in a declared range retain their own locked build fingerprint and require a
+publisher compatibility claim.
 
 ## Ownership and publication
 

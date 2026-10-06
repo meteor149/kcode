@@ -50,6 +50,7 @@ import ai.meteor.kcode.plugin.profiles.profileMachineConfiguration
 import ai.meteor.kcode.plugin.profiles.profileDataScopeKey
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 
 fun createDesktopKoogChatService(settingsStore: AppSettingsStore? = null): ChatService =
@@ -76,6 +77,7 @@ suspend fun createDesktopProfileHost(
     profileId: String? = null,
     homeDirectory: Path = Path.of(System.getProperty("user.home"), ".kcode"),
     moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
+    managementOnly: Boolean = false,
 ): KcodeProfileHost {
     val availableModuleFactories = moduleFactories.toMap()
     val commands = ProfileCommandGateway()
@@ -128,6 +130,9 @@ suspend fun createDesktopProfileHost(
             },
             stageSwitch = staging,
             activationRequest = request,
+            refreshBundledPackageIds = if ((requestedId ?: repository.selected() ?: "native") == "native") {
+                setOf("provider.ui.settings.profiles")
+            } else emptySet(),
         )
     }
     val startup = ProfileStartupFactory { modules ->
@@ -197,12 +202,25 @@ suspend fun createDesktopProfileHost(
         },
         ProfileArchiveExchange(pluginDirectory, desktopPackageHost(), NativePluginPackageResolver(pluginDirectory, desktopPackageHost()), { preparation.prepare().modules }),
         { request -> prepare(request.target.profileId, staging = true, request = request) })
-    return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
-        templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }) {
-        startupProfileId = profileId ?: repository.selected() ?: "native"
-        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(
-            deferProductExecutionUntilHostPublication = true,
-            hostInputs = DesktopPluginHostInputs(applicationWindow),
-        )))
+    val templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }
+    return if (managementOnly) {
+        try {
+            preparation.prepare()
+        } catch (cancelled: CancellationException) {
+            commands.close()
+            throw cancelled
+        } catch (_: Exception) {
+            // The manager remains useful for repository repair when native metadata is unavailable.
+        }
+        KcodeProfileHost.startManagementOnly({ startupProfileId }, factory, management, commands, templates)
+    } else {
+        KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
+            templates = templates) {
+            startupProfileId = profileId ?: repository.selected() ?: "native"
+            facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(
+                deferProductExecutionUntilHostPublication = true,
+                hostInputs = DesktopPluginHostInputs(applicationWindow),
+            )))
+        }
     }
 }

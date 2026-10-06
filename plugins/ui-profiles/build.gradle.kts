@@ -57,6 +57,7 @@ kotlin {
         commonMain { kotlin.srcDir(profileTextOutput) }
         commonMain.dependencies {
             api(project(":plugins:api"))
+                implementation(project(":plugins:profile-management-ui"))
             implementation(project(":plugins:default-ui-api"))
             implementation(project(":libraries:ui"))
             implementation(compose.runtime)

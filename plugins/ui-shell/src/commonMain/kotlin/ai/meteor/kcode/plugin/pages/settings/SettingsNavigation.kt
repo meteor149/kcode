@@ -48,11 +48,11 @@ internal fun SettingsWindowHeader(
     isRoot: Boolean,
     onNavigation: () -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().height(88.dp)) {
+    Box(Modifier.fillMaxWidth().height(72.dp)) {
         FloatingCircleButton(
             description = if (isRoot) text(UiText.BackToChat) else text(UiText.Settings),
             onClick = onNavigation,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 20.dp),
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = KcodeSpacing.md),
             size = KcodeSize.touchTarget,
         ) {
             KcodeIcon(
@@ -65,7 +65,7 @@ internal fun SettingsWindowHeader(
             title,
             Modifier.align(Alignment.Center),
             color = Ink,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
         )
     }
 }
@@ -78,7 +78,7 @@ internal fun SettingsHome(
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = KcodeSpacing.md),
+            .padding(horizontal = KcodeSpacing.lg, vertical = KcodeSpacing.md),
     ) {
         CompactSectionLabel(text(UiText.General))
         CompactSettingsGroup(contentPadding = PaddingValues(horizontal = KcodeSpacing.md, vertical = KcodeSpacing.hair)) {
@@ -105,12 +105,12 @@ private fun SettingsNavigationRow(
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 68.dp)
+        Modifier.fillMaxWidth().heightIn(min = 64.dp)
             .pressClickable(onClick = onClick).clip(RoundedCornerShape(KcodeRadius.control))
             .padding(horizontal = KcodeSpacing.hair, vertical = KcodeSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        KcodeIcon(icon, SoftInk.copy(alpha = .82f), Modifier.size(26.dp))
+        KcodeIcon(icon, SoftInk.copy(alpha = .82f), Modifier.size(22.dp))
         Column(Modifier.padding(start = KcodeSpacing.md).weight(1f)) {
             Text(title, color = Ink, style = MaterialTheme.typography.bodyLarge)
             Text(

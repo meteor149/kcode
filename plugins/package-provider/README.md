@@ -33,6 +33,25 @@ by `generateDesktopPackageAbi` / `generateAndroidPackageAbi`. The compiler/entry
 and sorted content hashes produce the platform ABI fingerprint; authors compile against the
 same SDK and copy this identity. Matching API numbers alone are insufficient.
 
+Each `ai.meteor.kcode` package variant records `pluginApi` (the API used to compile it) and
+`pluginApiRange` (`minimum`/`maximum`, the host APIs the publisher supports), mirroring the
+peer dependency ranges used by DeepSeek Harness packages. The host selects a variant only when
+its current API is inside that range and the compiled API is in the host's supported range.
+Current-API packages must match the host SDK ABI fingerprint. For older APIs, the fingerprint
+remains bound to the package metadata and immutable profile lock; the declared range is the
+publisher's binary-compatibility claim, so publishers must validate each API they include.
+Legacy metadata without a range gets one-step forward compatibility for the immediately
+previous supported API. New packages should always publish the explicit range.
+
+Package presentation metadata belongs to Cordis: its root manifest fields include
+`displayName`, `description`, `license`, `author`, `contributors`, `homepage`, `repository`,
+`bugsUrl` and `keywords`. Author, contributor, homepage, repository, bug tracker and keyword
+fields use Cordis package format 2. The
+`ai.meteor.kcode` extension contains Kcode configuration only. Use
+`kcodeConfigurationExtension(...)` to write it; Cordis validates package presentation fields
+while decoding and validating the manifest. Full field rules and an example are in the
+[package format guide](../../docs/plugin-package-format.md).
+
 The package format selects Windows, macOS, Linux, Android and iOS independently, with ARM/x86 families,
 32/64-bit constraints and optional numeric system-version ranges, distribution constraints and required features. kcode loads self-contained desktop JARs and Android APKs; iOS is metadata only.
 Windows uses NT version/build, macOS its release, Linux its kernel version and Android its

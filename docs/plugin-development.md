@@ -136,9 +136,28 @@ and must not shadow default/native package identities. The stable host's selectP
 checks the expected active Profile/generation before changing all references to a selected module.
 Supply the catalogue again on restart; do not bypass it with retained runtime owners or mounts.
 
+Native plugin releases use the Cordis package manifest and Kcode-specific variant metadata.
+The package ID/version, display name, description, license, author and contributor names,
+homepage, source repository, bug tracker and keywords belong to Cordis' package-level metadata. The `ai.meteor.kcode`
+extension is reserved for Kcode configuration and variant compatibility/ABI details. Follow
+the [package format guide](plugin-package-format.md) for field limits and publisher
+compatibility declarations.
+
 When changing a shared public ABI, review exports and package tests, update
 `CurrentPluginApiVersion`, regenerate package metadata and document the change. This applies
 to callbacks, default methods and configuration types as well as service keys.
+
+The current host API is 77 and its supported plugin range is 76–77. Native package variants
+declare `pluginApi` (the API used to compile the package) and `pluginApiRange` (the host API
+range the package supports), similar to DeepSeek Harness peer dependency ranges. The host
+requires its current API to fall inside that declared range. This does not relax the SDK runtime
+fingerprint policy: packages built against the current API must match the host fingerprint;
+packages built against an older API keep their SDK fingerprint bound to their package metadata
+and immutable release lock. Their declared range is the publisher's binary-compatibility claim,
+so test each API in the range before publishing it. Manifests created before `pluginApiRange`
+existed remain accepted for the immediately previous supported API. Lower the minimum supported
+API only after reviewing an incompatible change, and document which legacy package versions
+remain accepted.
 
 ## UI and persistence
 

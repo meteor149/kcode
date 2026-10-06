@@ -175,4 +175,26 @@
     <string name="profile_bundle_order_hint_zh">Bundle 从上到下应用，后面的层覆盖前面的层。请先确认顺序，再创建草稿。</string>
     <string name="profile_bundle_import_confirm">Import in this order</string>
     <string name="profile_bundle_import_confirm_zh">按此顺序导入</string>
+    <string name="profile_profiles">Profiles</string>
+    <string name="profile_profiles_zh">Profile 列表</string>
+    <string name="profile_manage">Create and manage</string>
+    <string name="profile_manage_zh">创建与管理</string>
+    <string name="profile_transfer">Import and export</string>
+    <string name="profile_transfer_zh">导入与导出</string>
+    <string name="profile_imports">Import</string>
+    <string name="profile_imports_zh">导入</string>
+    <string name="profile_exports">Export</string>
+    <string name="profile_exports_zh">导出</string>
+    <string name="profile_show_json">Edit JSON</string>
+    <string name="profile_show_json_zh">编辑 JSON</string>
+    <string name="profile_hide_json">Hide JSON</string>
+    <string name="profile_hide_json_zh">收起 JSON</string>
+    <string name="profile_no_profiles">No saved Profiles yet. Create one or import a Profile archive.</string>
+    <string name="profile_no_profiles_zh">还没有保存的 Profile。请创建一个或导入 Profile 归档。</string>
+    <string name="profile_no_history">No saved versions.</string>
+    <string name="profile_no_history_zh">暂无已保存版本。</string>
+    <string name="profile_no_modules">No verified modules are available.</string>
+    <string name="profile_no_modules_zh">没有可用的已验证模块。</string>
+    <string name="profile_loading">Loading Profiles…</string>
+    <string name="profile_loading_zh">正在加载 Profile…</string>
 </resources>

@@ -14,6 +14,7 @@ import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.cordis.packager.CordisPackagesExtension
 import org.cordis.packager.PluginCatalogTask
+import org.cordis.packages.PackageRepository
 import org.cordis.packages.PackageTarget
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
@@ -85,9 +86,13 @@ abstract class GenerateKcodePackageMetadata : DefaultTask() {
         val apiVersion = Regex("const val CurrentPluginApiVersion = (\\d+)")
             .find(source)?.groupValues?.get(1)
             ?: error("CurrentPluginApiVersion is missing from ${apiVersionSource.get().asFile}")
+        val minimumApiVersion = Regex("const val MinimumCompatiblePluginApiVersion = (\\d+)")
+            .find(source)?.groupValues?.get(1)
+            ?: error("MinimumCompatiblePluginApiVersion is missing from ${apiVersionSource.get().asFile}")
+        require(minimumApiVersion.toInt() <= apiVersion.toInt()) { "Minimum plugin API exceeds current API" }
         val capabilityJson = capabilities.get().distinct().sorted()
             .joinToString(",", transform = ::jsonString)
-        val metadata = """{"ai.meteor.kcode":{"pluginApi":$apiVersion,"runtimeAbi":"$abi","capabilities":[$capabilityJson]}}"""
+        val metadata = """{"ai.meteor.kcode":{"pluginApi":$apiVersion,"pluginApiRange":{"minimum":$minimumApiVersion,"maximum":$apiVersion},"runtimeAbi":"$abi","capabilities":[$capabilityJson]}}"""
         outputFile.get().asFile.apply {
             parentFile.mkdirs()
             writeText(metadata + "\n")
@@ -127,9 +132,26 @@ fun kcodeVariantMetadata(
     return task.flatMap { it.outputFile }
 }
 
-data class BundledProvider(val module: String, val id: String, val entry: String, val capability: String,
-    val androidEntry: String = entry, val desktop: Boolean = true,
-    val android: Boolean = true, val androidPackageSuffix: String = module, val androidArm64Only: Boolean = false)
+data class BundledProvider(
+    val module: String,
+    val id: String,
+    val entry: String,
+    val capability: String,
+    val androidEntry: String = entry,
+    val desktop: Boolean = true,
+    val android: Boolean = true,
+    val androidPackageSuffix: String = module,
+    val androidArm64Only: Boolean = false,
+    val displayName: String? = null,
+    val description: String? = null,
+    val license: String? = null,
+    val author: String? = null,
+    val contributors: List<String> = emptyList(),
+    val homepage: String? = null,
+    val repository: PackageRepository? = null,
+    val bugsUrl: String? = null,
+    val keywords: List<String> = emptyList(),
+)
 val bundledProviders = listOf(
     BundledProvider("ui-profiles", "provider.ui.settings.profiles",
         "ai.meteor.kcode.plugin.profileui.DefaultProfileUiPlugin", "uiSlots,profiles"),
@@ -214,7 +236,12 @@ val bundledPlugins = configurations.create("bundledPlugins") {
     isCanBeResolved = true
 }
 val releaseVersion = providers.gradleProperty("releaseVersion").orElse("1.0.0")
-val unitConfiguration = """{"ai.meteor.kcode":{"configuration":{"kind":"unit"}}}"""
+
+fun jsonStringLiteral(value: String): String = "\"" + value
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"") + "\""
+
+fun unitConfiguration(): String = """{"ai.meteor.kcode":{"configuration":{"kind":"unit"}}}"""
 
 // Exclude the SDK closure, retaining any components also reached through private roots.
 // Host-owned components still exclude their resources/JNI even when clients depend on them.
@@ -267,11 +294,21 @@ bundledProviders.forEach { provider ->
     owner.extensions.getByType<CordisPackagesExtension>().releases.register(releaseName) {
         packageId.set(provider.id)
         packageVersion.set(releaseVersion)
+        provider.displayName?.let { displayName.set(it) }
+        provider.description?.let { description.set(it) }
+        provider.license?.let { license.set(it) }
+        provider.author?.let { author.set(it) }
+        contributors.set(provider.contributors)
+        provider.homepage?.let { homepage.set(it) }
+        provider.repository?.let { repository.set(it) }
+        provider.bugsUrl?.let { bugsUrl.set(it) }
+        keywords.set(provider.keywords)
         contentVersion.set(true)
+        val kcodeConfiguration = unitConfiguration()
         val exportSchema = owner.layout.projectDirectory.file("src/profile-export/${provider.id}.json")
         manifestExtensions.set(if (exportSchema.asFile.exists()) owner.providers.fileContents(exportSchema).asText.map { schema ->
-            unitConfiguration.dropLast(1) + ",\"ai.meteor.kcode.profile-export\":" + schema.trim() + "}"
-        } else owner.providers.provider { unitConfiguration })
+            kcodeConfiguration.dropLast(1) + ",\"ai.meteor.kcode.profile-export\":" + schema.trim() + "}"
+        } else owner.providers.provider { kcodeConfiguration })
         fun configureVariant(platform: String, entry: String) {
             variants.register(platform) {
                 entryPoint.set(entry)

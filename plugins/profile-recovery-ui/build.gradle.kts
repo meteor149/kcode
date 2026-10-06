@@ -54,6 +54,8 @@ kotlin {
         commonMain { kotlin.srcDir(recoveryTextOutput) }
         commonMain.dependencies {
             api(project(":plugins:api"))
+            implementation(project(":plugins:profile-management-ui"))
+            implementation(project(":plugins:ui-profiles"))
             implementation(project(":plugins:runtime"))
             implementation(project(":libraries:ui"))
             implementation(compose.runtime)

@@ -1,5 +1,11 @@
 # Plugin SDK
 
+Plugin API 77 remains binary compatible with API 76. Native package variants can declare host
+API compatibility ranges (currently 76–77), similar to DeepSeek Harness peer dependency ranges.
+Current-API packages must match the host SDK fingerprint; older API packages in a declared range
+keep their fingerprint bound to the release lock, and the publisher owns testing that compatibility.
+Raise the minimum only when a reviewed API change requires it.
+
 Plugin API 74 adds complete committed Profile archive import and host-owned export leases.
 `importArchive` verifies code and publishes an isolated draft. `exportArchive` calls a
 suspending consumer with a temporary path/digest and removes that file on return, failure or
@@ -290,3 +296,8 @@ can precede message-ID allocation, generation flags and response preparation. Re
 consumers/providers against ABI 76. Existing exported chat/SDK namespaces cover this contract;
 no new implementation package is shared. The default executor also admits send, command
 feedback, setup feedback and regeneration before their state/persistence side effects.
+
+The current host API is 77 with a supported range of 76–77. Native package variants declare
+the host API range they support, in addition to the API used to compile them. Legacy manifests
+without that range receive one-step forward compatibility only. Publishers must test every API
+they claim to support; current-API packages still require the host's shared SDK ABI fingerprint.

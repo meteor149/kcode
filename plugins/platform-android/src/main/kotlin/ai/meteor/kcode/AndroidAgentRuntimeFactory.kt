@@ -58,6 +58,7 @@ import android.app.Activity
 import android.content.Context
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.CancellationException
 
 /** Native loader bridge for custom compositions; the factory borrows the application context. */
 fun androidPluginControllerFactory(context: Context, directory: File): DynamicPluginControllerFactory {
@@ -116,6 +117,7 @@ suspend fun createAndroidProfileHost(
     confirmationDialogs: ConfirmationDialogHost? = null,
     profileId: String? = null,
     moduleFactories: Map<String, () -> KcodePluginMount> = emptyMap(),
+    managementOnly: Boolean = false,
 ): KcodeProfileHost {
     val availableModuleFactories = moduleFactories.toMap()
     val commands = ProfileCommandGateway()
@@ -180,6 +182,9 @@ suspend fun createAndroidProfileHost(
                 },
             stageSwitch = staging,
             activationRequest = request,
+            refreshBundledPackageIds = if ((requestedId ?: repository.selected() ?: "native") == "native") {
+                setOf("provider.ui.settings.profiles")
+            } else emptySet(),
         )
     }
     val startup = ProfileStartupFactory { modules ->
@@ -259,12 +264,25 @@ suspend fun createAndroidProfileHost(
         ProfileArchiveExchange(pluginDirectory, androidPackageHost(), NativePluginPackageResolver(pluginDirectory, androidPackageHost(),
             artifactVerifier = androidPackageVerifier(activity)), { preparation.prepare().modules }),
         { request -> prepare(request.target.profileId, staging = true, request = request) })
-    return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
-        overlayAvailable = true, templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }) {
-        startupProfileId = profileId ?: repository.selected() ?: "native"
-        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(
-            deferProductExecutionUntilHostPublication = true,
-            hostInputs = hostInputs(),
-        )))
+    val templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }
+    return if (managementOnly) {
+        try {
+            preparation.prepare()
+        } catch (cancelled: CancellationException) {
+            commands.close()
+            throw cancelled
+        } catch (_: Exception) {
+            // The manager remains useful for repository repair when native metadata is unavailable.
+        }
+        KcodeProfileHost.startManagementOnly({ startupProfileId }, factory, management, commands, templates)
+    } else {
+        KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
+            overlayAvailable = true, templates = templates) {
+            startupProfileId = profileId ?: repository.selected() ?: "native"
+            facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(
+                deferProductExecutionUntilHostPublication = true,
+                hostInputs = hostInputs(),
+            )))
+        }
     }
 }

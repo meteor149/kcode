@@ -13,11 +13,17 @@ archives and 512 MiB total), then removed after the command completes or fails. 
 editors and duplicate file actions are rejected. Android cancelled slots remain reserved
 until the OS callback returns. See [Bundle archives](../../docs/profile-bundle-archives.md).
 
-`DefaultProfileUiPlugin` is the optional `provider.ui.settings.profiles` package entry.
-Its child contributes a `profiles` settings section when both `KcodeProfiles` and
-`KcodeUiSlots` are available. Missing services suspend that child without imposing
-management or default layouts on independent roots. Provider withdrawal removes the
-contribution and cancels/joins its queries and command observers.
+`DefaultProfileUiPlugin` contributes only the `plugins` settings section when both
+`KcodeProfiles` and `KcodeUiSlots` are available. That page manages instances in the active
+Profile; it does not expose Profile selection, creation, transfer or history. Enable, disable,
+configure, add and remove edits save to a revision-checked draft. After a verified preview, the
+page can activate those changes directly in Kcode. Full Profile lifecycle management remains
+in the independent manager.
+
+The complete Profile editor is available from the native independent manager, outside the
+replaceable product tree. It supports Profile selection, creation, cloning, JSON definition
+editing, transfer, history and activation. Removing a plugin instance does not erase a package
+archive that may still be referenced by another Profile or historical generation.
 
 The screen supports catalogue selection, creation, cloning, JSON definition editing,
 revision-checked draft saving, explicit discard, verified preview, effective tree and
@@ -65,11 +71,11 @@ Existing committed generations retain their frozen version 1 Bundle definitions;
 do not silently acquire new UI. Explicit Profile editing can insert
 `provider.ui.settings.profiles` when that module is available.
 
-Unsaved raw edits defer section return, system back and sheet dismissal before the exit
-animation. Users can save the revision-checked draft and leave, discard to the saved document,
-or continue editing. Invalid documents, authority conflicts and changed confirmation targets
-retain the editor; saving never activates the draft. Forced provider withdrawal bypasses the
-confirmation and cancels owned work without running pending navigation.
+Unsaved raw edits defer navigation from the standalone Profile editor before leaving the
+screen. Users can save the revision-checked draft, discard to the saved document, or continue
+editing. Invalid documents, authority conflicts and changed confirmation targets retain the
+editor; saving never activates the draft. Forced provider withdrawal bypasses the confirmation
+and cancels owned work without running pending navigation.
 Saving keeps the confirmation open until its durable result. Confirmation actions share
 one measured column so narrow layouts do not clip the final action.
 
@@ -79,6 +85,9 @@ Chinese switching, save/leave and discard/leave against durable metadata. It als
 confirmation text bounds and captures a screenshot. These semantic actions do not establish
 touch/keyboard accessibility or complete form/activation acceptance. Import/export,
 independent recovery UI, desktop rendering and broader device acceptance remain outstanding.
+The independent Plugin Manager entry is exposed as a second Android launcher activity and as
+`kcode --plugin-manager` on desktop. It binds only to host-owned Profile metadata and commands;
+it does not render the product UI, so a failed plugin composition leaves this entry available.
 
 ## Profile export policy
 
@@ -89,7 +98,7 @@ publishing a draft. Single-file imports retain their immediate behavior. This im
 is private to the UI package and does not change SDK 74 or Cordis composition semantics.
 
 AndroidProfileFileRoundtripTest exercises actual DocumentsUI JSON and complete archive save/open
-selections through this private APK's settings page. The saved intent matches the committed
+selections through this private APK's Profile management page. The saved intent matches the committed
 source, imports publish drafts and the active product remains unchanged. Committed/draft
 selection controls expose stable tags containing their Profile ID, so repeated labels do not
 make selection ambiguous in acceptance tests. The same case also selects two Bundles from an

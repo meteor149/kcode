@@ -16,4 +16,4 @@ internal fun profileText(resource: StringResource): String {
 
 /** XML remains the source of truth; generated defaults travel with the private implementation. */
 internal fun profileResourceText(key: String, language: String): String =
-    ProfileResourceStrings.getValue(if (language == "zh") "${key}_zh" else key)
+    ProfileResourceStrings.getValue(if (language.startsWith("zh")) "${key}_zh" else key)

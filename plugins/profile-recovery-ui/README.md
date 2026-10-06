@@ -2,16 +2,27 @@
 
 This host-linked module renders `ProfileHostContent` in the Android and desktop apps.
 It is outside the replaceable Cordis product tree and does not depend on default UI contracts
-or product localization. Ready hosts delegate directly to their own application renderer;
-only recovery/transitions use the independent Material fallback through `KcodeTheme` and
-the UI library's shared design defaults. Text defaults come from this module's XML dictionary.
+or product localization. Ready hosts normally delegate to their own application renderer;
+the separate Plugin Manager entry always uses an independent Material screen from
+`profile-management-ui`, including while the product is healthy. Recovery and transitions
+also use the host-linked fallback through `KcodeTheme` and the UI library's shared design
+defaults. Text defaults come from private XML dictionaries.
+
+Android registers `PluginManagerActivity` as a second launcher entry. Desktop accepts
+`--plugin-manager` to open the same manager window without rendering the product root. The
+manager links plugin operations to the full Profile editor; both use the host-owned
+`ProfileManagementClient`. The standalone host prepares package metadata only and waits until
+explicit activation to create a product runtime. If the Android main activity is already alive,
+the manager delegates commands to its host-owned client so active work and runtime publication
+remain coordinated. Invalid plugin configuration or failed product startup cannot remove access
+to management and repair tools.
 
 Recovery reads saved definitions through the neutral `ProfileManagementClient` without
 resolving the broken composition or querying its module catalogue. Users can select committed
 intent, a draft or a historical generation. Historical intent is read-only and activates its
 original frozen recipe directly; even save-and-activate does not write an implicit draft when
 there are no edits. Copy a selection to a new draft to edit historical intent while retaining
-its source recipe. Both the default settings page and recovery editor enforce this boundary.
+its source recipe. The standalone Profile editor and recovery editor enforce this boundary.
 Other selections support JSON editing, save, discard, saved activation and save-and-activate.
 Invalid JSON/identity changes and stale revisions preserve the editor. Dirty edits prevent
 selection/activation until explicitly saved/discarded. Refresh never updates a dirty editor's

@@ -2,6 +2,8 @@
 
 - [Plugin architecture](plugin-architecture.md): contracts, composition and ownership.
 - [Plugin development](plugin-development.md): allocation, packaging and validation.
+- [Plugin package format](plugin-package-format.md): native package manifest fields,
+  compatibility metadata and publisher validation.
 - [Verification evidence](verification.md): test scope, identity, device and execution-world limits.
 
 - [Profiles](profiles.md): native startup, committed state, package locks and data scopes.

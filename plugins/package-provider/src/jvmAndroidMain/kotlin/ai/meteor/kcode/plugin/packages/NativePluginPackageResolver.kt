@@ -1,6 +1,7 @@
 package ai.meteor.kcode.plugin.packages
 
 import ai.meteor.kcode.plugin.CurrentPluginApiVersion
+import ai.meteor.kcode.plugin.MinimumCompatiblePluginApiVersion
 import ai.meteor.kcode.plugin.DynamicPluginSpec
 import ai.meteor.kcode.plugin.KcodePluginPackages
 import ai.meteor.kcode.plugin.PluginPackageImport
@@ -160,8 +161,20 @@ class NativePluginPackageResolver(
     }
 
     private fun compatible(variant: PackageVariant): Boolean = variant.kcodeMetadata().let {
+        val hostApiInRange = it.pluginApiRange?.let { range -> CurrentPluginApiVersion in range }
+            // Older manifests had only a compiled API number. Keep one-step forward
+            // compatibility for the immediately previous supported API.
+            ?: (it.pluginApi == CurrentPluginApiVersion ||
+                (it.pluginApi == CurrentPluginApiVersion - 1 &&
+                    it.pluginApi >= MinimumCompatiblePluginApiVersion))
+        // A range is the publisher's binary-compatibility claim, like a peer dependency
+        // range. Current-API packages must still have been built with this host's ABI;
+        // previous-API packages carry their own fingerprint, verified against their lock.
+        val abiCompatible = it.pluginApi != CurrentPluginApiVersion || it.runtimeAbi == runtimeAbi
         variant.nativePackageName()
-        it.pluginApi == CurrentPluginApiVersion && it.runtimeAbi == runtimeAbi
+        it.pluginApi in MinimumCompatiblePluginApiVersion..CurrentPluginApiVersion &&
+            hostApiInRange &&
+            abiCompatible
     }
 
     private fun verifyArtifact(deployed: DeployedPluginPackage, variant: PackageVariant) {

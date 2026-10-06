@@ -89,7 +89,11 @@ class KcodeProfileHost(
     private val overlayAvailable: Boolean = initial?.conversationOverlayController != null,
     private val templateProvider: () -> List<ProfileDefinition> = { emptyList() },
 ) : AgentRuntimeOwner, ApplicationContent {
-    init { require(initial != null || initialFailure != null) { "A Profile host needs a runtime or startup failure" } }
+    init {
+        require(initial != null || initialFailure != null || management != null && commandGateway != null) {
+            "A Profile host needs a runtime, a startup failure, or a host-owned management client"
+        }
+    }
     private class HostCall(val host: KcodeProfileHost) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<HostCall>
     }
@@ -653,6 +657,45 @@ class KcodeProfileHost(
                 }
                 throw error
             }
+        }
+
+        /** Constructs the standalone manager without starting the selected product composition. */
+        suspend fun startManagementOnly(
+            initialProfileId: () -> String,
+            factory: ProfileRuntimeFactory,
+            management: ProfileManagement,
+            commands: ProfileCommandGateway,
+            templates: () -> List<ProfileDefinition> = { emptyList() },
+        ): KcodeProfileHost {
+            val callerContext = currentCoroutineContext()
+            callerContext.ensureActive()
+            val host = try {
+                withContext(NonCancellable) {
+                    KcodeProfileHost(
+                        initial = null,
+                        initialProfileId = initialProfileId(),
+                        factory = factory,
+                        management = management,
+                        commandGateway = commands,
+                        overlayAvailable = false,
+                        templateProvider = templates,
+                    ).also(commands::bind)
+                }
+            } catch (error: Throwable) {
+                withContext(NonCancellable) {
+                    runCatching { commands.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                }
+                throw error
+            }
+            try {
+                callerContext.ensureActive()
+            } catch (cancelled: CancellationException) {
+                withContext(NonCancellable) {
+                    runCatching { host.close() }.exceptionOrNull()?.takeIf { it !== cancelled }?.let(cancelled::addSuppressed)
+                }
+                throw cancelled
+            }
+            return host
         }
     }
 }

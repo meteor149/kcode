@@ -41,7 +41,14 @@ their original Bundle snapshots.
 Native factories choose an explicit `profileId`, the repository selection, or the initial
 `native` template. Desktop accepts `--profile <id>` and `--profile=<id>`. Android forwards
 the `profile` Activity intent extra. These choose startup; they do not perform a live switch
-or save selection by themselves.
+or save selection by themselves. Desktop also accepts `--plugin-manager` to open the
+host-linked manager without rendering or starting the product tree. Android exposes a second
+launcher activity named **kcode Plugin Manager**. These standalone entries use the host-owned
+metadata and command gateway, so they remain available when a plugin breaks product startup.
+The manager prepares package metadata but does not create a product runtime on entry; activation
+first loads the selected plugin tree.
+If the Android main activity is already alive, the launcher surface delegates commands to that
+runtime's gateway to coordinate activation and active work.
 
 Desktop and Android factories return stable facades owned by `KcodeProfileHost`.
 `createDesktopProfileHost` and `createAndroidProfileHost` are the suspending construction entry points; `switchTo(id)` performs
@@ -159,13 +166,22 @@ The catalogue supplies available code independently of the instance tree. Produc
 are allocated only after package and configuration preparation. A custom composition can
 omit default UI or leave consumers waiting for required providers.
 
-## Default management surface
+## Independent management surface
 
-The optional [ui-profiles package](../plugins/ui-profiles/README.md) contributes a settings
-section through KcodeProfiles and KcodeUiSlots. New native templates select kcode.default-ui
+The optional [ui-profiles package](../plugins/ui-profiles/README.md) contributes a plugin-only
+settings section through KcodeProfiles and KcodeUiSlots. The independent manager hosts the full
+Profile editor. New native templates select kcode.default-ui
 version 2 with this package. Frozen version 1 commits keep their original composition and
 can explicitly insert provider.ui.settings.profiles when available; startup does not silently
 upgrade their instance trees.
+
+The `plugins` section lists plugin instances and verified modules for the active Profile.
+Enable/disable, configure, add, and remove actions write revision-checked drafts. In Kcode
+Settings, a verified draft shows **Activate plugin changes**; this explicitly asks the native
+host to replace the running composition, without exposing Profile selection or lifecycle
+controls there. The independent manager retains full Profile management, including Bundle
+import and **Preview and start Profile**. Removing an instance does not delete releases still
+referenced by another Profile or history.
 
 The initial screen supports creation, cloning, source selection, JSON definition editing,
 revision-checked draft saving, discard, preview, effective tree/diagnostics, module catalogue,
@@ -253,8 +269,11 @@ are not removed. This protocol establishes process/restart consistency using ato
 replacement; tests do not simulate sudden device power loss or every filesystem's durability.
 
 Startup prefers committed intent to editable drafts and revalidates retained deployments.
-Changing a draft, bundle offer or distribution release does not silently upgrade a committed
-Profile. Package IDs identify releases; entry IDs identify independently configured instances.
+Changing a draft or bundle offer does not silently upgrade a committed Profile. Native hosts may
+designate a narrow set of first-party packages for startup refresh when an app update changes
+their host integration; successful startup publishes the refreshed lock as a new generation.
+Imported package locks and other committed Profile releases remain frozen. Package IDs identify
+releases; entry IDs identify independently configured instances.
 Disabling an entry does not remove its deployment from the locked available code graph.
 
 A previously selected release takes precedence over a same-ID builtin catalogue module.
