@@ -1,8 +1,9 @@
 # Profile core acceptance
 
-This is the current implementation-to-evidence map for the core Profile milestone, not
-a certification based on historical green logs. The audited kcode baseline is `b3d7d814`
-and the Cordis development baseline is `6a9b4e4`. Public plugin ABI is 76. The worktrees
+The core Profile milestone is verified against current implementation and executed tests.
+The implementation baseline is kcode `b3d7d814`, with integrated lifecycle verification at
+`17c1c70c` and the Android fixture updates recorded with this document. The Cordis development
+baseline is `6a9b4e4`. Public plugin ABI is 76. The worktrees
 are `meteor/profiles` and `meteor/profile-composition`; main has not been merged.
 
 ## Reference and ownership
@@ -24,7 +25,9 @@ platform bindings. Feature plugins own typed defaults, validation and export sch
 ## Requirement map
 
 Paths below are relative to their repository. Test names refer to observable cases;
-the existence of a case is not equivalent to a passing current execution.
+the existence of a case is not equivalent to a passing execution. All requirements in this
+table are verified by the integrated and native runs recorded below; deferred product polish
+is listed separately and is not counted as passing native interaction evidence.
 
 | Requirement | Implementation | Behavioral evidence to inspect |
 | --- | --- | --- |
@@ -68,7 +71,43 @@ APK execution evidence. Logs: `profile-subagent-admission-emulator-final-validat
 `profile-subagent-admission-emulator-dex-compile.log` and
 `profile-subagent-admission-emulator-compiled-validation.log`. Do not infer an environment-only
 cause from the startup ANR or count the timeout as a passing lifecycle test. No source
-assertion or package-identity requirement is waived; current Android acceptance is open.
+assertion or package-identity requirement was waived. These failed runs remain historical
+diagnostic evidence; the subsequent isolated-device acceptance closes this core gap.
+
+The supplementary no-default-product subagent case pinpointed the earlier emulator stall
+inside `packageFileSha256` reading the aggregate APK. An independently created API 35 x86_64
+AVD with 4 GB RAM ran both the unchanged full-default subagent case and its supplementary
+case successfully in 12.639 seconds. No product execution code changed to obtain that result.
+The original device and its other applications were left intact.
+
+The first wider Android run passed 13 of 19 cases. Its six ProfileHost fixture failures were
+traced to reading ubuntuShell on x86_64 without declaring injection: the fixture declared
+that service only on ARM64. Lookup now uses the same architecture condition and the initial
+management case reports the original startup failure before accessing a withdrawn bridge.
+This retains the ARM64 requirement; no substitute Ubuntu provider was added.
+
+The final Android batch passed 21 cases (`OK (21 tests)`, instrumentation code -1) in
+348.961 seconds: two private subagent cases, six native Profile-host cases, four early-startup
+recovery cases, one Bundle archive case, two export/schema cases and six actual recovery
+window cases. Log: `profile-core-owned-android-final-validation.log`. The rebuilt
+instrumentation APK passed in `profile-core-owned-android-final-build.log`.
+
+A subsequent batch passed eight cases (`OK (8 tests)`, instrumentation code -1) in 24.866
+seconds: the actual current Desktop-exported archive transferred to Android, one private
+Goal/Schedule case, all five Schedule dispatch lifecycle cases and the private conversation
+policy/executor case. The archive test received the real transfer path and matching digest;
+it did not skip for absent input. It verifies exact code identities, Android variant selection,
+separate draft publication, removal of source archives, restart from verified cache and export
+of frozen intent. Log: `profile-core-owned-android-execution-exchange-validation.log`.
+
+Together the final core evidence comprises 1,135 multiplatform cases, 222 desktop platform
+cases, 182 Cordis JVM/packager cases, 29 current API 35 Android cases, both application builds
+and the instrumentation build. No further production implementation changed after the
+integrated desktop/framework runs. The Android changes are fixture/coverage changes only.
+
+Validation logs are retained as ignored files in the kcode development worktree, including
+the Cordis integrated log. The task-owned acceptance AVD has been stopped and deleted;
+its directory and descriptor are confirmed absent.
 
 The core milestone includes minimal commands and independent recovery. Rich tree editors,
 full desktop native-dialog gestures, YAML, marketplace and hot-reload are deferred UI/product

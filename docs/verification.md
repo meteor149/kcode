@@ -372,3 +372,39 @@ profile-subagent-admission-emulator-compiled-validation.log. The suspended opera
 not yet identified; do not classify the whole failure as environment-only or infer passing
 APK behavior from successful assembly/dex compilation. Android subagent execution acceptance
 and final core completion remain open. No further unchanged blind retry was launched.
+
+## Android core acceptance closure
+
+The older emulator's supplementary no-default-product subagent case failed while reading
+the aggregate APK in packageFileSha256 (profile-subagent-admission-headless-diagnostic.log).
+A separate freshly created API 35 x86_64 AVD with 4 GB RAM ran both full-default and
+no-default-product subagent cases successfully in 12.639 seconds. The original full case
+was retained; no assertion or package identity requirement was removed. The added helper
+labels bounded runtime/allocation/restart phases rather than adding temporary product logs.
+
+The wider Android batch initially passed 13/19 cases. All six failures came from the
+ProfileHost fixture's unconditional ubuntuShell lookup on x86_64 although its inject list
+included that key only on ARM64. Reporting the saved initial host failure exposed the
+actual exception. Lookup now matches the declared architecture requirement; ARM64 coverage
+remains intact and no placeholder service was introduced.
+
+profile-core-owned-android-final-validation.log reports OK (21 tests), instrumentation code
+-1, 348.961 seconds: private subagents, actual APK Profile hosts/commands/scopes/restart/
+rollback, early startup recovery, Bundle exchange, schema review and real recovery windows.
+profile-core-owned-android-execution-exchange-validation.log reports OK (8 tests), code -1,
+24.866 seconds: the current Desktop-exported archive with provided digest (no skipped input),
+Goal/Schedule private identity, all five Schedule lifecycle cases and the private conversation
+executor/policy case. The archive retains exact releases/digests, verifies Android selection,
+keeps import separate from activation and starts from frozen verified cache after source removal.
+The instrumentation build passed in profile-core-owned-android-final-build.log.
+
+This closes the core Android evidence gaps in profile-core-acceptance.md. All 29 final Android
+cases passed. Earlier failures remain diagnostic history, not successful acceptance. The
+production baseline did not change after the 1,135 multiplatform, 222 desktop platform and
+182 Cordis cases and both app builds passed. Detailed native file-dialog gestures, richer
+editing, YAML, marketplace and hot-reload remain deferred; no root/Shizuku or model-network
+authorization is established by these fixtures. The task-owned AVD has been stopped and
+deleted, with both its directory and descriptor confirmed absent; no original Android target
+or user application was reset, stopped or deleted. The Cordis integrated validation log was
+moved into the kcode development worktree alongside the other ignored validation logs;
+both repositories retain their source evidence without committing generated logs.

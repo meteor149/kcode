@@ -69,6 +69,8 @@ class AndroidProfileHostTest {
         val fixture = Fixture()
         val host = fixture.start()
         try {
+            host.state.value.failure?.let { throw it }
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
             val old = fixture.profiles
             val catalogue = old.catalogue()
             val id = "commands-${System.nanoTime()}"
@@ -353,7 +355,7 @@ class AndroidProfileHostTest {
                 fs = ctx.require(KcodeFileSystem.Key).backend
                 shell = ctx.require(KcodeShell.Key).executor
                 profiles = ctx.require(KcodeProfiles.Key).client
-                ubuntu = ctx[KcodeUbuntuShell.Key]?.executor
+                ubuntu = if (androidPackageHost().arch == "arm64") ctx.require(KcodeUbuntuShell.Key).executor else null
             }, "okay")
 
         private val capture = captureModule("provider.ui.compose")

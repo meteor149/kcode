@@ -12,6 +12,7 @@ import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
@@ -35,6 +36,15 @@ class AndroidSubagentProviderPrivateLoadingTest {
     // The aggregate instrumentation APK also performs cold native catalogue initialization.
     @Test(timeout = 300_000)
     fun actualPackageOwnsConfiguredCapacityAndJoinsChildCleanupAcrossWithdrawalAndRestart(): Unit = runBlocking {
+        verifyPrivateLifecycle(includeDefaults = true)
+    }
+
+    @Test(timeout = 120_000)
+    fun privateSubagentWorksWithoutDefaultProductProviders(): Unit = runBlocking {
+        verifyPrivateLifecycle(includeDefaults = false)
+    }
+
+    private suspend fun CoroutineScope.verifyPrivateLifecycle(includeDefaults: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val directory = File(context.cacheDir, "private-subagents-${System.nanoTime()}").apply { mkdirs() }
@@ -47,15 +57,23 @@ class AndroidSubagentProviderPrivateLoadingTest {
         ) { ctx, _ -> factory = ctx.require(KcodeSubagents.Key).factory }, Unit)
         val configuration = KcodePluginRuntimeConfig(
             interactionPolicy = InteractionPolicy(approver = ToolCallApprover { true }),
-            featurePlugins = listOf(capture), pluginCompositionStore = FilePluginCompositionStore(directory),
+            profile = KcodePluginProfile(includeDefaults = includeDefaults),
+            featurePlugins = if (includeDefaults) listOf(capture) else listOf(
+                capture,
+                kcodePlugin(PluginDescriptor("feature.subagents", "builtin", "built-in", setOf("subagents")), SubagentFeaturePlugin, Unit),
+            ),
+            pluginCompositionStore = FilePluginCompositionStore(directory),
             dynamicPluginControllerFactory = DynamicPluginControllerFactory { ctx, loader, inventory ->
                 AndroidDynamicPluginController(ctx, context, loader, inventory, directory)
             },
         )
-        var runtime = KcodePluginRuntime.create(configuration)
+        var runtime = phase("initial runtime") { KcodePluginRuntime.create(configuration) }
         val release = CompletableDeferred<Unit>()
         try {
             assertEquals(5, factory.maxConcurrency)
+            if (!includeDefaults) assertFalse(runtime.diagnostics().plugins.any {
+                it.id in setOf("provider.ui.compose", "provider.agent-loop.koog", "provider.model-settings.catalog")
+            })
             val deployment = DynamicPluginSpec(
                 id = "feature.subagents", version = "private-capacity", artifactPath = artifact.path,
                 sha256 = packageFileSha256(artifact),
@@ -63,7 +81,7 @@ class AndroidSubagentProviderPrivateLoadingTest {
                 config = Json.parseToJsonElement("""{"maxConcurrency":2}"""),
                 packageName = instrumentation.context.packageName,
             )
-            runtime.pluginManager.replace(deployment)
+            phase("private APK replacement") { runtime.pluginManager.replace(deployment) }
             val original = factory
             assertEquals(2, original.maxConcurrency)
             assertNotSame(SubagentCoordinatorFactory::class.java.classLoader, original.javaClass.classLoader)
@@ -105,20 +123,26 @@ class AndroidSubagentProviderPrivateLoadingTest {
             assertEquals(null, original.maxConcurrency)
             assertFailsWith<IllegalStateException> { original.create(CoroutineScope(coroutineContext), "stale", { "" }, {}) }
             assertFailsWith<IllegalStateException> { coordinator.list(RootAgentPath, null) }
-            runtime.close()
-            runtime = KcodePluginRuntime.create(configuration)
-            runtime.pluginManager.setEnabled("feature.subagents", true)
+            phase("runtime closure") { runtime.close() }
+            runtime = phase("runtime restart") { KcodePluginRuntime.create(configuration) }
+            phase("subagent enable") { runtime.pluginManager.setEnabled("feature.subagents", true) }
             assertNotSame(original, factory)
             assertEquals(2, factory.maxConcurrency)
             val restored = factory
-            runtime.pluginManager.uninstall("feature.subagents")
+            phase("subagent uninstall") { runtime.pluginManager.uninstall("feature.subagents") }
             assertEquals(null, restored.maxConcurrency)
-            runtime.pluginManager.setEnabled("feature.subagents", true)
+            phase("subagent enable") { runtime.pluginManager.setEnabled("feature.subagents", true) }
             assertEquals(5, factory.maxConcurrency)
         } finally {
             release.complete(Unit)
-            runtime.close()
+            phase("runtime closure") { runtime.close() }
             directory.walkBottomUp().forEach { it.setWritable(true); it.delete() }
         }
+    }
+
+    private suspend fun <T> phase(name: String, block: suspend () -> T): T = try {
+        withTimeout(45_000) { block() }
+    } catch (error: TimeoutCancellationException) {
+        throw AssertionError("Private subagent phase did not settle: $name", error)
     }
 }
