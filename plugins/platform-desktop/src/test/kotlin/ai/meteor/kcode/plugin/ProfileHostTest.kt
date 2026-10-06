@@ -18,6 +18,7 @@ import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.profiles.ProfileCompiler
 import ai.meteor.kcode.plugin.profiles.ProfileCompositionSession
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileCompositionEdit
 import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.profiles.ProfileGenerationRepository
 import ai.meteor.kcode.plugin.profiles.ProfileLock
@@ -31,6 +32,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -382,12 +385,116 @@ class ProfileHostTest {
         }
     }
 
+    @Test
+    fun failedCompositionRestorationRequiresRecoveryAndRetiresOldOwner(): Unit = runBlocking {
+        verifyFailedCompositionRestoration(generalEdit = false)
+        verifyFailedCompositionRestoration(generalEdit = true)
+    }
+
+    private suspend fun verifyFailedCompositionRestoration(generalEdit: Boolean) {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.failAllocation += "old"
+            fixture.refuseCompositionPublication = true
+            val failure = assertFailsWith<IllegalStateException> {
+                if (generalEdit) {
+                    host.pluginManager.editProfile(ProfileCompositionEdit(
+                        "old", 1L, listOf(ProfileOperation.Disable("agent")),
+                    ))
+                } else {
+                    host.pluginManager.setEnabled("agent", false)
+                }
+            }
+            assertEquals("Profile composition requires recovery", failure.message)
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(before, fixture.repository.state())
+            assertTrue(fixture.live.isEmpty())
+            assertFailsWith<IllegalStateException> {
+                host.chatService.reply(configuration, emptyList(), "after failed restoration")
+            }
+            assertFailsWith<IllegalStateException> { host.pluginManager.currentProfile() }
+            assertFailsWith<IllegalStateException> { fixture.runtimes.first().pluginManager.currentProfile() }
+            assertFailsWith<IllegalStateException> {
+                fixture.runtimes.first().chatService.reply(configuration, emptyList(), "stale runtime")
+            }
+            fixture.failAllocation.clear()
+            fixture.refuseCompositionPublication = false
+            host.recoverTo("target")
+            assertEquals(ProfileHostState("target"), host.state.value)
+            assertEquals(listOf("target"), fixture.live)
+            assertEquals("target", fixture.repository.selected())
+            assertEquals("target", host.chatService.reply(configuration, emptyList(), "recovered"))
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun failedCompositionPublicationWithSuccessfulRestorationKeepsHostReady(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.refuseCompositionPublication = true
+            val failure = assertFailsWith<IllegalStateException> {
+                host.pluginManager.setEnabled("agent", false)
+            }
+            assertEquals("composition publication refused", failure.message)
+            assertEquals(ProfileHostState("old"), host.state.value)
+            assertEquals(before, fixture.repository.state())
+            assertEquals(listOf("old"), fixture.live)
+            assertEquals("old", host.chatService.reply(configuration, emptyList(), "restored"))
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun cancellingEditForSwitchCannotResetFailedRestorationToReady(): Unit = runBlocking {
+        val fixture = Fixture()
+        try {
+            val host = fixture.start()
+            val before = fixture.repository.state()
+            fixture.suspendCompositionPublication = CompletableDeferred()
+            fixture.failAllocation += "old"
+            val edit = async { runCatching { host.pluginManager.setEnabled("agent", false) } }
+            fixture.suspendCompositionPublication!!.await()
+            val switching = async {
+                assertFailsWith<IllegalStateException> { host.switchTo("target", cancelActive = true) }
+            }
+            withTimeout(5_000) { while (!edit.isCancelled) yield() }
+            fixture.releaseCompositionPublication.complete(Unit)
+            switching.await()
+            edit.join()
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(before, fixture.repository.state())
+            assertTrue("target" !in fixture.allocations)
+            assertFailsWith<IllegalStateException> {
+                host.chatService.reply(configuration, emptyList(), "cancelled restoration")
+            }
+            fixture.failAllocation.clear()
+            fixture.suspendCompositionPublication = null
+            host.recoverTo("target")
+            assertEquals(listOf("target"), fixture.live)
+        } finally { fixture.close() }
+    }
+
     private class Fixture {
         val root = Files.createTempDirectory("kcode-profile-host").toFile()
         val storage = FileProfileRepository(root)
         var refusePublication = false
+        var refuseCompositionPublication = false
+        var suspendCompositionPublication: CompletableDeferred<Unit>? = null
+        val releaseCompositionPublication = CompletableDeferred<Unit>()
         var afterPublication: suspend () -> Unit = {}
         val repository = object : ProfileGenerationRepository by storage {
+            override suspend fun commit(value: CommittedProfileGeneration, expectedGeneration: Long?) {
+                suspendCompositionPublication?.let {
+                    it.complete(Unit)
+                    releaseCompositionPublication.await()
+                    error("composition publication interrupted")
+                }
+                check(!refuseCompositionPublication) { "composition publication refused" }
+                storage.commit(value, expectedGeneration)
+            }
             override suspend fun commitAndSelect(value: CommittedProfileGeneration, expectedGeneration: Long?, expectedRevision: Long) {
                 check(!refusePublication) { "publication refused" }
                 storage.commitAndSelect(value, expectedGeneration, expectedRevision)
@@ -396,6 +503,7 @@ class ProfileHostTest {
         }
         val live = mutableListOf<String>()
         val allocations = mutableListOf<String>()
+        val runtimes = mutableListOf<KcodePluginRuntime>()
         val failAllocation = mutableSetOf<String>()
         val failClosure = mutableSetOf<String>()
         val failProviderCleanup = mutableSetOf<String>()
@@ -455,6 +563,7 @@ class ProfileHostTest {
                 profileActivation = activation,
                 profileBuiltinModules = listOf(mount),
             ))
+            runtimes += runtime
             val controller = if (!overlay) null else object : AgentConversationOverlayController {
                 override suspend fun startTurn(initialMessages: List<ChatMessage>) = object : AgentConversationOverlayTurn {
                     override suspend fun update(messages: List<ChatMessage>) { overlayUpdates++ }

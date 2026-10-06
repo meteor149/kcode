@@ -95,6 +95,7 @@ import org.cordis.asDynamicPlugin
 import org.cordis.loader.Loader
 import org.cordis.loader.LoaderConfig
 import org.cordis.loader.LoaderPlugin
+import org.cordis.loader.TreeRestorationException
 import org.cordis.loader.EntryOptions
 import org.cordis.loader.GroupPlugin
 import org.cordis.loader.withTreeTransaction
@@ -195,6 +196,20 @@ class KcodePluginRuntime private constructor(
     private val lock = Mutex()
     private val turns = mutableMapOf<Job, Int>()
     private var closed = false
+    private var recoveryFailure: ProfileRuntimeRecoveryException? = null
+
+    private fun requireOperational() {
+        check(!closed) { "plugin runtime is closed" }
+        recoveryFailure?.let { throw it }
+    }
+
+    private fun requireRecovery(error: Throwable): Nothing {
+        val failure = ProfileRuntimeRecoveryException(error)
+        recoveryFailure = failure
+        applicationView.value = null
+        overlayUiSlots.value = UiContributionsSnapshot()
+        throw failure
+    }
     private var restoring = false
     private val bundledReleaseHistory = linkedMapOf<String, String>()
     private var committedModelCatalog = ModelCatalogSnapshot()
@@ -295,7 +310,7 @@ class KcodePluginRuntime private constructor(
     }
     override suspend fun updateSettings(update: SettingsUpdate): AppliedSettingsUpdate {
         val (handler, catalog) = lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             val commands = checkNotNull(context[KcodeSettingsCommands.Key]) { "Enable settings and settings commands before configuring settings" }
             commands.handler to committedModelCatalog
         }
@@ -303,7 +318,7 @@ class KcodePluginRuntime private constructor(
     }
 
     override suspend fun modelCatalog(): ModelCatalogSnapshot = lock.withLock {
-        check(!closed) { "plugin runtime is closed" }
+        requireOperational()
         committedModelCatalog
     }
 
@@ -313,14 +328,14 @@ class KcodePluginRuntime private constructor(
         object : AgentConversationOverlayController {
             override suspend fun startTurn(initialMessages: List<ChatMessage>): AgentConversationOverlayTurn {
                 val service = lock.withLock {
-                    check(!closed) { "plugin runtime is closed" }
+                    requireOperational()
                     context.require(KcodeConversationOverlays.Key)
                 }
                 return requireNotNull(service.startTurn(initialMessages)) { "Conversation overlays are unavailable" }
             }
             override suspend fun setHostForeground(isForeground: Boolean) {
                 val registry = lock.withLock {
-                    check(!closed) { "plugin runtime is closed" }
+                    requireOperational()
                     overlayHostState.setForeground(isForeground)
                     context[KcodeConversationOverlays.Key]
                 }
@@ -328,7 +343,7 @@ class KcodePluginRuntime private constructor(
             }
             override suspend fun close() {
                 val controller = lock.withLock {
-                    check(!closed) { "plugin runtime is closed" }
+                    requireOperational()
                     context[KcodeConversationOverlays.Key]
                 }?.current()
                 controller?.close()
@@ -363,7 +378,7 @@ class KcodePluginRuntime private constructor(
         override suspend fun currentProfile(): ProfileCompositionState? {
             PluginOperationOwner.requireOutsideCall()
             return lock.withLock {
-                check(!closed) { "plugin runtime is closed" }
+                requireOperational()
                 activeProfile?.session?.currentCompositionState()
             }
         }
@@ -374,7 +389,7 @@ class KcodePluginRuntime private constructor(
             val serializer = ListSerializer(ProfileOperation.serializer())
             val operations = Json.decodeFromString(serializer, Json.encodeToString(serializer, edit.operations))
             return lock.withLock {
-                check(!closed) { "plugin runtime is closed" }
+                requireOperational()
                 check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
                 val activation = checkNotNull(activeProfile) { "This runtime does not use Profiles" }
                 val current = activation.session.currentCompositionState()
@@ -490,10 +505,13 @@ class KcodePluginRuntime private constructor(
             }
         }
 
-        override suspend fun installed(): List<DynamicPluginSpec> = lock.withLock { external?.installed().orEmpty() }
+        override suspend fun installed(): List<DynamicPluginSpec> = lock.withLock {
+            requireOperational()
+            external?.installed().orEmpty()
+        }
         override suspend fun close() = this@KcodePluginRuntime.close()
         override suspend fun settle() = lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             this@KcodePluginRuntime.settle()
         }
     }
@@ -508,7 +526,7 @@ class KcodePluginRuntime private constructor(
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
         return lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             val activation = activeProfile ?: return@withLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             val previous = activation.resolved
@@ -657,15 +675,27 @@ class KcodePluginRuntime private constructor(
             }
         } catch (error: Throwable) {
             // Cordis restores old bindings before candidate code resources can be released.
+            val restorationFailures = mutableListOf<Throwable>()
+            suspend fun restore(action: suspend () -> Unit) {
+                try { action() } catch (failure: Throwable) {
+                    restorationFailures += failure
+                    if (failure !== error) error.addSuppressed(failure)
+                }
+            }
             withContext(NonCancellable) {
-                runCatching { moduleTransaction?.rollback() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
-                profileDescriptors.clear()
-                profileDescriptors.putAll(beforeDescriptors)
-                val owned = (beforeDescriptors.keys + descriptors.keys + activation.resolved.packages.map { "package:${it.id}" } + candidate.packages.map { "package:${it.id}" }).toSet()
-                owned.forEach { inventory.remove(it) }
-                beforeInventory.filter { it.id in owned }.forEach { inventory.publish(it) }
-                bindings.values.map { it.key }.filter { it !in oldKeys }.forEach(loader.builtins::remove)
-                runCatching { settle(publishView = true) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                restore { moduleTransaction?.rollback() }
+                restore {
+                    profileDescriptors.clear()
+                    profileDescriptors.putAll(beforeDescriptors)
+                    val owned = (beforeDescriptors.keys + descriptors.keys + activation.resolved.packages.map { "package:${it.id}" } + candidate.packages.map { "package:${it.id}" }).toSet()
+                    owned.forEach { inventory.remove(it) }
+                    beforeInventory.filter { it.id in owned }.forEach { inventory.publish(it) }
+                    bindings.values.map { it.key }.filter { it !in oldKeys }.forEach(loader.builtins::remove)
+                }
+                restore { settle(publishView = error !is TreeRestorationException && restorationFailures.isEmpty()) }
+            }
+            if (error is TreeRestorationException || restorationFailures.isNotEmpty()) {
+                requireRecovery(error)
             }
             throw error
         }
@@ -676,7 +706,7 @@ class KcodePluginRuntime private constructor(
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
         return lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             val activation = activeProfile ?: return@withLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             if (changes.isEmpty()) return@withLock true
@@ -716,9 +746,11 @@ class KcodePluginRuntime private constructor(
                     commitApplicationView(prepared)
                 }
             } catch (error: Throwable) {
-                withContext(NonCancellable) {
-                    runCatching { settle(publishView = true) }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                val restorationFailure = withContext(NonCancellable) {
+                    runCatching { settle(publishView = error !is TreeRestorationException) }.exceptionOrNull()
                 }
+                restorationFailure?.takeIf { it !== error }?.let(error::addSuppressed)
+                if (error is TreeRestorationException || restorationFailure != null) requireRecovery(error)
                 throw error
             }
             true
@@ -802,7 +834,7 @@ class KcodePluginRuntime private constructor(
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
         return lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             val activation = checkNotNull(activeProfile) { "Runtime has no active Profile" }
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             val current = activation.session.currentCompositionState()
@@ -816,7 +848,7 @@ class KcodePluginRuntime private constructor(
     }
 
     suspend fun profileModuleCatalogue(): List<ProfileModuleSummary> = lock.withLock {
-        check(!closed) { "plugin runtime is closed" }
+        requireOperational()
         val activation = checkNotNull(activeProfile) { "Runtime has no active Profile" }
         val instances = linkedMapOf<String, MutableList<String>>()
         fun index(entries: List<EntryOptions>) {
@@ -839,7 +871,7 @@ class KcodePluginRuntime private constructor(
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
         return lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             val activation = activeProfile ?: return@withLock false
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             replaceProfileModuleLocked(activation, packageId, replacement)
@@ -901,7 +933,8 @@ class KcodePluginRuntime private constructor(
     }
 
     suspend fun diagnostics(): KcodePluginDiagnostics = lock.withLock {
-        if (!closed) settle()
+        requireOperational()
+        settle()
         KcodePluginDiagnostics(
             plugins = inventory.snapshot(),
             toolContributions = context[KcodeTools.Key]?.contributionIds().orEmpty(),
@@ -924,7 +957,7 @@ class KcodePluginRuntime private constructor(
     private suspend fun <T> useAgent(block: suspend (ChatService) -> T): T {
         val job = checkNotNull(currentCoroutineContext()[Job])
         val service = lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             settle()
             context.require(KcodeAgents.Key).chatService.also { turns[job] = (turns[job] ?: 0) + 1 }
         }
@@ -987,7 +1020,7 @@ class KcodePluginRuntime private constructor(
         PluginOperationOwner.requireOutsideCall()
         ChatGenerationRunner.requireOutsideCall()
         lock.withLock {
-            check(!closed) { "plugin runtime is closed" }
+            requireOperational()
             check(activeProfile == null) { "Declarative Profile changes require a Profile transaction" }
             check(turns.isEmpty()) { "finish or cancel active agent turns before changing plugins" }
             // Archive preparation is cancellable and cannot modify the composition.

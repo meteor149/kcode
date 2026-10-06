@@ -670,3 +670,39 @@ This establishes provider cleanup propagation at the host switch boundary. It do
 intra-Profile failed-restoration escalation, independent recovery UI, failure handling before
 initial host construction, device cleanup-failure behavior, or final platform acceptance.
 The overall goal remains active.
+
+## Incomplete active-composition restoration
+
+Cordis a1bd8d0 exposes TreeRestorationException in the existing org.cordis.loader shared
+boundary. A successful restoration keeps the original command failure; an incomplete one
+reports candidate/publication failure as its cause and retirement/restoration failures as
+suppressed exceptions. Rollback retires every tracked entry, including residual entries
+outside the current root recipe. Failed retirement prevents restoration allocation over
+uncertain resources. Final core/loader/include/HMR validation passed 137 tests without
+failures, errors or skips. The previously observed isolation-settling intermittency remains
+an outstanding audit; passing this run does not prove it fixed.
+
+Kcode marks incomplete tree/module restoration as a private runtime recovery failure.
+Both general Profile edits and the enable-state transaction path stop ordinary runtime
+calls and withdraw prepared UI projections. The Host clears its current view, retains the
+failed owner for retirement, and enters RecoveryRequired. A concurrent switch that cancels
+an edit rechecks the state after joining it and cannot reset an absent/failed runtime to Ready.
+Successful restoration after failed publication preserves Ready and the old durable authority.
+
+Final focused host/runtime validation passed 39 tests (7 native host, 20 host, 12 runtime),
+with zero failures, errors or skips. The restoration case exercises both general editing and
+enable-state editing, checks retained runtime references reject work, and explicitly recovers
+to a new target after retiring the failed owner. A controlled publication/cancellation race
+proves switching cannot overwrite RecoveryRequired with Ready. The successful-restoration
+case proves ordinary publication failure still admits work against the old committed Profile.
+
+Plugin API is now 70 because the shared framework gains the public restoration exception.
+PluginHostApiPackages continues exporting the existing org.cordis namespace; no additional
+shared namespace is needed. Generated external packages were rebuilt against the matching
+SDK/framework fingerprint. SDK allTests passed 91 executions (43 desktop, 24 Android debug,
+24 Android release), with zero failures, errors or skips. Desktop application compilation
+and Android application assembly passed against the final implementation.
+
+Independent recovery UI, failures before initial host construction, verified Bundle import,
+credential-safe export, autonomous-work admission auditing, Android device evidence under
+API 70 and final full-platform acceptance remain outstanding. The overall goal remains active.

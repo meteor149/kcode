@@ -40,6 +40,13 @@ the host also offers `recoverTo(id)` for normal committed/draft startup selectio
 fresh resources and appends a generation only after successful allocation and publication.
 Failed or cancelled attempts retain `RecoveryRequired` and the previous authority.
 
+Active Profile edits also close execution admission when tree or module restoration fails.
+The runtime rejects subsequent ordinary calls and withdraws its prepared UI projections;
+the host removes the failed runtime from its current view, enters RecoveryRequired and retains
+the owner for retirement before explicit recovery allocates a target. A failed publication
+whose old composition is restored successfully remains an ordinary command failure and keeps
+the host Ready. Durable selection and generation history are unchanged by failed edits.
+
 Owners whose closure failed are retained and recovery calls their closure boundary again. No
 candidate allocation or automatic old-runtime restoration overlaps such an owner. Cordis Fiber
 cleanup failures are terminal for that Fiber: every disposer is attempted, its failure is retained,

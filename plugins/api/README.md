@@ -22,7 +22,7 @@ and FileProvider components. Core's legacy `android.support` binder/parcelizer c
 already use the Android host namespace; their corresponding Core/Parcelable types must
 retain the same host identity.
 
-This shared boundary is Plugin API 69; older
+This shared boundary is Plugin API 70; older
 external packages must be rebuilt against its generated SDK ABI.
 
 API 65 exports portable Profile definitions, entries, bundle declarations and operations under
@@ -58,6 +58,11 @@ Cross-parent movement recreates the branch in the new context; same-parent order
 resources. Groups keep their children. Missing/non-group parents and cycles fail composition.
 The existing SDK namespace shares the new operation and serializer identities. Existing insert
 documents decode with append positioning; rebuild packages for the changed SDK/framework ABI.
+
+API 70 adds `TreeRestorationException` within the existing shared `org.cordis.loader`
+framework boundary. Hosts distinguish successful rollback from incomplete retirement/restoration.
+No new shared package identity is introduced; external packages must be rebuilt against the
+generated API 70 SDK/framework fingerprint.
 
 API 69 adds optional default-UI navigation deferral through `SettingsSection.onLeave` and
 the component sheet's pre-animation `onDismissAttempt`. Public identities stay in the

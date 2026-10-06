@@ -125,7 +125,24 @@ class KcodeProfileHost(
     }
 
     private suspend fun <T> call(block: suspend (KcodeAgentRuntime) -> T): T = admitted {
-        block(checkNotNull(current))
+        val runtime = checkNotNull(current)
+        try { block(runtime) }
+        catch (failure: ProfileRuntimeRecoveryException) {
+            withContext(NonCancellable) {
+                admission.withLock {
+                    if (current === runtime && mutableState.value.phase != ProfileHostPhase.Closed) {
+                        current = null
+                        view.value = null
+                        if (runtime !in pendingRetirement) pendingRetirement += runtime
+                        mutableState.value = mutableState.value.copy(
+                            phase = ProfileHostPhase.RecoveryRequired,
+                            failure = failure,
+                        )
+                    }
+                }
+            }
+            throw failure
+        }
     }
 
     val chatService: ChatService = object : ChatService {
@@ -361,6 +378,11 @@ class KcodeProfileHost(
                         jobs.forEach { it.join() }
                         finishOverlays()
                     }
+                    admission.withLock {
+                        check(mutableState.value.phase == ProfileHostPhase.Preparing && current != null) {
+                            "Active composition failed while switching Profiles"
+                        }
+                    }
                     val previousIntent = current?.pluginManager?.currentProfile()
                     target = if (request == null) factory.prepare(id) else factory.prepare(request)
                     check(target!!.activation.resolved.definition.id == id) { "Prepared Profile identity mismatch" }
@@ -406,7 +428,17 @@ class KcodeProfileHost(
                     }
                     release { candidate?.let { releaseRuntime(it) } }
                     release { target?.activation?.session?.discardPreparedSwitch() }
-                    if (!withdrawn) admission.withLock { mutableState.value = previousState.copy(failure = error) }
+                    if (!withdrawn) admission.withLock {
+                        val phase = if (
+                            current == null || pendingRetirement.isNotEmpty() ||
+                            mutableState.value.phase == ProfileHostPhase.RecoveryRequired
+                        ) {
+                            ProfileHostPhase.RecoveryRequired
+                        } else {
+                            ProfileHostPhase.Ready
+                        }
+                        mutableState.value = previousState.copy(phase = phase, failure = error)
+                    }
                     else if (!previousReleased || pendingRetirement.isNotEmpty()) admission.withLock {
                         mutableState.value = previousState.copy(phase = ProfileHostPhase.RecoveryRequired, failure = error)
                     } else {
