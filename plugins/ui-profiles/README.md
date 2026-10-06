@@ -82,6 +82,13 @@ independent recovery UI, desktop rendering and broader device acceptance remain 
 
 ## Profile export policy
 
+AndroidProfileFileRoundtripTest exercises actual DocumentsUI JSON and complete archive save/open
+selections through this private APK's settings page. The saved intent matches the committed
+source, imports publish drafts and the active product remains unchanged. Committed/draft
+selection controls expose stable tags containing their Profile ID, so repeated labels do not
+make selection ambiguous in acceptance tests. Desktop selected-file dialogs and multi-Bundle
+selection remain unverified; see docs/verification.md for the precise boundary.
+
 The release-owned schemas under "src/profile-export" declare portable configuration for:
 
 - provider.ui.settings.profiles

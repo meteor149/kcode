@@ -111,3 +111,9 @@ shell-owned transfer file into its isolated cache, verifies unchanged code ident
 different native variant, publishes a draft, removes source/outer files, starts Android code
 and exports the same frozen layers with its Android lock. This establishes backend transfer
 and real APK execution, not OS file-dialog acceptance, Shizuku authorization or root execution.
+
+AndroidProfileFileRoundtripTest separately passes actual DocumentsUI selections through the
+shipped private settings page: complete archive export to Downloads, saved profile.json
+comparison and reimport as a draft without changing the active generation. This establishes
+selected-file acceptance for that Android page; Desktop dialogs, multi-Bundle import selections
+and full application navigation still require separate checks. See verification.md.

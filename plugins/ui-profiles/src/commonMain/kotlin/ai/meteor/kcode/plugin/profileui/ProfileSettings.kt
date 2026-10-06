@@ -139,10 +139,12 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
                 Text(profile.id, style = MaterialTheme.typography.bodySmall)
                 if (profile.id == state.catalogue?.activeProfileId) Text(profileText(Res.string.profile_active))
                 if (profile.generation != null) TextButton(enabled = enabled && !state.dirty,
+                    modifier = Modifier.testTag("profile-committed-${profile.id}"),
                     onClick = { scope.launch { session.select(ProfileTarget(profile.id)) } }) {
                     Text(profileText(Res.string.profile_saved))
                 }
                 if (profile.hasDraft) TextButton(enabled = enabled && !state.dirty,
+                    modifier = Modifier.testTag("profile-draft-${profile.id}"),
                     onClick = { scope.launch { session.select(ProfileTarget(profile.id, ProfileSource.Draft)) } }) {
                     Text(profileText(Res.string.profile_draft))
                 }

@@ -43,3 +43,26 @@ result (`result=-1` on rejection), not only the adb process exit code.
 
 Atomic-file restart tests do not simulate sudden power loss or every filesystem's durability.
 Keep those limits explicit rather than treating a green build as broader evidence.
+
+## Android selected-file Profile exchange
+
+AndroidProfileFileRoundtripTest uses shipped private settings/Profile/theme APK renderers and
+the real DocumentsUI CreateDocument/OpenDocument activities on a physical ARM64 API 36 device.
+It commits a Localization-only source, returns to the default product, selects that exact
+committed source, saves JSON and complete archive files to Downloads, then selects each file
+for import. The saved JSON and archive profile.json equal the reviewed source; both imports
+produce durable drafts with unchanged active generation and exactly one authority revision
+increment each. Test-owned Downloads files are removed. Shell reads inspect output bytes;
+application import/export still uses actual SAF selections and streams, without injected results.
+
+Initial runs exposed fixture races (clicking before selection finished), ambiguous repeated
+Committed labels and a non-clickable Downloads breadcrumb. Stable per-Profile selection tags,
+enabled-action waits and clickable root selection corrected the fixture. The final run passed
+one test, OK (1 test), instrumentation code -1 (profile-file-roundtrip-controls-device.log).
+Thirty-three UI desktop tests passed with zero failures/errors/skips, and the instrumentation
+APK assembled (profile-file-roundtrip-controls-build.log). Earlier failed runs remain in local
+ignored logs; no temporary product logging or debugger sessions were introduced.
+
+This proves JSON and complete-archive selected-file exchange in this private Android settings
+page. It does not prove Desktop dialogs, multi-Bundle selected-file exchange, complete default
+application navigation, all accessibility methods or every DocumentsProvider implementation.
