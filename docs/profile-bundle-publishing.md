@@ -108,4 +108,5 @@ through Profile management, remove input/outer deployments, restart from frozen 
 native caches, and export through verified feature policies. These establish the publishing
 API/native import boundary. They do not establish selected-file acceptance in an OS picker.
 Self-contained committed Profile export and verified target-host lock rebuilding now have a
-separate [archive backend](profile-archives.md); its SDK/file UI connection remains outstanding.
+separate [archive backend](profile-archives.md) with SDK 74 commands/native file actions.
+Selected-file OS picker acceptance remains outstanding.

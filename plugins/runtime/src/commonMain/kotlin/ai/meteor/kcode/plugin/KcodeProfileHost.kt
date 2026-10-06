@@ -11,6 +11,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.AgentConversationOverlayController
@@ -318,6 +320,14 @@ class KcodeProfileHost(
 
     suspend fun exportPortableProfile(request: ProfilePortableExport): String = metadata {
         it.exportPortable(request.target, expectedRevision = request.expectedRevision)
+    }
+
+    suspend fun importProfileArchive(request: ProfileArchiveImport): ProfileCatalogue = metadata {
+        it.importArchive(request).withActive()
+    }
+
+    suspend fun exportProfileArchive(request: ProfilePortableExport, consume: suspend (ProfileArchiveReference) -> Unit): Unit = metadata {
+        it.exportArchive(request, consume)
     }
     @Composable
     override fun Render(options: ApplicationHostOptions) {

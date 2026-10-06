@@ -54,6 +54,8 @@ import ai.meteor.kcode.plugin.profileui.resources.profile_unsaved
 import ai.meteor.kcode.plugin.profileui.resources.profile_verified
 import ai.meteor.kcode.plugin.profileui.resources.profile_import_file
 import ai.meteor.kcode.plugin.profileui.resources.profile_import_bundles
+import ai.meteor.kcode.plugin.profileui.resources.profile_import_archive
+import ai.meteor.kcode.plugin.profileui.resources.profile_export_archive
 import ai.meteor.kcode.plugin.profileui.resources.profile_export_file
 import ai.meteor.kcode.plugin.profileui.resources.profile_imported
 import ai.meteor.kcode.plugin.profileui.resources.profile_exported
@@ -99,6 +101,8 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
     val importTitle = profileText(Res.string.profile_import_file)
     val bundleImportTitle = profileText(Res.string.profile_import_bundles)
     val exportTitle = profileText(Res.string.profile_export_file)
+    val archiveImportTitle = profileText(Res.string.profile_import_archive)
+    val archiveExportTitle = profileText(Res.string.profile_export_archive)
     var id by remember(session) { mutableStateOf("") }
     var name by remember(session) { mutableStateOf("") }
     var cancelActive by remember(session) { mutableStateOf(false) }
@@ -173,6 +177,15 @@ internal fun ProfileSettings(session: ProfileUiSession, client: ProfileManagemen
                 modifier = Modifier.testTag("profile-export-file"),
                 onClick = { scope.launch { session.exportFile(documents, exportTitle) } }) {
                 Text(exportTitle)
+            }
+            TextButton(enabled = enabled && !state.dirty && id.isNotBlank(), modifier = Modifier.testTag("profile-import-archive"),
+                onClick = { scope.launch { session.importArchive(documents, id, name.ifBlank { id }, archiveImportTitle) } }) {
+                Text(archiveImportTitle)
+            }
+            TextButton(enabled = enabled && !state.dirty && state.target != null && state.target?.source != ProfileSource.Draft,
+                modifier = Modifier.testTag("profile-export-archive"),
+                onClick = { scope.launch { session.exportArchive(documents, archiveExportTitle) } }) {
+                Text(archiveExportTitle)
             }
             when (state.exchange) {
                 ProfileExchangeResult.Imported -> Text(profileText(Res.string.profile_imported))

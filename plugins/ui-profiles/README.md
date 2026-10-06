@@ -1,5 +1,11 @@
 # Profile management UI
 
+Complete Profile archive actions use SDK 74 `importArchive`/`exportArchive`. Import captures
+revision before single-file selection and stages an owned input. Export consumes a host-owned
+temporary lease during native saving. Binary streaming checks the digest and a 512 MiB bound;
+Desktop replaces atomically, while Android provider writes can be partial on failure.
+Cancellation publishes no draft or success. See [committed archives](../../docs/profile-archives.md).
+
 The Bundle archive action uses SDK 73 `importBundles`, captures revision before native
 multi-file selection and creates an isolated draft without activation. Picker order is
 the initial Bundle order. Inputs are streamed into owned temporary files (up to sixteen

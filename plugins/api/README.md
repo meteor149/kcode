@@ -1,5 +1,11 @@
 # Plugin SDK
 
+Plugin API 74 adds complete committed Profile archive import and host-owned export leases.
+`importArchive` verifies code and publishes an isolated draft. `exportArchive` calls a
+suspending consumer with a temporary path/digest and removes that file on return, failure or
+cancellation. Clients cannot supply review rules or output paths to the host. See
+[committed archives](../../docs/profile-archives.md).
+
 Plugin API 73 adds ordered native Bundle imports to `ProfileManagementClient`. Requests
 carry temporary archive locators/digests and a catalogue revision; hosts verify code and
 create isolated drafts without activation. Locators remain caller-owned until return and

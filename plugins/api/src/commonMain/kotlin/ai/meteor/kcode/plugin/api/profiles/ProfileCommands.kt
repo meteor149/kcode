@@ -66,6 +66,11 @@ interface ProfileManagementClient {
     /** Host feature policies review opaque configuration; callers cannot bypass that review. */
     suspend fun exportPortable(request: ProfilePortableExport): String =
         error("This client does not support portable Profile export")
+    suspend fun importArchive(request: ProfileArchiveImport): ProfileCatalogue =
+        error("This client does not support committed Profile archives")
+    /** Host-reviewed archive; the host removes its temporary file after the consumer completes. */
+    suspend fun exportArchive(request: ProfilePortableExport, consume: suspend (ProfileArchiveReference) -> Unit): Unit =
+        error("This client does not support committed Profile archive export")
     /** Acceptance is synchronous; this does not await withdrawal of the submitting plugin. */
     fun submit(command: ProfileCommand): ProfileCommandHandle
 }

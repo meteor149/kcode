@@ -140,8 +140,19 @@ class AndroidProfileHostTest {
             assertEquals(4, created)
             host.close()
             assertEquals(0, fixture.live)
-            val missing = assertFailsWith<IllegalStateException> { fixture.start() }
-            assertTrue(missing.message.orEmpty().contains("No package release available for 'example.ui.alternate'"))
+            val beforeMissing = fixture.repository.state()
+            val missing = fixture.start()
+            try {
+                assertEquals(ProfileHostPhase.RecoveryRequired, missing.state.value.phase)
+                val failure = assertNotNull(missing.state.value.failure)
+                assertTrue(failure is IllegalStateException)
+                assertTrue(failure.message.orEmpty().contains("No package release available for 'example.ui.alternate'"))
+                assertEquals(beforeMissing, fixture.repository.state())
+                val catalogue = assertNotNull(missing.profileCommands).catalogue()
+                assertEquals(scopedId, catalogue.selectedProfileId)
+                assertEquals(null, catalogue.activeProfileId)
+                assertEquals(0, fixture.live)
+            } finally { missing.close() }
             assertEquals(0, fixture.live)
             val restarted = fixture.start(factories)
             try {

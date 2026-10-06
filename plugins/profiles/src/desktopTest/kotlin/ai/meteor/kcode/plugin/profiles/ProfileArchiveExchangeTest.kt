@@ -12,6 +12,7 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileEntry
 import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import java.io.File
 import java.nio.file.Files
 import java.util.zip.ZipFile
@@ -25,8 +26,43 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 
 class ProfileArchiveExchangeTest {
+    @Test
+    fun exportedLeaseIsRemovedAfterConsumerFailureAndCancellation(): Unit = runBlocking {
+        val home = Files.createTempDirectory("profile-archive-lease").toFile()
+        try {
+            val repository = FileProfileRepository(File(home, "profiles"))
+            seed(repository)
+            val before = repository.state()
+            val management = ProfileManagement(repository, { emptyList() }, ProfileExportReview { it.value }) { error("Cannot activate") }
+            val exchange = ProfileArchiveExchange(File(home, "packages"), host, resolver)
+            var borrowed: File? = null
+            val request = ProfilePortableExport(ProfileTarget("source"), before.revision)
+            assertFailsWith<IllegalStateException> {
+                exchange.exportArchive(management, request) { reference ->
+                    borrowed = File(reference.archivePath)
+                    assertTrue(borrowed!!.isFile)
+                    error("Consumer refused")
+                }
+            }
+            assertFalse(borrowed!!.exists())
+            assertFalse(borrowed!!.parentFile.exists())
+            assertFailsWith<CancellationException> {
+                exchange.exportArchive(management, request) { reference ->
+                    borrowed = File(reference.archivePath)
+                    throw CancellationException("consumer cancelled")
+                }
+            }
+            assertFalse(borrowed!!.exists())
+            assertFalse(borrowed!!.parentFile.exists())
+            assertEquals(before, repository.state())
+        } finally { home.deleteRecursively() }
+    }
+
     private val bundle = ProfileBundle(id = "base", version = "1", patches = listOf(
         ProfileOperation.Insert(listOf(ProfileEntry("provider", "example.provider", JsonPrimitive("frozen")))),
     ))

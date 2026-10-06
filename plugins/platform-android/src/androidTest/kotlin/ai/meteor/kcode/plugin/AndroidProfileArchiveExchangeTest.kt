@@ -3,13 +3,15 @@ package ai.meteor.kcode.plugin
 import ai.meteor.kcode.createAndroidProfileHost
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.packages.NativePluginPackageResolver
 import ai.meteor.kcode.plugin.packages.androidPackageHost
 import ai.meteor.kcode.plugin.packages.androidPackageVerifier
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileArchiveExchange
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
-import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.plugin.profiles.ProfilePortableExporter
 import ai.meteor.kcode.tools.permission.ToolCallApprover
 import android.app.Activity
@@ -21,7 +23,6 @@ import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -77,8 +78,25 @@ class AndroidProfileArchiveExchangeTest {
             assertEquals(desktopLock.archiveSha256, androidLock.archiveSha256)
             assertEquals(desktopLock.dependencies, androidLock.dependencies)
             assertNotEquals(desktopLock.variantId, androidLock.variantId)
-            ProfileManagement(repository, { emptyList() }) { error("Import must not activate") }
-                .importPortable(Json.encodeToString(prepared), "copy", "Copy", before.revision)
+            repository.saveDraft(ProfileDefinition(id = "bootstrap"))
+            val bootstrap = withContext(Dispatchers.Main.immediate) {
+                val activity = object : Activity() {
+                    init { attachBaseContext(isolated) }
+                    override fun getApplicationContext(): android.content.Context = isolated
+                    override fun getFilesDir() = directory
+                    override fun getAssets() = context.assets
+                    override fun getResources() = context.resources
+                }
+                createAndroidProfileHost(activity, profileId = "bootstrap", toolCallApprover = ToolCallApprover { true })
+            }
+            try {
+                bootstrap.state.value.failure?.let { throw it }
+                val client = assertNotNull(bootstrap.profileCommands)
+                val result = client.importArchive(ProfileArchiveImport(ProfileArchiveReference(archive.absolutePath, digest),
+                    "copy", client.catalogue().revision, "Copy"))
+                assertEquals("bootstrap", result.activeProfileId)
+                assertEquals("bootstrap", bootstrap.state.value.profileId)
+            } finally { bootstrap.close() }
             assertNull(repository.loadCommitted("copy"))
             assertTrue(archive.delete())
             assertTrue(File(packages, "profile-archives").deleteRecursively())
@@ -103,6 +121,17 @@ class AndroidProfileArchiveExchangeTest {
                     ProfilePortableExport(ProfileTarget("copy"), client.catalogue().revision)))
                 assertEquals(prepared.bundles, exported.bundles)
                 assertEquals(prepared.lock, exported.lock)
+                var borrowed: File? = null
+                client.exportArchive(ProfilePortableExport(ProfileTarget("copy"), client.catalogue().revision)) { reference ->
+                    borrowed = File(reference.archivePath)
+                    assertTrue(borrowed!!.isFile)
+                    val document = ZipFile(borrowed!!).use { zip ->
+                        ProfilePortableExporter.decode(zip.getInputStream(zip.getEntry("profile.json")).bufferedReader().use { it.readText() })
+                    }
+                    assertEquals(prepared.bundles, document.bundles)
+                    assertEquals(prepared.lock, document.lock)
+                }
+                assertTrue(!borrowed!!.exists())
             } finally { host.close() }
         } finally { directory.deleteRecursively() }
     }

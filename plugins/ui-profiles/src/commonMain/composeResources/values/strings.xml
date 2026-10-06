@@ -165,4 +165,8 @@
     <string name="profile_continue_editing_zh">继续编辑</string>
     <string name="profile_import_bundles">Import Bundle archives</string>
     <string name="profile_import_bundles_zh">导入 Bundle 归档</string>
+    <string name="profile_import_archive">Import complete Profile archive</string>
+    <string name="profile_import_archive_zh">导入完整 Profile 归档</string>
+    <string name="profile_export_archive">Export complete Profile archive</string>
+    <string name="profile_export_archive_zh">导出完整 Profile 归档</string>
 </resources>

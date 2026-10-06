@@ -19,6 +19,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileOperation
 import ai.meteor.kcode.plugin.api.profiles.ProfilePreview
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableImport
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.api.profiles.ProfileSource
@@ -42,6 +44,53 @@ import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProfileUiSessionTest {
+    @Test
+    fun archiveExchangeConsumesExportLeaseAndImportsDraftWithCapturedRevision(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        try {
+            session.refresh()
+            val files = Files()
+            files.onArchiveWrite = { assertTrue(client.archiveLeaseLive) }
+            session.exportArchive(files, "Export")
+            assertEquals("original.kprofile", files.name)
+            assertEquals(client.archive, files.writtenArchive)
+            assertFalse(client.archiveLeaseLive)
+            assertEquals(ProfileExchangeResult.Exported, session.state.value.exchange)
+            val previews = client.previewCalls
+            session.importArchive(files, "copy", "Copy", "Import")
+            assertEquals(ProfileArchiveImport(files.archive!!, "copy", 1, "Copy"), client.archiveImported)
+            assertEquals(ProfileTarget("copy", ProfileSource.Draft), session.state.value.target)
+            assertEquals(previews, client.previewCalls)
+            assertNull(client.submitted)
+            files.onRead = { client.revision++ }
+            val document = session.state.value.document
+            session.importArchive(files, "conflict", "Conflict", "Import")
+            assertEquals(ProfileUiFailure.OperationFailed, session.state.value.failure)
+            assertEquals(document, session.state.value.document)
+            assertEquals("copy", client.archiveImported!!.id)
+        } finally { session.close() }
+    }
+
+    @Test
+    fun archivePickerCancellationAndWithdrawalPublishNoImport(): Unit = runTest {
+        val client = Client()
+        val session = ProfileUiSession(client)
+        session.refresh()
+        val files = Files().apply { archive = null }
+        val before = session.state.value
+        session.importArchive(files, "copy", "Copy", "Import")
+        assertEquals(before, session.state.value)
+        files.archive = client.archive
+        files.gate = CompletableDeferred()
+        val pending = async { session.importArchive(files, "copy", "Copy", "Import") }
+        runCurrent()
+        session.close()
+        assertFailsWith<CancellationException> { pending.await() }
+        assertTrue(files.finished)
+        assertNull(client.archiveImported)
+    }
+
     @Test
     fun bundleImportPreservesOrderAndRevisionAndDoesNotActivate(): Unit = runTest {
         val client = Client()
@@ -178,6 +227,24 @@ class ProfileUiSessionTest {
     }
 
     private class Files : ProfileDocumentFiles {
+        var archive: ProfileArchiveReference? = ProfileArchiveReference("source", "c".repeat(64))
+        var writtenArchive: ProfileArchiveReference? = null
+        var onArchiveWrite: () -> Unit = {}
+        override suspend fun readArchive(title: String, consume: suspend (ProfileArchiveReference) -> Unit): Boolean {
+            try {
+                gate?.await()
+                onRead()
+                val input = archive ?: return false
+                consume(input)
+                return true
+            } finally { finished = true }
+        }
+        override suspend fun writeArchive(title: String, name: String, archive: ProfileArchiveReference): Boolean {
+            onArchiveWrite()
+            this.name = name
+            writtenArchive = archive
+            return saved
+        }
         var bundles = listOf(ProfileBundleArchiveReference("first", "a".repeat(64)),
             ProfileBundleArchiveReference("second", "b".repeat(64)))
         override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
@@ -591,6 +658,9 @@ class ProfileUiSessionTest {
         var failExport = false
         var imported: ProfilePortableImport? = null
         var bundleImported: ProfileBundleImport? = null
+        var archiveImported: ProfileArchiveImport? = null
+        val archive = ProfileArchiveReference("export", "d".repeat(64))
+        var archiveLeaseLive = false
         var exported: ProfilePortableExport? = null
         var queryGate: CompletableDeferred<Unit>? = null
         var queryStarted: CompletableDeferred<Unit>? = null
@@ -653,6 +723,18 @@ class ProfileUiSessionTest {
             check(request.expectedRevision == revision && !failExport)
             exported = request
             return "reviewed"
+        }
+        override suspend fun importArchive(request: ProfileArchiveImport): ProfileCatalogue {
+            check(request.expectedRevision == revision)
+            archiveImported = request
+            definition = ProfileDefinition(id = request.id, displayName = request.displayName)
+            revision++
+            return catalogue()
+        }
+        override suspend fun exportArchive(request: ProfilePortableExport, consume: suspend (ProfileArchiveReference) -> Unit) {
+            check(request.expectedRevision == revision && !failExport)
+            archiveLeaseLive = true
+            try { consume(archive) } finally { archiveLeaseLive = false }
         }
         override fun submit(command: ProfileCommand): ProfileCommandHandle {
             submitted = command as ProfileCommand.Activate

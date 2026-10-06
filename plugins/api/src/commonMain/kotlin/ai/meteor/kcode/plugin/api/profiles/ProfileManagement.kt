@@ -61,6 +61,17 @@ data class ProfileBundleImport(
 /** Only committed or historical recipes have verified package locks suitable for export. */
 data class ProfilePortableExport(val target: ProfileTarget, val expectedRevision: Long)
 
+/** Local locator, never persisted. Export locators are borrowed only during the consumer call. */
+data class ProfileArchiveReference(val archivePath: String, val sha256: String)
+
+/** Verify code and frozen layers, then create an isolated draft without activation. */
+data class ProfileArchiveImport(
+    val archive: ProfileArchiveReference,
+    val id: String,
+    val expectedRevision: Long,
+    val displayName: String = id,
+)
+
 /** Copy composition/code intent into a new draft; business data is never copied. */
 data class ProfileCloneRequest(
     val source: ProfileTarget,

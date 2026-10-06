@@ -1,5 +1,55 @@
 # Profile implementation
 
+## Complete archive commands and owned native files
+
+SDK 74 adds `ProfileArchiveImport`, `ProfileArchiveReference` and two management client
+methods. Import checks revision/create-only identity before preparation and again at draft
+publication, preserving independent scopes and frozen layers without activation. Export uses
+a suspending consumer with a host-owned temporary archive; consumers cannot nominate host
+output paths or export review callbacks. Success, failure and cancellation release the lease.
+Host admission and the owned Cordis bridge carry these metadata calls through Ready and
+RecoveryRequired and reject withdrawn clients. The SDK namespace already exports the new
+contracts; private transport implementations remain outside it.
+
+Both native factories supply verified transport and their builtin module catalogue. The optional
+Profile screen has separate complete archive import/export actions, retaining JSON and ordered
+Bundle formats. Import captures revision before picking and streams a temporary input. Export
+saves from the host lease with digest and 512 MiB checks. Desktop publishes a verified sibling
+temporary file atomically; Android streams to the selected document provider and cannot claim
+atomic rollback on provider failure. Cancelled slots remain reserved until OS callbacks return.
+UI withdrawal cancels/joins owned work; dirty editors and duplicate file actions are rejected.
+
+Concentrated checks passed 94 SDK tests, 73 Profile tests and 33 UI tests, with zero failures,
+errors or skips. Initial native validation passed 25 tests (actual archive 1, package integration
+15, gateway 9); focused validation passed the updated archive case and private Profile UI host
+case. The updated archive case proves that a consumer cannot close its own host, external host
+closure cancels/joins consumption, and temporary archive/directory cleanup finishes before
+closure returns. Both applications and the instrumentation APK built against API 74 and
+unchanged Cordis 6a9b4e4. New DTOs require no additional shared namespace; regenerated real
+JAR/APK packages use the matching SDK/framework fingerprint.
+
+Physical Android verification covered 13 distinct cases under API 74: complete cross-host
+archive commands, ordered Bundle imports, private Profile UI/picker cancellation, feature
+export review, three recovery cases and six host/SDK/data-scope cases. The initial batch had
+12 passes and one obsolete test expectation: the typed-alternate restart case expected a
+missing module to throw instead of returning the supported RecoveryRequired host. The test
+now verifies failure details, unchanged authority, retained selection, no active product,
+zero allocations and explicit failed-host closure. Its isolated retry passed `OK (1 test)`
+with instrumentation code -1; the other 12 successful cases were not repeated. Complete
+archive import/export ran through the native SDK, preserving exact code identities while
+verifying the Android variant, and export lease cleanup was observed. Private APK UI opened
+and cancelled the complete-archive OS picker without authority or runtime changes.
+
+Evidence logs (local ignored files): `profile-archive-command-validation.log`,
+`profile-archive-command-final-validation.log`, `profile-archive-command-device-package.log`,
+`profile-archive-command-device-validation.log`, `profile-archive-host-contract-package.log`
+and `profile-archive-host-contract-device.log`. Backend verification and picker cancellation
+do not establish selected-file round trips, touch/keyboard accessibility, real Shizuku
+authorization or root execution.
+
+Selected-file OS picker round trips, additional feature export schemas, early startup recovery
+and the full execution-admission audit remain outstanding. The overall goal remains active.
+
 ## Bundle publishing tooling phase
 
 `ProfileBundleArchiveWriter` generates pure-data Bundle manifests from frozen SDK Bundle

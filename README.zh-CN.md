@@ -152,6 +152,8 @@ Profile 支持指定位置插入、排序，以及在分组和根节点之间移
 
 SDK 73 将有序的外部 Bundle 归档及已验证的内嵌代码导入独立草稿。原生选择器暂存输入并捕获目录 revision；导入不自动激活。导入草稿按锁定摘要从原生缓存解析代码。格式见 [Bundle 归档指南](docs/profile-bundle-archives.md)。
 
+SDK 74 导入和导出包含冻结配置层及精确代码的完整已提交 Profile 归档。原生文件操作持有并清理临时文件；导入创建隔离草稿，并在代码验证后重建目标宿主部署锁。见 [完整归档指南](docs/profile-archives.md)。
+
 使用 `:plugins:profiles:packProfileBundle` 和 JSON 请求发布 Bundle 归档。两端共用的原生打包器自动生成清单并验证代码容器，不执行插件，使用方式见 [发布指南](docs/profile-bundle-publishing.md)。
 
 SDK 72 通过中立管理客户端提供带 revision 校验的可携带 Profile 导入导出。导入创建独立草稿并保留冻结的 Bundle 与包意图，激活仍须显式执行。可选 Profile 界面通过原生文件选择器导入导出。导出按对应世代的已验证包元数据审查已提交或历史配置。Goal、Web Search 和 Localization 已声明可携带配置规则，其他未经审查的配置值仍被拒绝。

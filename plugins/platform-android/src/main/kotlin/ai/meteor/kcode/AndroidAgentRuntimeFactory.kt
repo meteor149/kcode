@@ -3,6 +3,7 @@ package ai.meteor.kcode
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchive
+import ai.meteor.kcode.plugin.profiles.ProfileArchiveExchange
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
 import ai.meteor.kcode.plugin.profiles.profileImportedOffers
@@ -244,6 +245,8 @@ suspend fun createAndroidProfileHost(
                 artifactVerifier = androidPackageVerifier(activity)))
                 .prepare(archives.map { ProfileBundleArchiveInput(File(it.archivePath), it.sha256) }, id, name)
         },
+        ProfileArchiveExchange(pluginDirectory, androidPackageHost(), NativePluginPackageResolver(pluginDirectory, androidPackageHost(),
+            artifactVerifier = androidPackageVerifier(activity)), { catalogue }),
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
         overlayAvailable = true, canRecover = { startupReached }, templates = {

@@ -4,6 +4,8 @@ import ai.meteor.kcode.createDesktopProfileHost
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundle
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.KcodeProfiles
 import ai.meteor.kcode.plugin.api.profiles.ProfileManagementClient
@@ -24,7 +26,6 @@ import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveInput
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveWriter
 import ai.meteor.kcode.plugin.profiles.ProfileArchiveExchange
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
-import ai.meteor.kcode.plugin.profiles.ProfilePackageExportReviews
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveExtension
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveMetadata
 import ai.meteor.kcode.plugin.profiles.ProfileBundleArchiveRuntime
@@ -32,6 +33,11 @@ import ai.meteor.kcode.plugin.profiles.ProfilePortableExporter
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -51,6 +57,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class NativeProfileBundleArchiveTest {
     @Test
@@ -147,6 +154,11 @@ class NativeProfileBundleArchiveTest {
             assertFailsWith<IllegalStateException> {
                 bridgeClient.importBundles(ProfileBundleImport(emptyList(), "stale", repository.state().revision))
             }
+            assertFailsWith<IllegalStateException> {
+                bridgeClient.exportArchive(ProfilePortableExport(ProfileTarget("bootstrap"), repository.state().revision)) {
+                    error("Withdrawn client cannot consume an archive")
+                }
+            }
             assertNull(repository.loadCommitted("imported"))
             assertTrue(archive.delete())
             assertTrue(overlayArchive.delete())
@@ -168,15 +180,26 @@ class NativeProfileBundleArchiveTest {
                     assertEquals(listOf(bundle, overlay), exported.bundles)
                     assertEquals(listOf("feature.localization"), exported.lock.packages.map { it.id })
                     if (it == 1) {
-                        val resolver = NativePluginPackageResolver(packages, host)
-                        val management = ProfileManagement(repository, { emptyList() },
-                            ProfilePackageExportReviews(resolver::profileExportSchema)) { error("Export cannot activate") }
                         val fixture = File("build/profile-archive-fixture/desktop.kprofile").absoluteFile
                         val beforeExport = repository.state()
                         val generation = requireNotNull(repository.loadCommitted("imported")).generation
-                        val digest = ProfileArchiveExchange(packages, host, resolver).export(management,
-                            ProfileTarget("imported", ProfileSource.History, generation), beforeExport.revision, fixture)
+                        var borrowed: ProfileArchiveReference? = null
+                        client.exportArchive(ProfilePortableExport(ProfileTarget("imported", ProfileSource.History, generation), beforeExport.revision)) { reference ->
+                            borrowed = reference
+                            fixture.parentFile.mkdirs()
+                            File(reference.archivePath).copyTo(fixture, overwrite = true)
+                        }
+                        val digest = assertNotNull(borrowed).sha256
+                        assertFalse(File(borrowed!!.archivePath).exists())
                         assertEquals(beforeExport, repository.state())
+                        val importedCatalogue = client.importArchive(ProfileArchiveImport(ProfileArchiveReference(fixture.absolutePath, digest),
+                            "sdkcopy", beforeExport.revision))
+                        assertEquals("imported", importedCatalogue.activeProfileId)
+                        assertNull(repository.loadCommitted("sdkcopy"))
+                        assertNotNull(repository.loadDraft("sdkcopy"))
+                        assertFailsWith<IllegalArgumentException> {
+                            client.importArchive(ProfileArchiveImport(ProfileArchiveReference("missing", digest), "stale", beforeExport.revision))
+                        }
                         File(fixture.parentFile, "desktop.sha256").writeText(digest)
                         val receiver = File(home, "receiver")
                         val receiverPackages = File(receiver, "plugins")
@@ -217,6 +240,22 @@ class NativeProfileBundleArchiveTest {
                             val copiedPreview = assertNotNull(copied.profileCommands).preview(ProfileTarget("copy"))
                             assertEquals(preview.entries, copiedPreview.entries)
                         } finally { copied.close() }
+                        var leased: File? = null
+                        val leaseReady = CompletableDeferred<Unit>()
+                        val consuming = async {
+                            client.exportArchive(ProfilePortableExport(ProfileTarget("imported"), client.catalogue().revision)) { reference ->
+                                leased = File(reference.archivePath)
+                                assertTrue(leased!!.isFile)
+                                assertFailsWith<IllegalStateException> { runtime.close() }
+                                leaseReady.complete(Unit)
+                                awaitCancellation()
+                            }
+                        }
+                        withTimeout(15_000) { leaseReady.await() }
+                        withTimeout(15_000) { runtime.close() }
+                        assertFailsWith<CancellationException> { consuming.await() }
+                        assertFalse(leased!!.exists())
+                        assertFalse(leased!!.parentFile.exists())
                     }
                 } finally { runtime.close() }
             }

@@ -3,8 +3,8 @@
 `ProfileArchiveExchange` is the native backend for exchanging a frozen committed or
 historical Profile together with its exact code archives. It preserves ordered Bundle
 definitions and user operations instead of flattening them into a single effective tree.
-It is an implementation API in `plugins/profiles`; SDK commands and native file actions
-for this format are not yet connected. Plugin API remains 73.
+The native backend lives in `plugins/profiles`. SDK 74 exposes `importArchive` and
+`exportArchive`, and the optional Profile screen supplies separate complete-archive actions.
 
 ## Export
 
@@ -42,6 +42,30 @@ The `.kprofile` suffix is a convention. Content and SHA-256 establish the format
 The data variant supports native hosts. This does not promise that embedded code has a
 compatible variant for every platform.
 
+## Owned SDK exchange and native files
+
+`importArchive(ProfileArchiveImport(reference, id, revision, name))` accepts one caller-owned
+temporary archive path/digest. The caller retains it through return. Management checks
+revision and create-only identity before native preparation and again at draft publication.
+Import does not change active composition. Metadata commands work in Ready and RecoveryRequired.
+
+`exportArchive(ProfilePortableExport(target, revision)) { reference -> ... }` reviews and
+packages frozen intent before calling the consumer. The host owns the temporary file and
+directory, retaining them only through the suspending consumer. Success, consumer failure,
+cancellation and bridge withdrawal release the lease. The consumer must copy the bytes before
+returning and cannot treat the locator as a persisted capability. Callbacks must not unload
+their own provider or close the runtime. Stale bridge clients reject these calls.
+
+The UI captures import revision before the native picker. Selected inputs stream into owned
+temporary files under the existing 512 MiB selection limit and are deleted after command
+completion. Export streams the host lease while rechecking its digest, bounded to 512 MiB.
+Desktop writes a sibling temporary file and atomically replaces the selected destination.
+Android uses OpenDocument/CreateDocument and streams through the document provider; provider
+writes may be partial on failure and do not offer atomic rollback. Cancelled Android picker
+slots stay reserved until the old OS callback arrives. Dirty editors and concurrent file
+actions are rejected. Imported drafts are selected for editing without automatic preview or
+activation. JSON and Bundle actions retain their existing independent formats.
+
 ## Import preparation
 
 `prepare(input, id, displayName, builtinModules)` verifies the outer archive, manifest,
@@ -71,6 +95,13 @@ The actual Desktop test exports a two-Bundle Localization generation, prepares i
 receiver, imports the draft and starts from the receiver cache after outer deployment removal.
 It also repacks a valid outer container with a false locked version and verifies refusal by
 the real native code resolver.
+
+SDK command tests cover create-only/revision conflicts, unchanged active composition, stale
+clients, consumer failure/cancellation and temporary lease cleanup. The actual Desktop host
+also closes while a consumer is suspended and proves cleanup completes; the consumer itself
+cannot close its own host. UI tests cover captured revisions, draft selection, cancelled and
+withdrawn pickers, lease lifetime and binary digest refusal. The private Android Profile UI
+opens/cancels the complete-archive OS picker and confirms no authority/runtime mutation.
 
 `AndroidProfileArchiveExchangeTest` consumes that actual Desktop fixture. Pass instrumentation
 arguments `profileArchive=/data/local/tmp/kcode-profile-archive-fixture.kprofile` and

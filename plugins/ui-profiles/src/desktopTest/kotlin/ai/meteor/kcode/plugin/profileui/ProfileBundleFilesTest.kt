@@ -1,6 +1,8 @@
 package ai.meteor.kcode.plugin.profileui
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.coroutines.CancellationException
@@ -12,6 +14,20 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProfileBundleFilesTest {
+    @Test
+    fun binaryArchiveCopyPreservesBytesAndRejectsChangedInputs(): Unit = runBlocking {
+        val bytes = byteArrayOf(0, -1, 13, 10, 1)
+        stageProfileBundles(listOf({ ByteArrayInputStream(bytes) })) { inputs ->
+            val input = inputs.single()
+            val reference = ProfileArchiveReference(input.archivePath, input.sha256)
+            val output = ByteArrayOutputStream()
+            copyProfileArchive(reference, output)
+            assertTrue(bytes.contentEquals(output.toByteArray()))
+            Files.write(Path.of(input.archivePath), byteArrayOf(2))
+            assertFailsWith<IllegalArgumentException> { copyProfileArchive(reference, ByteArrayOutputStream()) }
+        }
+    }
+
     @Test
     fun stagingPreservesBytesAndOrderAndCleansUpWhenConsumerFails(): Unit = runBlocking {
         var staged = emptyList<Path>()

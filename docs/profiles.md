@@ -5,8 +5,9 @@ data layers with verified embedded native packages. Preparation returns frozen m
 revision-checked import creates a draft and activation remains separate. First imported
 drafts prefer their locked code digest in the native cache over newer offers. The binary
 Bundle import command and native file-picker action are available in SDK 73. Import stages
-verified code and creates a new draft without changing active composition. Archive export
-and full OS file round-trip acceptance remain outstanding.
+verified code and creates a new draft without changing active composition. SDK 74 adds
+[complete Profile archive](profile-archives.md) import/export and native file actions with
+owned temporary leases. Full OS file round-trip acceptance remains outstanding.
 
 SDK 72 exposes portable exchange through `KcodeProfiles.client.importPortable` and
 `exportPortable`. Requests carry the catalogue revision. Import creates a new draft, retains

@@ -22,6 +22,12 @@ Profile data cannot contain Kotlin implementation objects, callbacks or arbitrar
 
 ## Portable Profile configuration
 
+SDK 74 exposes `importArchive(ProfileArchiveImport(...))` and
+`exportArchive(ProfilePortableExport(...)) { reference -> ... }`. Import references remain
+caller-owned until return; exported references remain host-owned and expire when the consumer
+returns. Export approval is selected by the host from verified feature metadata. Callbacks
+must not close their runtime or unload their own provider. See [committed archives](profile-archives.md).
+
 SDK 73 adds `ProfileManagementClient.importBundles(ProfileBundleImport(archives, newId,
 expectedRevision, displayName))`. Each `ProfileBundleArchiveReference` contains a temporary
 local path and its SHA-256, retained by the caller until the call returns. Native hosts

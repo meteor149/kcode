@@ -2,6 +2,9 @@ package ai.meteor.kcode.plugin.profiles
 
 import ai.meteor.kcode.plugin.api.profiles.ProfileActivationRequest
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveImport
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
 import ai.meteor.kcode.plugin.api.profiles.ProfileCatalogue
 import ai.meteor.kcode.plugin.api.profiles.ProfileCloneRequest
@@ -38,6 +41,7 @@ class ProfileManagement private constructor(
     private val exportReview: ProfileExportReview,
     private val exportReviews: ProfileExportReviewFactory? = null,
     private val bundlePrepare: (suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument)? = null,
+    private val archiveTransport: ProfileArchiveTransport? = null,
 ) {
     constructor(
         repository: ProfileGenerationRepository,
@@ -66,6 +70,15 @@ class ProfileManagement private constructor(
         bundlePrepare: suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews, bundlePrepare)
+
+    constructor(
+        repository: ProfileGenerationRepository,
+        bundles: () -> List<ProfileBundle>,
+        exportReviews: ProfileExportReviewFactory,
+        bundlePrepare: suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument,
+        archiveTransport: ProfileArchiveTransport,
+        prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
+    ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews, bundlePrepare, archiveTransport)
 
     suspend fun catalogue(): ProfileCatalogue = repository.catalogue()
     suspend fun draft(id: String): ProfileDefinition? = repository.loadDraft(id)
@@ -118,6 +131,24 @@ class ProfileManagement private constructor(
         review: ProfileExportReview? = null,
         expectedRevision: Long? = null,
     ): String = withPortableExport(target, review, expectedRevision) { text, _ -> text }
+
+    suspend fun importArchive(request: ProfileArchiveImport): ProfileCatalogue {
+        ProfileDefinition(id = request.id, displayName = request.displayName).validate()
+        val input = request.archive
+        require(input.archivePath.isNotBlank() && input.sha256.matches(Regex("[a-f0-9]{64}"))) { "Invalid Profile archive input" }
+        val before = catalogue()
+        require(before.revision == request.expectedRevision) { "Profile repository changed; refresh" }
+        require(before.profiles.none { it.id == request.id }) { "Profile already exists" }
+        val prepared = checkNotNull(archiveTransport) { "Profile archive transport is unavailable" }
+            .prepareArchive(input, request.id, request.displayName).also { it.validate() }
+        currentCoroutineContext().ensureActive()
+        return importPortable(Json.encodeToString(PortableProfileDocument.serializer(), prepared),
+            request.id, request.displayName, request.expectedRevision)
+    }
+
+    suspend fun exportArchive(request: ProfilePortableExport, consume: suspend (ProfileArchiveReference) -> Unit) {
+        checkNotNull(archiveTransport) { "Profile archive transport is unavailable" }.exportArchive(this, request, consume)
+    }
 
     /** Native archive exporters cannot supply approvals; they receive the exact reviewed generation. */
     internal suspend fun <T> preparePortableExport(

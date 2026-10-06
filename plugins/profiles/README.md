@@ -3,7 +3,8 @@
 `ProfileArchiveExchange` exports reviewed committed/historical intent with exact code archives
 and prepares imports using the target host's verified native variant. Ordered frozen Bundles
 and user operations survive transfer. Preparation publishes no metadata and allocates no
-product providers. This backend is not yet connected to SDK commands/file UI; API remains 73.
+product providers. SDK 74 connects native transport through owned management commands and
+temporary export leases, consumed by the optional Profile file UI.
 See [committed archives](../../docs/profile-archives.md).
 
 `ProfileBundleArchiveWriter` and the Desktop `packProfileBundle` Gradle task generate

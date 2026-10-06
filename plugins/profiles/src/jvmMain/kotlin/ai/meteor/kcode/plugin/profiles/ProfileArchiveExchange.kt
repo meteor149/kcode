@@ -7,6 +7,8 @@ import ai.meteor.kcode.plugin.api.StoredDynamicPlugin
 import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.api.profiles.ProfileDefinition
 import ai.meteor.kcode.plugin.api.profiles.ProfileTarget
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
+import ai.meteor.kcode.plugin.api.profiles.ProfilePortableExport
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -28,7 +30,29 @@ class ProfileArchiveExchange(
     private val directory: File,
     private val host: PackageHost,
     private val resolver: PluginPackageResolver,
-) {
+    private val builtinModules: () -> Set<String> = { emptySet() },
+) : ProfileArchiveTransport {
+    override suspend fun prepareArchive(input: ProfileArchiveReference, id: String, displayName: String) =
+        prepare(ProfileBundleArchiveInput(File(input.archivePath), input.sha256), id, displayName, builtinModules())
+
+    override suspend fun exportArchive(
+        management: ProfileManagement,
+        request: ProfilePortableExport,
+        consume: suspend (ProfileArchiveReference) -> Unit,
+    ): Unit = withContext(Dispatchers.IO) {
+        val temporary = Files.createTempDirectory("kcode-profile-lease-")
+        val archive = temporary.resolve("export.kprofile")
+        try {
+            val digest = export(management, request.target, request.expectedRevision, archive.toFile())
+            currentCoroutineContext().ensureActive()
+            consume(ProfileArchiveReference(archive.toString(), digest))
+        } finally {
+            withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+                try { Files.deleteIfExists(archive) } finally { Files.deleteIfExists(temporary) }
+            }
+        }
+    }
+
     suspend fun export(
         management: ProfileManagement,
         target: ProfileTarget,

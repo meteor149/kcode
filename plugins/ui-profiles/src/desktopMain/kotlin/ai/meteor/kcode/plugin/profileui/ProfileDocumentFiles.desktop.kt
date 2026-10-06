@@ -3,6 +3,7 @@ package ai.meteor.kcode.plugin.profileui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import ai.meteor.kcode.plugin.api.profiles.ProfileBundleArchiveReference
+import ai.meteor.kcode.plugin.api.profiles.ProfileArchiveReference
 import java.awt.EventQueue
 import java.awt.FileDialog
 import java.awt.Frame
@@ -24,6 +25,30 @@ import kotlin.coroutines.resumeWithException
 @Composable
 internal actual fun rememberProfileDocumentFiles(): ProfileDocumentFiles = remember {
     object : ProfileDocumentFiles {
+        override suspend fun readArchive(title: String, consume: suspend (ProfileArchiveReference) -> Unit): Boolean {
+            val path = choose(title, FileDialog.LOAD) ?: return false
+            stageProfileBundles(listOf({ Files.newInputStream(path) })) { inputs ->
+                val input = inputs.single()
+                consume(ProfileArchiveReference(input.archivePath, input.sha256))
+            }
+            return true
+        }
+
+        override suspend fun writeArchive(title: String, name: String, archive: ProfileArchiveReference): Boolean {
+            val path = choose(title, FileDialog.SAVE, name) ?: return false
+            return withContext(Dispatchers.IO) {
+                ensureActive()
+                val temporary = Files.createTempFile(path.parent, ".kcode-profile-", ".tmp")
+                try {
+                    Files.newOutputStream(temporary).use { output -> copyProfileArchive(archive, output) }
+                    FileChannel.open(temporary, StandardOpenOption.WRITE).use { it.force(true) }
+                    ensureActive()
+                    Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                    true
+                } finally { Files.deleteIfExists(temporary) }
+            }
+        }
+
         override suspend fun readBundles(title: String, consume: suspend (List<ProfileBundleArchiveReference>) -> Unit): Boolean {
             val paths = chooseMany(title)
             if (paths.isEmpty()) return false
