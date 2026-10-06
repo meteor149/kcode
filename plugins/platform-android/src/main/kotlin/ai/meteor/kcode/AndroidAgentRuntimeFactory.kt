@@ -230,6 +230,7 @@ suspend fun createAndroidProfileHost(
         val snapshot = preparation.snapshot
         return PreparedProfileRuntime(activation) {
             facade(KcodePluginRuntime.create(snapshot.configuration.copy(
+                deferProductExecutionUntilHostPublication = true,
                 hostInputs = hostInputs(),
                 profileStartup = ProfileStartupFactory { modules ->
                     check(modules.map { it.descriptor.id }.toSet() == snapshot.modules) { "Native module catalogue changed" }
@@ -261,6 +262,9 @@ suspend fun createAndroidProfileHost(
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
         overlayAvailable = true, templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }) {
         startupProfileId = profileId ?: repository.selected() ?: "native"
-        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(hostInputs = hostInputs())))
+        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(
+            deferProductExecutionUntilHostPublication = true,
+            hostInputs = hostInputs(),
+        )))
     }
 }

@@ -49,6 +49,44 @@ class NativeProfileExecutionAdmissionTest {
     }
 
     @Test
+    fun failedCandidateKeepsExecutionClosedAndRestoresPublishedOldGeneration(): Unit = runBlocking {
+        val home = Files.createTempDirectory("native-profile-candidate-admission")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        fun definition(id: String, module: String) = ProfileDefinition(id = id, patches = listOf(
+            ProfileOperation.Insert(listOf(ProfileEntry("work", module))),
+        ))
+        repository.saveDraft(definition("first", "example.work"))
+        repository.saveDraft(definition("broken", "example.failing"))
+        val gates = mutableListOf<ExecutionAdmission>()
+        val factories = listOf("example.work", "example.failing").associateWith { module ->
+            {
+                kcodePlugin(PluginDescriptor(module, "test", "test", emptySet()),
+                    plugin<Unit> { ctx, _ ->
+                        val gate = ctx.root.require(KcodeExecution.Key).admission
+                        gates += gate
+                        assertFailsWith<CancellationException> { gate.run { error("Candidate executed") } }
+                        if (module == "example.failing") error("Candidate allocation refused")
+                    }, Unit)
+            }
+        }
+        val host = createDesktopProfileHost(homeDirectory = home, profileId = "first",
+            profile = KcodePluginProfile(includeDefaults = false), moduleFactories = factories)
+        try {
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase, host.state.value.failure?.stackTraceToString())
+            val original = gates.single()
+            original.run { Unit }
+            val committed = repository.state()
+            assertFailsWith<IllegalStateException> { host.switchTo("broken") }
+            assertEquals(committed, repository.state())
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            assertEquals(3, gates.size)
+            assertFailsWith<CancellationException> { original.run { error("Old owner") } }
+            assertFailsWith<CancellationException> { gates[1].run { error("Failed candidate") } }
+            gates.last().run { Unit }
+        } finally { host.close(); home.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun directProductWorkBlocksMutationAndSwitchCancellationJoinsCleanup(): Unit = runBlocking {
         val home = Files.createTempDirectory("native-profile-execution-admission")
         val repository = FileProfileRepository(home.resolve("profiles").toFile())
@@ -62,7 +100,9 @@ class NativeProfileExecutionAdmissionTest {
             profile = KcodePluginProfile(includeDefaults = false), moduleFactories = mapOf("example.work" to {
                 kcodePlugin(PluginDescriptor("example.work", "test", "test", emptySet()),
                     plugin<Unit> { ctx, _ ->
-                        gates += ctx.root.require(KcodeExecution.Key).admission
+                        val gate = ctx.root.require(KcodeExecution.Key).admission
+                        gates += gate
+                        assertFailsWith<CancellationException> { gate.run { error("Unpublished product work") } }
                     }, Unit)
             }))
         val finishCleanup = CompletableDeferred<Unit>()

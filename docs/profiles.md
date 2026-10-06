@@ -412,6 +412,11 @@ joins admitted work and cleanup; preparation failure reopens the retained runtim
 permanently closes stale admission handles. Metadata reads remain available during preparation.
 
 Koog continuations and in-process subagents run under the admitted structured operation.
-Detached autonomous providers must use the shared boundary themselves. Candidate/startup
-publication, command execution before generation and additional detached producers remain
-separate audit/acceptance work; do not infer complete background coordination from these tests.
+Detached autonomous providers must use the shared boundary themselves. Admission starts closed
+before the first product provider mounts. Temporary composition resume cannot release that
+publication barrier. Direct runtime creation releases it after successful preparation; native
+Profile factories defer release until the host exposes the committed runtime. Target switches
+release it after durable selection publication, and restoration releases it after verifying
+the previous frozen generation. Failed candidates retire their captured admission references.
+Command execution before generation and additional detached producers remain separate
+audit/acceptance work; do not infer complete background coordination from these tests.

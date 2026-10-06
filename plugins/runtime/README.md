@@ -68,3 +68,8 @@ the return path after the generation and application view have committed.
 
 
 SDK 75 publishes root-context `KcodeExecution` coordination. Composition mutations pause admission and reject active product work; native Profile switching can cancel and join it. Runtime retirement and failed startup close captured admission references before releasing product resources. This is lifecycle infrastructure, not a product task or agent provider.
+
+Product execution starts closed during allocation. Native Profile factories set
+`deferProductExecutionUntilHostPublication`; only host publication/restoration releases
+that barrier. Composition pauses and resumes cannot open an unpublished candidate.
+Direct runtime creation releases execution after successful preparation.

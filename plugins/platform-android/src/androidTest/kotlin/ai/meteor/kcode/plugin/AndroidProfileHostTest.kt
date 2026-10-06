@@ -2,6 +2,8 @@ package ai.meteor.kcode.plugin
 
 import ai.meteor.kcode.createAndroidProfileHost
 import ai.meteor.kcode.plugin.packages.androidPackageHost
+import ai.meteor.kcode.plugin.api.ExecutionAdmission
+import ai.meteor.kcode.plugin.api.KcodeExecution
 import ai.meteor.kcode.plugin.api.FileSystemBackend
 import ai.meteor.kcode.plugin.api.KcodeFileSystem
 import ai.meteor.kcode.plugin.api.KcodeHistory
@@ -37,6 +39,7 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -267,12 +270,18 @@ class AndroidProfileHostTest {
         val host = fixture.start()
         try {
             val baseline = assertNotNull(fixture.repository.loadCommitted("native"))
+            val originalAdmission = fixture.admissions.single()
+            originalAdmission.run { Unit }
             val broken = baseline.definition.copy(id = "broken", patches = baseline.definition.patches +
                 ProfileOperation.Configure("provider.ui.compose", JsonPrimitive("fail"), "string"))
             fixture.repository.saveDraft(broken)
             val before = fixture.repository.state()
             assertFailsWith<IllegalStateException> { host.switchTo("broken") }
             assertEquals(before, fixture.repository.state())
+            assertEquals(3, fixture.admissions.size)
+            assertFailsWith<CancellationException> { originalAdmission.run { error("Old product") } }
+            assertFailsWith<CancellationException> { fixture.admissions[1].run { error("Failed candidate") } }
+            fixture.admissions.last().run { Unit }
             assertEquals(baseline, fixture.repository.loadCommitted("native"))
             assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
             assertEquals(1, fixture.live)
@@ -323,6 +332,7 @@ class AndroidProfileHostTest {
         var ubuntu: ShellBackend? = null
         var mode = ShellExecutionMode.App
         var live = 0
+        val admissions = mutableListOf<ExecutionAdmission>()
         private fun captureModule(id: String) = kcodePlugin(PluginDescriptor(id, "test", "test", emptySet()),
             plugin<String>(validator = ConfigValidator { it }, inject = dependencies(*buildList<ServiceKey<*>> {
                 add(KcodeSettings.Key)
@@ -332,6 +342,9 @@ class AndroidProfileHostTest {
                 add(KcodeProfiles.Key)
                 if (androidPackageHost().arch == "arm64") add(KcodeUbuntuShell.Key)
             }.toTypedArray())) { ctx, config ->
+                val admission = ctx.root.require(KcodeExecution.Key).admission
+                admissions += admission
+                assertFailsWith<CancellationException> { admission.run { error("Unpublished APK product work") } }
                 live++
                 collect { live-- }
                 check(config != "fail") { "target allocation refused" }

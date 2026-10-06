@@ -13,13 +13,14 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** One runtime owns this boundary; stale references remain closed after retirement. */
-internal class ProductExecutionAdmission : ExecutionAdmission {
+internal class ProductExecutionAdmission(initiallyPublished: Boolean = true) : ExecutionAdmission {
     private class Call(val owner: ProductExecutionAdmission) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<Call>
     }
 
     private val mutex = Mutex()
     private val jobs = mutableMapOf<Job, Int>()
+    private var published = initiallyPublished
     private var paused = false
     private var retired = false
 
@@ -30,7 +31,7 @@ internal class ProductExecutionAdmission : ExecutionAdmission {
     override suspend fun <T> run(block: suspend () -> T): T {
         val job = checkNotNull(currentCoroutineContext()[Job])
         mutex.withLock {
-            if (paused || retired) throw CancellationException("Product execution admission is closed")
+            if (!published || paused || retired) throw CancellationException("Product execution admission is closed")
             currentCoroutineContext().ensureActive()
             jobs[job] = (jobs[job] ?: 0) + 1
         }
@@ -58,6 +59,12 @@ internal class ProductExecutionAdmission : ExecutionAdmission {
             active.forEach { it.cancel() }
             active.forEach { it.join() }
         }
+    }
+
+    /** Publication is independent of temporary composition pauses. */
+    suspend fun publish() = mutex.withLock {
+        check(!retired) { "Product execution admission was retired" }
+        published = true
     }
 
     suspend fun resume() = mutex.withLock {

@@ -157,6 +157,8 @@ data class KcodePluginRuntimeConfig(
     val scheduledTaskNotificationsFactory: ScheduledTaskNotificationsFactory? = null,
     val conversationOverlayFactory: (suspend (StateFlow<UiContributionsSnapshot>) -> AgentConversationOverlayController?)? = null,
     val bundledPackages: List<BundledPluginPackage> = emptyList(),
+    /** Native Profile hosts release execution after durable and visible publication. */
+    val deferProductExecutionUntilHostPublication: Boolean = false,
 )
 
 /** Only inventory and the loader bridge are bootstrap infrastructure. Product providers are managed. */
@@ -963,6 +965,8 @@ class KcodePluginRuntime private constructor(
 
     internal suspend fun resumeProductExecution() = execution.resume()
 
+    internal suspend fun publishProductExecution() = execution.publish()
+
     private suspend fun <T> compositionLock(block: suspend () -> T): T = lock.withLock {
         execution.pause(cancelActive = false)
         try { block() }
@@ -1475,7 +1479,7 @@ class KcodePluginRuntime private constructor(
                 inventory.publish(builtinDescriptor("core.plugin-inventory", "pluginInventory"))
                 bootstrap += context.plugin(LoaderPlugin, LoaderConfig()).await()
                 inventory.publish(builtinDescriptor("core.loader", "loader"))
-                val execution = ProductExecutionAdmission()
+                val execution = ProductExecutionAdmission(initiallyPublished = false)
                 startupExecution = execution
                 context.effect("product execution admission") { collect { execution.retire() } }
                 KcodeExecution(context.root, execution)
@@ -1499,6 +1503,7 @@ class KcodePluginRuntime private constructor(
                         it.restoreInstalledComposition(bundled, config.profile.disabled)
                         it.settle()
                     }
+                    if (!config.deferProductExecutionUntilHostPublication) execution.publish()
                 }
             } catch (error: Throwable) {
                 // Failed Entry disposal removes its parent effect before propagating the

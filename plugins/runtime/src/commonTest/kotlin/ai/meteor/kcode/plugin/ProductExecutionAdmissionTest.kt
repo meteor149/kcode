@@ -16,6 +16,24 @@ import kotlin.test.assertTrue
 
 class ProductExecutionAdmissionTest {
     @Test
+    fun temporaryResumeCannotReleaseUnpublishedExecution(): Unit = runBlocking {
+        val gate = ProductExecutionAdmission(initiallyPublished = false)
+        assertFailsWith<CancellationException> { gate.run { error("Before mounting") } }
+        gate.pause(cancelActive = false)
+        gate.resume()
+        assertFailsWith<CancellationException> { gate.run { error("Before publication") } }
+        gate.publish()
+        assertEquals("published", gate.run { "published" })
+        gate.pause(cancelActive = false)
+        gate.publish()
+        assertFailsWith<CancellationException> { gate.run { error("Still paused") } }
+        gate.resume()
+        gate.run { Unit }
+        gate.retire()
+        assertFailsWith<IllegalStateException> { gate.publish() }
+    }
+
+    @Test
     fun pauseWithoutCancellationRejectsActiveWorkAndLeavesAdmissionOpen(): Unit = runBlocking {
         val gate = ProductExecutionAdmission()
         val started = CompletableDeferred<Unit>()

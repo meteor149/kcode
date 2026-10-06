@@ -171,3 +171,28 @@ and the instrumentation APK in `profile-execution-admission-final-validation.log
 APK repeated only the affected schedule preparation/retry and cancellation paths: `OK (2 tests)`
 and code -1 in `profile-execution-admission-final-device.log`. The earlier foreground-policy
 case remains separate fixture evidence; no UI/dialog acceptance is inferred from it.
+
+
+## Profile publication execution barrier
+
+Product allocation now begins with execution unpublished. The separate publication bit
+survives composition pause/resume, rejects candidate work and cannot reopen retired handles.
+Native Profile factories defer release until durable target publication and host visibility;
+initial host binding and verified old-generation restoration release the same barrier.
+Direct runtime allocation releases it only after successful startup preparation.
+
+`profile-publication-barrier-validation.log` passed six runtime boundary tests, the selected
+NativeProfileHost/ProfileHost/NativeProfileExecutionAdmission suites, desktop compilation,
+Android assembly and instrumentation APK assembly. After adding initial-publication cleanup,
+`profile-publication-barrier-final-validation.log` passed 21 ProfileHost tests and three native
+admission tests and rebuilt the instrumentation APK. The native admission cases cover apply-time
+rejection, failed candidate retirement, unchanged repository state and old-generation recovery.
+
+Physical Android ran `AndroidProfileHostTest#failedApkTargetAllocationRestoresLockedProvidersAndHistory`
+with actual private APK providers. `profile-publication-barrier-device-validation.log` reports
+`OK (1 test)` and instrumentation code -1. The apply-time probe rejects execution on initial,
+failed and restored roots; old and failed admission handles remain closed after recovery, and
+the restored root admits work. This evidence does not prove every autonomous producer uses
+admission, pre-generation command protection, Desktop native dialogs or complete navigation.
+Those remain required acceptance work. The final host build is recorded separately in
+`profile-publication-barrier-host-validation.log`. No SDK ABI changed in this phase.

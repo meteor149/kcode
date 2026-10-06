@@ -172,6 +172,7 @@ suspend fun createDesktopProfileHost(
         val snapshot = preparation.snapshot
         return PreparedProfileRuntime(activation) {
             facade(KcodePluginRuntime.create(snapshot.configuration.copy(
+                deferProductExecutionUntilHostPublication = true,
                 hostInputs = DesktopPluginHostInputs(applicationWindow),
                 profileStartup = ProfileStartupFactory { modules ->
                     check(modules.map { it.descriptor.id }.toSet() == snapshot.modules) { "Native module catalogue changed" }
@@ -199,6 +200,9 @@ suspend fun createDesktopProfileHost(
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
         templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }) {
         startupProfileId = profileId ?: repository.selected() ?: "native"
-        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow))))
+        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(
+            deferProductExecutionUntilHostPublication = true,
+            hostInputs = DesktopPluginHostInputs(applicationWindow),
+        )))
     }
 }

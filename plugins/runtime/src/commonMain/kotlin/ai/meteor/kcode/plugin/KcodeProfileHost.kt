@@ -422,6 +422,7 @@ class KcodeProfileHost(
                         view.value = candidate
                         mutableState.value = ProfileHostState(id)
                     }
+                    (candidate!!.owner as? KcodePluginRuntime)?.publishProductExecution()
                     recordProfileCommandPublication(target!!.activation.session.currentCompositionState())
                 }
             }
@@ -513,6 +514,7 @@ class KcodeProfileHost(
                             view.value = candidate
                             mutableState.value = ProfileHostState(id)
                         }
+                        (candidate!!.owner as? KcodePluginRuntime)?.publishProductExecution()
                         recordProfileCommandPublication(target!!.activation.session.currentCompositionState())
                     }
                 }
@@ -549,6 +551,7 @@ class KcodeProfileHost(
                                 view.value = restored
                                 mutableState.value = previousState.copy(failure = error)
                             }
+                            (restored.owner as? KcodePluginRuntime)?.publishProductExecution()
                         } catch (restoreError: Throwable) {
                             if (restoreError !== error) error.addSuppressed(restoreError)
                             release { restored?.let { releaseRuntime(it) } }
@@ -635,8 +638,21 @@ class KcodeProfileHost(
                 }
                 throw cancelled
             }
-            return KcodeProfileHost(initial, initialProfileId(), factory, management, commands,
-                overlayAvailable = overlayAvailable, templateProvider = templates).also(commands::bind)
+            try {
+                return withContext(NonCancellable) {
+                    KcodeProfileHost(initial, initialProfileId(), factory, management, commands,
+                        overlayAvailable = overlayAvailable, templateProvider = templates).also { host ->
+                        commands.bind(host)
+                        (initial.owner as? KcodePluginRuntime)?.publishProductExecution()
+                    }
+                }
+            } catch (error: Throwable) {
+                withContext(NonCancellable) {
+                    runCatching { initial.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                    runCatching { commands.close() }.exceptionOrNull()?.takeIf { it !== error }?.let(error::addSuppressed)
+                }
+                throw error
+            }
         }
     }
 }
