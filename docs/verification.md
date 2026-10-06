@@ -442,3 +442,28 @@ The updated APK was installed over the existing physical-phone application witho
 its data. Its original `native` Profile successfully published the next generation and the
 normal chat UI was observed with no recovery or compatibility error; retained API 76 releases
 remain in that generation. This is upgrade/startup evidence, not document-picker acceptance.
+
+## Published Cordis snapshot integration
+
+Cordis Profile composition and package metadata changes were merged into `main` at
+`644d2a8`. The [publication workflow](https://github.com/meteor149/cordis-kotlin/actions/runs/37490790647)
+passed its tests and published the complete `0.0.1-SNAPSHOT` distribution with build timestamp
+`20261006.155201`. Local Cordis verification passed 184 tests and Gradle plugin validation.
+
+Kcode validation used published Maven artifacts without `cordisSource` or an included Cordis
+build. The resolved Core, HMR, Include, Loader, Packages and Timer JVM JAR SHA-1 values were
+compared with the newly published artifacts and all matched. `allTests`, desktop platform
+tests, desktop host compilation and Android debug assembly passed: 1,136 multiplatform cases
+and 225 desktop platform cases, with no failures, errors or skipped cases.
+
+This run exposed missing SDK exports for the default palette and typography helpers moved
+into `libraries/ui`. API 79 exports their two file facades explicitly, retains the compatible
+API floor of 76, and keeps theme implementation classes private. The real-JAR UI test checks
+shared helper identity and private implementation identity. The settings contribution test
+now checks the plugin-only section and rejects a Profile section before and after withdrawal.
+
+The resulting APK was installed over the existing physical-phone application without
+clearing data. Cold startup reached the normal conversation interface. Opening the independent
+manager displayed its plugin management interface, and reopening the main launcher returned
+to the conversation task rather than showing the manager. These device checks cover upgrade,
+startup and launcher separation; document-picker plugin import was not exercised in this run.

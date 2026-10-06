@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 
 class NativeProfileUiHostTest {
     @Test
-    fun actualPackagedManagementContributionWithdrawsAndReturnsWithFreshState(): Unit = runBlocking {
+    fun actualPackagedPluginSettingsWithdrawAndReturnWithFreshState(): Unit = runBlocking {
         val home = Files.createTempDirectory("kcode-profile-ui-host")
         lateinit var slots: KcodeUiSlots
         lateinit var client: ProfileManagementClient
@@ -32,7 +32,8 @@ class NativeProfileUiHostTest {
             }, Unit)
         val host = createDesktopProfileHost(homeDirectory = home, profile = KcodePluginProfile(overrides = listOf(capture)))
         try {
-            val section = slots.snapshot().settingsSections.single { it.id == "profiles" }
+            val section = slots.snapshot().settingsSections.single { it.id == "plugins" }
+            assertTrue(slots.snapshot().settingsSections.none { it.id == "profiles" })
             assertTrue(host.pluginManager.installed().any { it.id == "provider.ui.settings.profiles" })
             val committed = FileProfileRepository(home.resolve("profiles").toFile()).loadCommitted("native")!!
             assertEquals("2", committed.bundles.single { it.id == "kcode.default-ui" }.version)
@@ -64,9 +65,10 @@ class NativeProfileUiHostTest {
                     committed.definition.patches.size)
             } finally { session.close() }
             host.pluginManager.setEnabled("provider.ui.settings.profiles", false)
-            assertTrue(slots.snapshot().settingsSections.none { it.id == "profiles" })
+            assertTrue(slots.snapshot().settingsSections.none { it.id == "plugins" || it.id == "profiles" })
             host.pluginManager.setEnabled("provider.ui.settings.profiles", true)
-            val restored = slots.snapshot().settingsSections.single { it.id == "profiles" }
+            val restored = slots.snapshot().settingsSections.single { it.id == "plugins" }
+            assertTrue(slots.snapshot().settingsSections.none { it.id == "profiles" })
             assertNotSame(section, restored)
         } finally {
             host.close()
