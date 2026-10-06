@@ -36,7 +36,7 @@ import org.cordis.include.CompositionResult
 /** Metadata commands never mount providers. Activation stays with the native runtime owner. */
 class ProfileManagement private constructor(
     private val repository: ProfileGenerationRepository,
-    private val bundles: () -> List<ProfileBundle>,
+    private val bundles: suspend () -> List<ProfileBundle>,
     private val prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     private val exportReview: ProfileExportReview,
     private val exportReviews: ProfileExportReviewFactory? = null,
@@ -45,27 +45,27 @@ class ProfileManagement private constructor(
 ) {
     constructor(
         repository: ProfileGenerationRepository,
-        bundles: () -> List<ProfileBundle>,
+        bundles: suspend () -> List<ProfileBundle>,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, ProfileExportReview { null })
 
     constructor(
         repository: ProfileGenerationRepository,
-        bundles: () -> List<ProfileBundle>,
+        bundles: suspend () -> List<ProfileBundle>,
         exportReview: ProfileExportReview,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, exportReview)
 
     constructor(
         repository: ProfileGenerationRepository,
-        bundles: () -> List<ProfileBundle>,
+        bundles: suspend () -> List<ProfileBundle>,
         exportReviews: ProfileExportReviewFactory,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
     ) : this(repository, bundles, prepare, ProfileExportReview { null }, exportReviews)
 
     constructor(
         repository: ProfileGenerationRepository,
-        bundles: () -> List<ProfileBundle>,
+        bundles: suspend () -> List<ProfileBundle>,
         exportReviews: ProfileExportReviewFactory,
         bundlePrepare: suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument,
         prepare: suspend (ProfileActivationRequest) -> ProfileActivation,
@@ -73,7 +73,7 @@ class ProfileManagement private constructor(
 
     constructor(
         repository: ProfileGenerationRepository,
-        bundles: () -> List<ProfileBundle>,
+        bundles: suspend () -> List<ProfileBundle>,
         exportReviews: ProfileExportReviewFactory,
         bundlePrepare: suspend (List<ProfileBundleArchiveReference>, String, String) -> PortableProfileDocument,
         archiveTransport: ProfileArchiveTransport,
@@ -195,7 +195,9 @@ class ProfileManagement private constructor(
         val intent = loadProfileIntent(repository, target)
         var result = try {
             ProfileCompiler().compile(intent.definition, profileIntentBundles(intent, bundles()))
-        } catch (error: IllegalArgumentException) {
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             CompositionResult(emptyList(), listOf(CompositionDiagnostic("composition", -1, target.profileId,
                 error.message ?: "Profile compilation failed")), emptyMap())
         }

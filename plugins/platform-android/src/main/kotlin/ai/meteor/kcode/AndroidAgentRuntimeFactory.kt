@@ -27,6 +27,7 @@ import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.PreparedProfileRuntime
 import ai.meteor.kcode.plugin.ProfileRuntimeFactory
+import ai.meteor.kcode.plugin.NativeProfilePreparation
 import ai.meteor.kcode.plugin.ProfileCommandGateway
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.api.AndroidPluginHostInputs
@@ -125,7 +126,7 @@ suspend fun createAndroidProfileHost(
         }
     } else emptyList()
     val nativeProfile = profile.copy(overrides = profile.overrides + nativeOverrides)
-    val pluginDirectory = Files.createDirectories(activity.filesDir.toPath().resolve("cordis_plugins")).toFile()
+    val pluginDirectory = File(activity.filesDir, "cordis_plugins")
     val featurePlugins = listOf(kcodePlugin(
         PluginDescriptor("provider.plugin-packages.platform", "builtin", "native", setOf("pluginPackages")),
         NativePluginPackagesPlugin(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity)), Unit,
@@ -138,20 +139,14 @@ suspend fun createAndroidProfileHost(
         PluginDescriptor("policy.shell-mode.platform", "builtin", "native", setOf("shellMode")),
         HostShellModeInputPlugin(), modeProvider,
     ))
-    val bundled = if (!profile.includeDefaults) emptyList() else stageBundledPackageCatalog(pluginDirectory, host = androidPackageHost()) { name ->
-        activity.assets.open(name)
-    }.filter { it.id != "policy.shell-mode.platform" || settingsBackedShell }
-        .filter { it.id != "policy.notifications.permission.android" || permissionHost != null }
-        .filter { it.id != "provider.tool-approvals.native" || toolCallApprover == null }
-        .filter { it.id != "provider.interaction.platform" || settingsBackedInteraction }
-        .filter { it.id != "provider.settings.platform" || settingsStore == null }
-        .filter { it.id != "provider.history.platform" || historyRepository == null }
     val legacyStore = FilePluginCompositionStore(pluginDirectory)
     val repository = FileProfileRepository(File(activity.filesDir, "cordis_profiles"))
-    lateinit var catalogue: Set<String>
-    var startupReached = false
+    lateinit var preparation: NativeProfilePreparation
     var startupProfileId = profileId ?: "native"
     suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
+        val snapshot = preparation.prepare()
+        val catalogue = snapshot.modules
+        val bundled = snapshot.configuration.bundledPackages
         val bundles = nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList())
         val resolver = NativePluginPackageResolver(pluginDirectory, androidPackageHost(), artifactVerifier = androidPackageVerifier(activity))
         val offers = profileImportedOffers(repository, requestedId ?: repository.selected() ?: "native", request?.target,
@@ -188,8 +183,7 @@ suspend fun createAndroidProfileHost(
         )
     }
     val startup = ProfileStartupFactory { modules ->
-        catalogue = modules.map { it.descriptor.id }.toSet()
-        startupReached = true
+        check(modules.map { it.descriptor.id }.toSet() == preparation.snapshot.modules) { "Native module catalogue changed" }
         startupProfileId = profileId ?: repository.selected() ?: "native"
         prepare()
     }
@@ -198,20 +192,32 @@ suspend fun createAndroidProfileHost(
         permissionHost != null -> AndroidPluginHostInputs(activity, permissionHost)
         else -> AndroidPluginHostInputs(activity)
     }
-    val configuration = KcodePluginRuntimeConfig(
-        bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
-        profileStartup = startup,
-        profileBuiltinModules = nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" },
-        profileModuleFactories = availableModuleFactories,
-        interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover ?: ToolCallApprover { false }),
-        settingsBackedInteraction = settingsBackedInteraction,
-        profile = nativeProfile,
-        settingsStore = settingsStore,
-        historyRepository = historyRepository,
-        featurePlugins = nativeFeaturePlugins.filter { it.descriptor.id == "provider.plugin-packages.platform" } + commands.pluginMount(),
-        pluginCompositionStore = legacyStore,
-        dynamicPluginControllerFactory = androidPluginControllerFactory(activity, pluginDirectory),
-    )
+    preparation = NativeProfilePreparation {
+        Files.createDirectories(pluginDirectory.toPath())
+        val bundled = if (!profile.includeDefaults) emptyList() else stageBundledPackageCatalog(pluginDirectory, host = androidPackageHost()) { name ->
+            activity.assets.open(name)
+        }.filter { it.id != "policy.shell-mode.platform" || settingsBackedShell }
+            .filter { it.id != "policy.notifications.permission.android" || permissionHost != null }
+            .filter { it.id != "provider.tool-approvals.native" || toolCallApprover == null }
+            .filter { it.id != "provider.interaction.platform" || settingsBackedInteraction }
+            .filter { it.id != "provider.settings.platform" || settingsStore == null }
+            .filter { it.id != "provider.history.platform" || historyRepository == null }
+        KcodePluginRuntimeConfig(
+            bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
+            profileStartup = startup,
+            profileBuiltinModules = nativeFeaturePlugins.filterNot { it.descriptor.id == "provider.plugin-packages.platform" },
+            profileModuleFactories = availableModuleFactories,
+            interactionPolicy = InteractionPolicy(permissionModeProvider, toolCallApprover ?: ToolCallApprover { false }),
+            settingsBackedInteraction = settingsBackedInteraction,
+            profile = nativeProfile,
+            settingsStore = settingsStore,
+            historyRepository = historyRepository,
+            featurePlugins = nativeFeaturePlugins.filter { it.descriptor.id == "provider.plugin-packages.platform" } + commands.pluginMount(),
+            pluginCompositionStore = legacyStore,
+            dynamicPluginControllerFactory = androidPluginControllerFactory(activity, pluginDirectory),
+        )
+    }
+
     fun facade(runtime: KcodePluginRuntime) = KcodeAgentRuntime(
         chatService = runtime.chatService,
         conversationOverlayController = runtime.conversationOverlayController,
@@ -221,11 +227,12 @@ suspend fun createAndroidProfileHost(
     )
     suspend fun prepared(id: String, request: ProfileActivationRequest? = null): PreparedProfileRuntime {
         val activation = prepare(id, staging = true, request = request)
+        val snapshot = preparation.snapshot
         return PreparedProfileRuntime(activation) {
-            facade(KcodePluginRuntime.create(configuration.copy(
+            facade(KcodePluginRuntime.create(snapshot.configuration.copy(
                 hostInputs = hostInputs(),
                 profileStartup = ProfileStartupFactory { modules ->
-                    check(modules.map { it.descriptor.id }.toSet() == catalogue) { "Native module catalogue changed" }
+                    check(modules.map { it.descriptor.id }.toSet() == snapshot.modules) { "Native module catalogue changed" }
                     activation
                 },
             )))
@@ -235,8 +242,11 @@ suspend fun createAndroidProfileHost(
         override suspend fun prepare(id: String) = prepared(id)
         override suspend fun prepare(request: ProfileActivationRequest) = prepared(request.target.profileId, request)
     }
+    fun nativeBundles() = preparation.snapshot.let { snapshot ->
+        nativeProfileBundles((snapshot.modules - availableModuleFactories.keys + snapshot.configuration.bundledPackages.map { it.id }).toList())
+    }
     val management = ProfileManagement(repository,
-        { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
+        { preparation.prepare(); nativeBundles() },
         ProfilePackageExportReviews { spec -> NativePluginPackageResolver(pluginDirectory, androidPackageHost(),
             artifactVerifier = androidPackageVerifier(activity)).profileExportSchema(spec) },
         { archives, id, name ->
@@ -246,14 +256,11 @@ suspend fun createAndroidProfileHost(
                 .prepare(archives.map { ProfileBundleArchiveInput(File(it.archivePath), it.sha256) }, id, name)
         },
         ProfileArchiveExchange(pluginDirectory, androidPackageHost(), NativePluginPackageResolver(pluginDirectory, androidPackageHost(),
-            artifactVerifier = androidPackageVerifier(activity)), { catalogue }),
+            artifactVerifier = androidPackageVerifier(activity)), { preparation.prepare().modules }),
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
-        overlayAvailable = true, canRecover = { startupReached }, templates = {
-            listOf(nativeProfileTemplate(nativeProfileBundles(
-                (catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList(),
-            ), profile.includeDefaults))
-        }) {
-        facade(KcodePluginRuntime.create(configuration.copy(hostInputs = hostInputs())))
+        overlayAvailable = true, templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }) {
+        startupProfileId = profileId ?: repository.selected() ?: "native"
+        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(hostInputs = hostInputs())))
     }
 }

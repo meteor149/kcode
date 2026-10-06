@@ -117,13 +117,13 @@ class NativeProfileHostTest {
             }, Unit)
         }
         try {
-            assertFailsWith<IllegalArgumentException> {
-                createDesktopProfileHost(homeDirectory = home, profile = profile,
-                    moduleFactories = mapOf("provider.ui.compose" to { original }))
-            }
-            assertFailsWith<IllegalArgumentException> {
-                createDesktopProfileHost(homeDirectory = home, profile = profile,
-                    moduleFactories = mapOf("example.wrong" to factory))
+            listOf(mapOf("provider.ui.compose" to { original }), mapOf("example.wrong" to factory)).forEach { invalid ->
+                val failed = createDesktopProfileHost(homeDirectory = home, profile = profile, moduleFactories = invalid)
+                try {
+                    assertEquals(ProfileHostPhase.RecoveryRequired, failed.state.value.phase)
+                    assertTrue(failed.state.value.failure is IllegalArgumentException)
+                    assertEquals(null, assertNotNull(failed.profileCommands).catalogue().activeProfileId)
+                } finally { failed.close() }
             }
             assertEquals(0, originalLive)
             assertEquals(0, alternateLive)

@@ -106,8 +106,8 @@ class KcodeProfileHost(
         initialFailure,
     ))
     private var startupRetirement: AgentRuntimeOwner? = null
-    private val templateSnapshot by lazy {
-        try {
+    private fun templateSnapshot(): Pair<List<ProfileDefinition>, Exception?> {
+        return try {
             val definitions = templateProvider().map {
                 Json.decodeFromString(ProfileDefinition.serializer(), Json.encodeToString(ProfileDefinition.serializer(), it))
                     .also(ProfileDefinition::validate)
@@ -120,8 +120,8 @@ class KcodeProfileHost(
             emptyList<ProfileDefinition>() to error
         }
     }
-    val profileTemplates: List<ProfileDefinition> get() = templateSnapshot.first
-    val profileTemplateFailure: Exception? get() = templateSnapshot.second
+    val profileTemplates: List<ProfileDefinition> get() = templateSnapshot().first
+    val profileTemplateFailure: Exception? get() = templateSnapshot().second
     val state: StateFlow<ProfileHostState> = mutableState.asStateFlow()
     val profileCommands: ProfileManagementClient? get() = commandGateway
     private var foreground = true

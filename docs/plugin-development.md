@@ -20,6 +20,13 @@ configuration uses the typed default; explicit configuration retains its scalar/
 identity and validator. Opaque legacy mounts support their default configuration only. Portable
 Profile data cannot contain Kotlin implementation objects, callbacks or arbitrary graphs.
 
+Native alternate module factories return lazy definitions and may be consulted during metadata
+preparation before any product exists. Do not allocate resources in those factories. Successful
+preflight definitions are consumed once by the first product; later allocations obtain fresh
+definitions. Directory/catalogue preparation failures leave a host recovery surface and can be
+retried explicitly after their cause is repaired. Preview never applies provider effects.
+
+
 ## Portable Profile configuration
 
 SDK 74 exposes `importArchive(ProfileArchiveImport(...))` and

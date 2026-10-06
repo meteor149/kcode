@@ -183,6 +183,15 @@ class AndroidProfileRecoveryUiTest {
 
     @Test(timeout = 120_000)
     fun startupFailureCanBeRepairedAndActivatedThroughTheHostSurface(): Unit = runBlocking {
+        startupRecoverySurface(failCatalogue = false)
+    }
+
+    @Test(timeout = 120_000)
+    fun moduleCatalogueFailureCanBeRepairedThroughTheHostSurface(): Unit = runBlocking {
+        startupRecoverySurface(failCatalogue = true)
+    }
+
+    private suspend fun startupRecoverySurface(failCatalogue: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val directory = File(context.cacheDir, "profile-recovery-${System.nanoTime()}").apply { mkdirs() }
@@ -196,8 +205,12 @@ class AndroidProfileRecoveryUiTest {
             ProfileOperation.Insert(listOf(ProfileEntry("root", "missing.module"))),
         ))
         repository.saveDraft(broken)
+        var catalogueAvailable = !failCatalogue
+        var allocations = 0
         val modules = mapOf("example.root" to {
+            check(catalogueAvailable) { "Native module catalogue unavailable" }
             kcodePlugin(PluginDescriptor("example.root", "test", "test", emptySet()), plugin<Unit> { ctx, _ ->
+                allocations++
                 KcodeApplicationUi(ctx, ApplicationRenderer {
                     ApplicationFrame { BasicText("Recovered alternative root", Modifier.safeDrawingPadding()) }
                 })
@@ -215,6 +228,8 @@ class AndroidProfileRecoveryUiTest {
                 moduleFactories = modules)
         }
         assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+        assertEquals(0, allocations)
+        if (failCatalogue) assertEquals("Native module catalogue unavailable", host.state.value.failure?.message)
         var window: AndroidPluginWindow? = null
         lateinit var view: ComposeView
         val language = mutableStateOf("en")
@@ -254,11 +269,14 @@ class AndroidProfileRecoveryUiTest {
             }
             assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
             assertEquals(broken, repository.loadDraft("broken"))
+            assertEquals(0, allocations)
+            catalogueAvailable = true
             val repaired = broken.copy(patches = listOf(ProfileOperation.Insert(listOf(ProfileEntry("root", "example.root")))))
             setDocument(Json.encodeToString(ProfileDefinition.serializer(), repaired))
             click("Save and activate")
             awaitLabel("Recovered alternative root")
             assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            assertEquals(1, allocations)
             assertEquals(repaired, repository.loadCommitted("broken")!!.definition)
             assertEquals("broken", repository.selected())
             screenshot("profile-recovered-root.png")

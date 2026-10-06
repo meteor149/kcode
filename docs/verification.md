@@ -90,3 +90,33 @@ profile-bundle-order-device-build.log and profile-bundle-order-stable-build.log)
 This covers this Android provider/page and two ordered layers. It does not establish Desktop
 native dialogs, every selection gesture/provider, all sixteen layers, full application
 navigation or the remaining startup-recovery/background-admission audit.
+
+## Early native startup recovery
+
+`NativeProfileStartupRecoveryTest` now covers package/workspace/staging obstructions,
+unavailable repository paths, a failing alternate module factory and cancellation before
+product allocation. Draft/preview/activation commands remain host-owned; failed attempts
+preserve repository state and obstructions. Repairing the underlying temporary path permits
+retry on the same host. Preview allocates no product. Existing alternate factory count tests
+prove preflight definitions are consumed once and later products receive fresh definitions.
+
+Seventy-four Profiles and 66 native Desktop cases passed without failures/errors/skips.
+Both applications and the instrumentation APK built against unchanged SDK 74/Cordis 6a9b4e4
+(`profile-early-startup-validation.log`, `profile-early-startup-owned-validation.log`). Initial
+failed builds/runs are retained: incompatible Android fixture file helpers and duplicate
+preflight factory invocation were corrected before final validation. The final UI fixture
+APK build passed separately (`profile-early-startup-ui-build.log`).
+
+The physical Android run passed four `AndroidProfileEarlyStartupTest` cases and
+`AndroidProfileRecoveryUiTest.moduleCatalogueFailureCanBeRepairedThroughTheHostSurface`:
+`OK (5 tests)`, instrumentation code -1 (`profile-early-startup-device-validation.log`). It
+covers real filesystem obstructions, same-host retries and a real recovery window before
+catalogue construction. English/Chinese labels, invalid JSON retention and successful
+replacement-root rendering were observed. Provider allocation occurs only on activation;
+metadata remains unchanged through failed preparation/preview. The recovery screenshot was
+inspected and its shell transfer file removed.
+
+This is evidence for these path/module faults and this Android host window. It does not prove
+every storage failure, Desktop rendering/dialogs, power-loss durability, corrupt-authority
+repair, or the full autonomous/background-work admission boundary. No privileged execution
+or broad unchanged device suite was repeated in this phase.

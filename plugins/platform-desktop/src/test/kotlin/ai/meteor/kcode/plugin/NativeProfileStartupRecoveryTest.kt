@@ -22,6 +22,8 @@ import ai.meteor.kcode.plugin.api.profiles.ProfileDataScope
 import ai.meteor.kcode.plugin.profiles.FileProfileRepository
 import ai.meteor.kcode.plugin.profiles.ProfileManagement
 import java.nio.file.Files
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -37,6 +39,137 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class NativeProfileStartupRecoveryTest {
+    @Test
+    fun blockedPackageDirectoryRetainsManagementAndRetriesAfterRepair(): Unit = runBlocking {
+        blockedDirectoryRecovery("plugins", includeDefaults = false)
+    }
+
+    @Test
+    fun blockedWorkspaceRetainsManagementAndRetriesAfterRepair(): Unit = runBlocking {
+        blockedDirectoryRecovery("workspace", includeDefaults = false)
+    }
+
+    @Test
+    fun bundledStagingFailureRetainsManagementAndRetriesAfterRepair(): Unit = runBlocking {
+        blockedDirectoryRecovery("plugins/bundled-imports", includeDefaults = true)
+    }
+
+    private suspend fun blockedDirectoryRecovery(relative: String, includeDefaults: Boolean) {
+        val home = Files.createTempDirectory("kcode-early-startup")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        repository.saveDraft(definition("saved"))
+        val before = repository.state()
+        val blocked = home.resolve(relative)
+        Files.createDirectories(blocked.parent)
+        Files.writeString(blocked, "retained obstruction")
+        val host = createDesktopProfileHost(homeDirectory = home, profileId = "saved",
+            profile = KcodePluginProfile(includeDefaults = includeDefaults))
+        try {
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertNotNull(host.state.value.failure)
+            assertEquals(before, repository.state())
+            assertTrue(host.profileTemplates.isEmpty())
+            assertNotNull(host.profileTemplateFailure)
+            val client = assertNotNull(host.profileCommands)
+            assertEquals(listOf("saved"), client.catalogue().profiles.map { it.id })
+            val saved = client.writeDraft(ProfileDraftWrite(definition("repair"), before.revision, createOnly = true))
+            val request = ProfileActivationRequest(ProfileTarget("repair", ProfileSource.Draft), saved.revision)
+            val beforeRetry = repository.state()
+            assertTrue(client.preview(request.target).diagnostics.isNotEmpty())
+            assertEquals(ProfileCommandPhase.Failed, client.submit(ProfileCommand.Activate(request)).await().phase)
+            assertEquals(beforeRetry, repository.state())
+            assertEquals("retained obstruction", Files.readString(blocked))
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            Files.delete(blocked)
+            // Preview retries metadata preparation but must not allocate or activate a product.
+            assertTrue(client.preview(request.target).packagesVerified)
+            assertEquals(beforeRetry, repository.state())
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals(1, host.profileTemplates.size)
+            assertEquals(null, host.profileTemplateFailure)
+            assertEquals(ProfileCommandPhase.Succeeded, client.submit(ProfileCommand.Activate(request)).await().phase)
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+            assertEquals("repair", repository.selected())
+            assertEquals(definition("saved"), repository.loadDraft("saved"))
+        } finally { host.close(); home.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun unavailableRepositoryDirectoryCanBeRetriedWithoutRecreatingHost(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-repository-startup")
+        val blocked = home.resolve("profiles")
+        Files.writeString(blocked, "retained repository obstruction")
+        val host = createDesktopProfileHost(homeDirectory = home, profileId = "repair",
+            profile = KcodePluginProfile(includeDefaults = false))
+        try {
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            val client = assertNotNull(host.profileCommands)
+            assertFailsWith<IOException> { client.catalogue() }
+            assertEquals("retained repository obstruction", Files.readString(blocked))
+            Files.delete(blocked)
+            val catalogue = client.catalogue()
+            assertTrue(catalogue.profiles.isEmpty())
+            val saved = client.writeDraft(ProfileDraftWrite(definition("repair"), catalogue.revision, createOnly = true))
+            assertEquals(ProfileCommandPhase.Succeeded, client.submit(ProfileCommand.Activate(ProfileActivationRequest(
+                ProfileTarget("repair", ProfileSource.Draft), saved.revision,
+            ))).await().phase)
+            assertEquals(ProfileHostPhase.Ready, host.state.value.phase)
+        } finally { host.close(); home.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun failedModuleFactoryRetainsDraftsAndRetryAllocatesOnlyAfterActivation(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-catalogue-startup")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        repository.saveDraft(definition("saved", "example.module"))
+        val before = repository.state()
+        var healthy = false
+        var allocations = 0
+        val host = createDesktopProfileHost(homeDirectory = home, profileId = "saved",
+            profile = KcodePluginProfile(includeDefaults = false), moduleFactories = mapOf("example.module" to {
+                check(healthy) { "Module catalogue unavailable" }
+                kcodePlugin(PluginDescriptor("example.module", "test", "test", emptySet()), plugin<Unit> { _, _ ->
+                    allocations++
+                }, Unit)
+            }))
+        try {
+            assertEquals(ProfileHostPhase.RecoveryRequired, host.state.value.phase)
+            assertEquals("Module catalogue unavailable", host.state.value.failure?.message)
+            val client = assertNotNull(host.profileCommands)
+            assertEquals(before.revision, client.catalogue().revision)
+            val target = ProfileTarget("saved", ProfileSource.Draft)
+            assertTrue(client.preview(target).diagnostics.isNotEmpty())
+            assertEquals(0, allocations)
+            assertEquals(before, repository.state())
+            healthy = true
+            assertTrue(client.preview(target).packagesVerified)
+            assertEquals(0, allocations)
+            assertEquals(before, repository.state())
+            assertEquals(ProfileCommandPhase.Succeeded, client.submit(ProfileCommand.Activate(
+                ProfileActivationRequest(target, before.revision),
+            )).await().phase)
+            assertEquals(1, allocations)
+            assertEquals("saved", repository.selected())
+        } finally { host.close(); home.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun cancelledModuleCatalogueIsNotConvertedToRecoveryHost(): Unit = runBlocking {
+        val home = Files.createTempDirectory("kcode-catalogue-cancellation")
+        val repository = FileProfileRepository(home.resolve("profiles").toFile())
+        repository.saveDraft(definition("saved"))
+        val before = repository.state()
+        try {
+            assertFailsWith<CancellationException> {
+                createDesktopProfileHost(homeDirectory = home, profileId = "saved",
+                    profile = KcodePluginProfile(includeDefaults = false), moduleFactories = mapOf("example.module" to {
+                        throw CancellationException("Catalogue preparation cancelled")
+                    }))
+            }
+            assertEquals(before, repository.state())
+        } finally { home.toFile().deleteRecursively() }
+    }
+
     @Test
     fun unavailableTemplateDoesNotWithdrawStartupRecoveryMetadata(): Unit = runBlocking {
         val home = Files.createTempDirectory("kcode-template-metadata")

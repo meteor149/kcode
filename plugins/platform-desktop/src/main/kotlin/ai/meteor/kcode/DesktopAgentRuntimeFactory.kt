@@ -28,6 +28,7 @@ import ai.meteor.kcode.plugin.KcodePluginRuntimeConfig
 import ai.meteor.kcode.plugin.KcodeProfileHost
 import ai.meteor.kcode.plugin.PreparedProfileRuntime
 import ai.meteor.kcode.plugin.ProfileRuntimeFactory
+import ai.meteor.kcode.plugin.NativeProfilePreparation
 import ai.meteor.kcode.plugin.ProfileCommandGateway
 import ai.meteor.kcode.plugin.profiles.ProfileActivation
 import ai.meteor.kcode.plugin.api.DesktopPluginHostInputs
@@ -78,12 +79,8 @@ suspend fun createDesktopProfileHost(
 ): KcodeProfileHost {
     val availableModuleFactories = moduleFactories.toMap()
     val commands = ProfileCommandGateway()
-    val workspace = Files.createDirectories(
-        homeDirectory.resolve("workspace"),
-    ).toRealPath()
-    val pluginDirectory = Files.createDirectories(
-        homeDirectory.resolve("plugins"),
-    ).toFile()
+    val workspace = homeDirectory.resolve("workspace")
+    val pluginDirectory = homeDirectory.resolve("plugins").toFile()
     val nativeProfile = profile
     val featurePlugins = listOf(
         kcodePlugin(
@@ -91,16 +88,14 @@ suspend fun createDesktopProfileHost(
             NativePluginPackagesPlugin(pluginDirectory, desktopPackageHost()), Unit,
         ),
     ) + commands.pluginMount()
-    lateinit var catalogue: Set<String>
-    var startupReached = false
+    lateinit var preparation: NativeProfilePreparation
     var startupProfileId = profileId ?: "native"
     val legacyStore = FilePluginCompositionStore(pluginDirectory)
     val repository = FileProfileRepository(homeDirectory.resolve("profiles").toFile())
-    val bundled = if (!profile.includeDefaults) emptyList() else stageBundledPackageCatalog(pluginDirectory, host = desktopPackageHost()) { name ->
-        checkNotNull(NativePluginPackagesPlugin::class.java.classLoader.getResourceAsStream(name)) { "Missing bundled plugin resource '$name'" }
-    }.filter { it.id != "provider.settings.platform" || settingsStore == null }
-        .filter { it.id != "provider.history.platform" || historyRepository == null }
     suspend fun prepare(requestedId: String? = profileId, staging: Boolean = false, request: ProfileActivationRequest? = null): ProfileActivation {
+        val snapshot = preparation.prepare()
+        val catalogue = snapshot.modules
+        val bundled = snapshot.configuration.bundledPackages
         val bundles = nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList())
         val resolver = NativePluginPackageResolver(pluginDirectory, desktopPackageHost())
         val offers = profileImportedOffers(repository, requestedId ?: repository.selected() ?: "native", request?.target,
@@ -115,7 +110,7 @@ suspend fun createDesktopProfileHost(
                         else homeDirectory.resolve("profile-data").resolve(key).resolve(filename)).toAbsolutePath().toString()
                 }
                 val workspaceKey = profileDataScopeKey(definition.id, definition.dataScope.workspace)
-                val cwd = if (definition.dataScope.workspace == "default") workspace else
+                val cwd = if (definition.dataScope.workspace == "default") workspace.toRealPath() else
                     Files.createDirectories(homeDirectory.resolve("workspaces").resolve(workspaceKey)).toRealPath()
                 val configs = mapOf(
                     "provider.settings.platform" to dataFile(definition.dataScope.settings, "settings.preferences_pb"),
@@ -136,28 +131,36 @@ suspend fun createDesktopProfileHost(
         )
     }
     val startup = ProfileStartupFactory { modules ->
-        catalogue = modules.map { it.descriptor.id }.toSet()
-        startupReached = true
+        check(modules.map { it.descriptor.id }.toSet() == preparation.snapshot.modules) { "Native module catalogue changed" }
         startupProfileId = profileId ?: repository.selected() ?: "native"
         prepare()
     }
-    val configuration = KcodePluginRuntimeConfig(
-        bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
-        profileStartup = startup,
-        profileModuleFactories = availableModuleFactories,
-        interactionPolicy = InteractionPolicy(
-            approver = ToolCallApprover { false },
-        ),
-        settingsBackedInteraction = true,
-        profile = nativeProfile,
-        settingsStore = settingsStore,
-        historyRepository = historyRepository,
-        featurePlugins = featurePlugins,
-        pluginCompositionStore = legacyStore,
-        dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
-            DesktopDynamicPluginController(context, loader, inventory, pluginDirectory)
-        },
-    )
+    preparation = NativeProfilePreparation {
+        Files.createDirectories(pluginDirectory.toPath())
+        Files.createDirectories(workspace)
+        val bundled = if (!profile.includeDefaults) emptyList() else stageBundledPackageCatalog(pluginDirectory, host = desktopPackageHost()) { name ->
+            checkNotNull(NativePluginPackagesPlugin::class.java.classLoader.getResourceAsStream(name)) { "Missing bundled plugin resource '$name'" }
+        }.filter { it.id != "provider.settings.platform" || settingsStore == null }
+            .filter { it.id != "provider.history.platform" || historyRepository == null }
+        KcodePluginRuntimeConfig(
+            bundledPackages = bundled.map { BundledPluginPackage(it.id, it.release) },
+            profileStartup = startup,
+            profileModuleFactories = availableModuleFactories,
+            interactionPolicy = InteractionPolicy(
+                approver = ToolCallApprover { false },
+            ),
+            settingsBackedInteraction = true,
+            profile = nativeProfile,
+            settingsStore = settingsStore,
+            historyRepository = historyRepository,
+            featurePlugins = featurePlugins,
+            pluginCompositionStore = legacyStore,
+            dynamicPluginControllerFactory = DynamicPluginControllerFactory { context, loader, inventory ->
+                DesktopDynamicPluginController(context, loader, inventory, pluginDirectory)
+            },
+        )
+    }
+
     fun facade(runtime: KcodePluginRuntime) = KcodeAgentRuntime(
         chatService = runtime.chatService,
         pluginManager = runtime.pluginManager,
@@ -166,11 +169,12 @@ suspend fun createDesktopProfileHost(
     )
     suspend fun prepared(id: String, request: ProfileActivationRequest? = null): PreparedProfileRuntime {
         val activation = prepare(id, staging = true, request = request)
+        val snapshot = preparation.snapshot
         return PreparedProfileRuntime(activation) {
-            facade(KcodePluginRuntime.create(configuration.copy(
+            facade(KcodePluginRuntime.create(snapshot.configuration.copy(
                 hostInputs = DesktopPluginHostInputs(applicationWindow),
                 profileStartup = ProfileStartupFactory { modules ->
-                    check(modules.map { it.descriptor.id }.toSet() == catalogue) { "Native module catalogue changed" }
+                    check(modules.map { it.descriptor.id }.toSet() == snapshot.modules) { "Native module catalogue changed" }
                     activation
                 },
             )))
@@ -180,21 +184,21 @@ suspend fun createDesktopProfileHost(
         override suspend fun prepare(id: String) = prepared(id)
         override suspend fun prepare(request: ProfileActivationRequest) = prepared(request.target.profileId, request)
     }
+    fun nativeBundles() = preparation.snapshot.let { snapshot ->
+        nativeProfileBundles((snapshot.modules - availableModuleFactories.keys + snapshot.configuration.bundledPackages.map { it.id }).toList())
+    }
     val management = ProfileManagement(repository,
-        { nativeProfileBundles((catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList()) },
+        { preparation.prepare(); nativeBundles() },
         ProfilePackageExportReviews { spec -> NativePluginPackageResolver(pluginDirectory, desktopPackageHost()).profileExportSchema(spec) },
         { archives, id, name ->
             ProfileBundleArchive(pluginDirectory, desktopPackageHost(), NativePluginPackageResolver(pluginDirectory, desktopPackageHost()))
                 .prepare(archives.map { ProfileBundleArchiveInput(File(it.archivePath), it.sha256) }, id, name)
         },
-        ProfileArchiveExchange(pluginDirectory, desktopPackageHost(), NativePluginPackageResolver(pluginDirectory, desktopPackageHost()), { catalogue }),
+        ProfileArchiveExchange(pluginDirectory, desktopPackageHost(), NativePluginPackageResolver(pluginDirectory, desktopPackageHost()), { preparation.prepare().modules }),
         { request -> prepare(request.target.profileId, staging = true, request = request) })
     return KcodeProfileHost.start({ startupProfileId }, factory, management, commands,
-        canRecover = { startupReached }, templates = {
-            listOf(nativeProfileTemplate(nativeProfileBundles(
-                (catalogue - availableModuleFactories.keys + bundled.map { it.id }).toList(),
-            ), profile.includeDefaults))
-        }) {
-        facade(KcodePluginRuntime.create(configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow))))
+        templates = { listOf(nativeProfileTemplate(nativeBundles(), profile.includeDefaults)) }) {
+        startupProfileId = profileId ?: repository.selected() ?: "native"
+        facade(KcodePluginRuntime.create(preparation.prepare().configuration.copy(hostInputs = DesktopPluginHostInputs(applicationWindow))))
     }
 }

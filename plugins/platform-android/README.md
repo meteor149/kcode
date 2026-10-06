@@ -49,7 +49,8 @@ The Plugin API 66 stable manager also exposes draft/clone/preview/history comman
 revision-checked activation of committed, draft or historical intent. The dedicated device
 suite exercises draft activation and historical restoration with actual APK providers;
 historical restoration appends a generation and preserves the Profile workspace.
-Management UI and independent recovery UI remain pending.
+The native application links independent recovery UI and optional `ui-profiles` settings
+management; rendering and selected-file verification are recorded separately.
 The common host exposes metadata and explicit activation in RecoveryRequired, independently
 of the withdrawn product tree. Desktop recovery tests do not prove this path on an Android
 device or recover failures that happen before initial host construction.
@@ -70,4 +71,14 @@ the host binds; do not await readiness from apply. Injected clients submit detac
 edit or module-selection commands synchronously, then observe their host-owned handles. Accepted
 work survives the submitting provider's withdrawal. Old clients reject new calls; explicit
 cancellation after publication retains the committed result. The host's `profileCommands` client
-remains available for metadata/activation after failed restoration. UI remains optional/pending.
+remains available for metadata/activation after failed restoration. Default Profile UI remains optional.
+
+Directory preparation, bundled staging and module factory/catalogue errors now return a
+`RecoveryRequired` host before any product allocation. Repository and legacy store directories
+open on use rather than in constructors. Host metadata commands remain available when storage
+is readable, and report unavailable storage without deleting/resetting it. Explicit preview
+or activation retries unsuccessful native preparation after the underlying cause is repaired.
+Preparation shares catalogue validation with runtime creation and never applies providers;
+only a complete successful snapshot is retained. Failed template queries are retried after
+preparation succeeds. Cancellation still closes the gateway and propagates; compatibility
+runtime factories still require a ready product and rethrow failed startup.

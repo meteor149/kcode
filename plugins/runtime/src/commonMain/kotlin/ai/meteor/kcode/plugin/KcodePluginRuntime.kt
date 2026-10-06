@@ -1334,22 +1334,32 @@ class KcodePluginRuntime private constructor(
             }
         }
 
-        private suspend fun createOwned(config: KcodePluginRuntimeConfig): KcodePluginRuntime {
+        /** Validates a native catalogue without creating a Context or applying any plugin. */
+        fun prepareProfileModuleCatalogue(config: KcodePluginRuntimeConfig): List<KcodePluginMount> {
+            require(config.profileStartup != null || config.profileActivation != null) { "Declarative Profile startup is required" }
+            validateProfileConfiguration(config)
+            val slots = MutableStateFlow(UiContributionsSnapshot())
+            val defaults = defaultModules(config, slots, ConversationOverlayHostState(slots.asStateFlow()))
+            return profileModules(config, defaults).values.toList()
+        }
+
+        private fun validateProfileConfiguration(config: KcodePluginRuntimeConfig) {
             require(config.profile.overrides.map { it.descriptor.id }.distinct().size == config.profile.overrides.size) { "Duplicate Profile override" }
             require(config.profileBuiltinModules.map { it.descriptor.id }.distinct().size == config.profileBuiltinModules.size) { "Duplicate Profile builtin module" }
             require(config.profileActivation == null || (config.profile.disabled.isEmpty() && config.profile.overrides.isEmpty())) {
                 "Legacy Profile overrides cannot be combined with a declarative Profile"
             }
             require(config.profileActivation == null || config.profileStartup == null) { "Choose one Profile startup source" }
-            val overlayUiSlots = MutableStateFlow(UiContributionsSnapshot())
-            val overlayHostState = ConversationOverlayHostState(overlayUiSlots.asStateFlow())
-            val mounts = linkedMapOf<String, KcodePluginMount>()
-            fun add(mount: KcodePluginMount) {
-                val id = mount.descriptor.id
-                require(id.isNotBlank() && id !in BootstrapIds) { "invalid product plugin id '$id'" }
-                require(mounts.put(id, mount) == null) { "duplicate plugin id '$id'" }
-            }
-            val defaults = if (config.profileActivation == null && config.profile.includeDefaults) (config.bundle ?: nativePluginBundle(NativePluginServices(
+            require(config.bundledPackages.map { it.id }.distinct().size == config.bundledPackages.size) { "Duplicate bundled plugin identity" }
+            require(config.bundledPackages.all { it.id.isNotBlank() && it.id !in BootstrapIds }) { "Invalid bundled plugin identity" }
+        }
+
+        private fun defaultModules(
+            config: KcodePluginRuntimeConfig,
+            overlayUiSlots: MutableStateFlow<UiContributionsSnapshot>,
+            overlayHostState: ConversationOverlayHostState,
+        ): List<KcodePluginMount> {
+            return if (config.profileActivation == null && config.profile.includeDefaults) (config.bundle ?: nativePluginBundle(NativePluginServices(
                 interactionPolicy = config.interactionPolicy,
                 settingsBackedInteraction = config.settingsBackedInteraction,
                 skillRuntime = config.skillRuntime,
@@ -1366,6 +1376,12 @@ class KcodePluginRuntime private constructor(
                 conversationOverlayHostState = overlayHostState,
                 packagedProviderIds = config.bundledPackages.map { it.id }.toSet(),
             ))) else emptyList()
+        }
+
+        private fun profileModules(
+            config: KcodePluginRuntimeConfig,
+            defaults: List<KcodePluginMount>,
+        ): LinkedHashMap<String, KcodePluginMount> {
             val profileModules = linkedMapOf<String, KcodePluginMount>()
             if (config.profileStartup != null || config.profileActivation != null) {
                 defaults.filterNot { it.descriptor.id == "provider.plugin-installations.platform" }.forEach { module ->
@@ -1389,7 +1405,23 @@ class KcodePluginRuntime private constructor(
                     require(module.descriptor.id == id) { "Alternate module factory identity mismatch for '$id'" }
                     profileModules[id] = module
                 }
-            } else {
+            }
+            return profileModules
+        }
+
+        private suspend fun createOwned(config: KcodePluginRuntimeConfig): KcodePluginRuntime {
+            validateProfileConfiguration(config)
+            val overlayUiSlots = MutableStateFlow(UiContributionsSnapshot())
+            val overlayHostState = ConversationOverlayHostState(overlayUiSlots.asStateFlow())
+            val mounts = linkedMapOf<String, KcodePluginMount>()
+            fun add(mount: KcodePluginMount) {
+                val id = mount.descriptor.id
+                require(id.isNotBlank() && id !in BootstrapIds) { "invalid product plugin id '$id'" }
+                require(mounts.put(id, mount) == null) { "duplicate plugin id '$id'" }
+            }
+            val defaults = defaultModules(config, overlayUiSlots, overlayHostState)
+            val profileModules = profileModules(config, defaults)
+            if (config.profileStartup == null && config.profileActivation == null) {
                 require(config.profileModuleFactories.isEmpty()) { "Alternate modules require declarative Profile startup" }
                 defaults.forEach(::add)
             }
@@ -1412,8 +1444,6 @@ class KcodePluginRuntime private constructor(
                 require(id in mounts || config.bundledPackages.any { it.id == id }) { "override refers to unknown plugin '$id'" }
                 mounts[id] = mount
             }
-            require(config.bundledPackages.map { it.id }.distinct().size == config.bundledPackages.size) { "Duplicate bundled plugin identity" }
-            require(config.bundledPackages.all { it.id.isNotBlank() && it.id !in BootstrapIds }) { "Invalid bundled plugin identity" }
             val bundled = if (activation != null) emptyList() else config.bundledPackages.filterNot { it.id in overrideIds }
             val bundledIds = bundled.map { it.id }.toSet()
             bundledIds.forEach(mounts::remove)

@@ -30,7 +30,7 @@ class ProfileArchiveExchange(
     private val directory: File,
     private val host: PackageHost,
     private val resolver: PluginPackageResolver,
-    private val builtinModules: () -> Set<String> = { emptySet() },
+    private val builtinModules: suspend () -> Set<String> = { emptySet() },
 ) : ProfileArchiveTransport {
     override suspend fun prepareArchive(input: ProfileArchiveReference, id: String, displayName: String) =
         prepare(ProfileBundleArchiveInput(File(input.archivePath), input.sha256), id, displayName, builtinModules())

@@ -54,17 +54,22 @@ runtime rather than a retained old owner. Each allocation receives fresh host in
 Native hosts also expose explicit activation through the SDK plugin manager.
 
 The suspending Profile-host factories retain host-owned management in RecoveryRequired when
-initial Profile preparation or product allocation fails after native catalogue construction.
+directory preparation, bundled-package staging, module catalogue construction, Profile preparation
+or product allocation fails. Repository directories open lazily on metadata access, so an
+unavailable path does not prevent construction of the recovery host.
 No initial product runtime is required to query metadata, repair a draft or submit activation.
 Failed startup resource retirement is retained and must complete before recovery allocates a
 target; incomplete initial tree retirement may require process restart. Cancellation closes
 the unbound command gateway and joins allocated resources rather than returning a recovery host.
-Invalid native module-factory configuration remains a construction error.
+Invalid native module-factory configuration is reported as a startup failure before product
+allocation. Failed native metadata preparation is retried by explicit preview/activation;
+only a fully validated catalogue is retained. Preview never applies providers. Templates
+unavailable during initial preparation are queried again after successful preparation.
 
 The compatibility createDesktopKoogChatRuntime/createAndroidKoogChatRuntime functions still
 require successful initial startup: they close a failed host and rethrow its startup failure.
 The shipped applications use the suspending Profile-host factories and the host-linked
-`profile-recovery-ui` surface. Startup failures after catalogue construction show their cause,
+`profile-recovery-ui` surface. Startup failures show their cause,
 saved Profile choices and an editable JSON definition. Users can save/discard repairs, activate
 saved intent, or save and activate. Committed selections are read from their exact generation;
 drafts do not require compiling the broken tree. The surface preserves dirty write revisions
@@ -80,8 +85,10 @@ clones still use the neutral management contract. No shared SDK contract changed
 The host surface's recovery/edit/activation flow and English/Chinese defaults were verified
 in an actual Android window on a physical ARM64/API 36 device under SDK 71. This targeted
 case does not establish desktop rendering or every touch/keyboard route.
-Failure before catalogue construction,
-bundled-package staging failure and repair of corrupt repository authority remain outstanding.
+If the repository itself is unavailable, metadata commands report that error until its path
+is repaired; the host and recovery surface still exist. No repair silently removes an
+obstruction or resets persisted authority. Explicit repair of corrupt repository authority
+remains outstanding.
 
 In `RecoveryRequired`, host-owned catalogue/draft/clone/delete/preview/history commands remain
 available without the product tree. The catalogue reports no active Profile; the durable selection

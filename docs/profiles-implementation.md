@@ -1,5 +1,48 @@
 # Profile implementation
 
+## Early native startup recovery
+
+Native factories now build directory/catalogue configuration inside the Profile host startup
+boundary. A shared `NativeProfilePreparation` retains only successfully validated metadata;
+failed preparation is retried by explicit preview or activation. Catalogue validation is shared
+with runtime construction and creates no Context or provider effects. Alternate definitions
+created by preflight are consumed once by the first product; subsequent products call the
+original factories for fresh definitions. Native configuration errors therefore remain visible
+without an active product rather than throwing before host creation.
+
+Profile repository and legacy composition directories open on use, with repository opening
+on the I/O dispatcher. Unavailable storage reports failure without deleting an obstruction or
+resetting authority; a failed lazy initialization can be retried after the path is repaired.
+Draft commands remain available independently of native preparation when storage is readable.
+Preview and complete-archive preparation use suspending catalogue suppliers. Failed preview
+preparation returns diagnostics, cancellation propagates, and templates are queried again after
+successful preparation. Compatibility runtime factories still close/rethrow failed startup.
+SDK 74/shared exports and Cordis 6a9b4e4 are unchanged.
+
+Concentrated local validation passed 74 Profiles tests and 66 native Desktop tests with zero
+failures/errors/skips. Desktop cases include package/workspace/staging/repository obstructions,
+failed module factories, cancellation, retirement failures, stable command admission, fresh
+alternate-definition counts, actual Bundle archives and 15 real package integration cases.
+Both applications and the instrumentation APK built successfully. The first build exposed
+Android test use of unavailable Java file helpers; compatible file I/O corrected the fixture.
+The next run exposed a real duplicate alternate-factory call in preflight; one-use definitions
+fixed it while retaining the existing per-product count assertions.
+
+Physical Android validation passed five cases, `OK (5 tests)` and instrumentation code -1.
+Four native cases cover package directory, Bundle staging, repository path and module factory
+failure/retry with preserved metadata and zero provider allocations during preview. The fifth
+opens the real host recovery window before catalogue construction, checks English/Chinese
+rendering and invalid JSON handling, then repairs/activates a replacement root exactly once.
+The recovery screenshot was inspected; the shell-owned transfer copy was removed.
+
+Evidence: `profile-early-startup-validation.log`, `profile-early-startup-final-validation.log`,
+`profile-early-startup-owned-validation.log`, `profile-early-startup-ui-build.log`,
+`profile-early-startup-device-package.log` and `profile-early-startup-device-validation.log`.
+Logs and screenshot are local ignored artifacts. These cases do not simulate every I/O fault
+or establish Desktop recovery/dialog rendering. Explicit corrupt-authority repair, the full
+background execution-admission audit, remaining feature export schemas and completion audit
+remain outstanding; the overall Profile goal remains active.
+
 ## Complete archive commands and owned native files
 
 SDK 74 adds `ProfileArchiveImport`, `ProfileArchiveReference` and two management client

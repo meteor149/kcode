@@ -24,7 +24,8 @@ The Plugin API 66 manager exposes catalogue/draft reads, revision-checked draft 
 cloning, deletion, preview, history and activation of committed/draft/historical intent.
 Preview prepares the deployment without mounting providers. Historical activation appends a
 new generation; clones retain code intent and use separate business data scopes by default.
-Management UI and recovery UI remain pending; see the Profile guide.
+Both native applications link independent recovery UI; optional default Profile management
+is provided by `ui-profiles`. See the Profile guide for behavior and verification limits.
 After failed restoration, the retained host admits metadata/preview and explicit SDK activation
 without a product runtime. recoverTo(id) retries normal recipe activation after retiring any
 owner whose cleanup previously failed. Further closure failure prevents new allocation.
@@ -43,4 +44,14 @@ the host binds; do not await readiness from apply. Injected clients submit detac
 edit or module-selection commands synchronously, then observe their host-owned handles. Accepted
 work survives the submitting provider's withdrawal. Old clients reject new calls; explicit
 cancellation after publication retains the committed result. The host's `profileCommands` client
-remains available for metadata/activation after failed restoration. UI remains optional/pending.
+remains available for metadata/activation after failed restoration. Default Profile UI remains optional.
+
+Directory preparation, bundled staging and module factory/catalogue errors now return a
+`RecoveryRequired` host before any product allocation. Repository and legacy store directories
+open on use rather than in constructors. Host metadata commands remain available when storage
+is readable, and report unavailable storage without deleting/resetting it. Explicit preview
+or activation retries unsuccessful native preparation after the underlying cause is repaired.
+Preparation shares catalogue validation with runtime creation and never applies providers;
+only a complete successful snapshot is retained. Failed template queries are retried after
+preparation succeeds. Cancellation still closes the gateway and propagates; compatibility
+runtime factories still require a ready product and rethrow failed startup.

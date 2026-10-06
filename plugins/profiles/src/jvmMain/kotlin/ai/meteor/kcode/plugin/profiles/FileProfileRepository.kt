@@ -30,19 +30,22 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** Immutable generations become visible only through one atomically replaced authority file. */
 class FileProfileRepository(directory: File) : ProfileGenerationRepository {
-    private val root = Files.createDirectories(directory.toPath()).toRealPath()
-    private val mutex = processLocks.computeIfAbsent(root) { Mutex() }
+    private val root by lazy { Files.createDirectories(directory.toPath()).toRealPath() }
+    private val mutex get() = processLocks.computeIfAbsent(root) { Mutex() }
     private val json = Json { prettyPrint = true; encodeDefaults = true }
 
-    private suspend fun <T> access(atomic: Boolean = false, block: () -> T): T = mutex.withLock {
-        withContext(if (atomic) Dispatchers.IO + NonCancellable else Dispatchers.IO) {
-            val lockFile = root.resolve("repository.lock")
-            checkFile(lockFile)
-            FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
-                channel.lock().use { block() }
+    private suspend fun <T> access(atomic: Boolean = false, block: () -> T): T =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                withContext(if (atomic) Dispatchers.IO + NonCancellable else Dispatchers.IO) {
+                    val lockFile = root.resolve("repository.lock")
+                    checkFile(lockFile)
+                    FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
+                        channel.lock().use { block() }
+                    }
+                }
             }
         }
-    }
 
     private fun profileDirectory(id: String, create: Boolean = false): Path {
         ProfileDefinition(id = id).validate()
