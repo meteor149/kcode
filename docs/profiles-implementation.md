@@ -1,5 +1,24 @@
 # Profile implementation
 
+## Reviewed JSON theme configuration
+
+The owning UI theme release now declares export permission for all supported JSON sections:
+colors, extendedColors, spacing, radius, size, glass, overlay and fontScale. Explicit roles
+and deployment ranges replace the former Unit-only permission. The private export dialect
+adds a closed hex-color string format; arbitrary strings, unknown formats/properties and
+out-of-range values remain denied. ConfigValidator retains relational/runtime validation.
+The exact locked release supplies its metadata; historical Unit-only rules remain unchanged.
+No exported SDK contract or shared package identity changed; ABI remains 76.
+
+The first consolidated validation passed 83 Profiles tests and two real-JAR schema cases;
+its separate acceptance-verifier case failed on the newly discovered saved-selection fixture
+assumption. That assumption was corrected without changing the theme implementation. The
+final run passed the verifier, two theme tests and both app builds. The native export case
+activates full JSON theme overrides, compares JSON/complete archive intent and rejects
+hidden arbitrary color text, unknown color keys and numeric overflow without changing authority.
+Logs are recorded in verification.md. Android compilation is not physical-device evidence;
+desktop dialogs and final Profile acceptance remain outstanding.
+
 ## Synchronous generation handoff failure
 
 A closed real generation runner can throw before returning a Job, after response preparation

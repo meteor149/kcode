@@ -45,6 +45,7 @@ class ProfileExportSchema private constructor(
         val required: Set<String> = emptySet(),
         val additionalProperties: Rule? = null,
         val maxLength: Int? = null,
+        val format: String? = null,
         val minimum: Double? = null,
         val maximum: Double? = null,
     ) {
@@ -61,6 +62,7 @@ class ProfileExportSchema private constructor(
             }
             require(type == "object" || properties.isEmpty() && required.isEmpty() && additionalProperties == null) { "Invalid export schema properties" }
             require(if (type == "string") maxLength != null && maxLength in 1..65536 else maxLength == null) { "Invalid export string limit" }
+            require(format == null || type == "string" && format == "hex-color") { "Invalid export string format" }
             require(required.all { it in properties } && properties.keys.all(String::isNotBlank)) { "Invalid required export properties" }
             properties.values.forEach { it.validate(depth + 1) }
             additionalProperties?.validate(depth + 1)
@@ -76,7 +78,8 @@ class ProfileExportSchema private constructor(
                 number.isFinite() && number in requireNotNull(minimum)..requireNotNull(maximum)
             } == true
             "enum" -> value in values.orEmpty()
-            "string" -> value is JsonPrimitive && value.isString && value.content.length <= requireNotNull(maxLength)
+            "string" -> value is JsonPrimitive && value.isString && value.content.length <= requireNotNull(maxLength) &&
+                (format == null || value.content.matches(Regex("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?")))
             "object" -> value is JsonObject && required.all { it in value } && value.all { (key, item) ->
                 (properties[key] ?: additionalProperties)?.accepts(item) == true
             }

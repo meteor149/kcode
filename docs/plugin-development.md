@@ -74,8 +74,11 @@ Numbers require finite inclusive `minimum` and `maximum` bounds. Integers may de
 bounds; bounded integer endpoints must be whole numbers within the exact JSON integer range
 (-9007199254740991..9007199254740991). Numeric strings are never coerced.
 Every shipped provider declares explicit Unit export permission in its owning module.
-Model temperature bounds and subagent concurrency additionally declare bounded JSON fields;
-other JSON configuration requires its own feature declaration. Implicit defaults do not
+Model temperature bounds, subagent concurrency and UI theme configuration additionally
+declare bounded JSON fields. Theme colors use string rules with maxLength and the fixed
+`format: "hex-color"`; RGB/ARGB hex values are accepted and arbitrary strings are rejected.
+Unknown formats fail closed; arbitrary regular-expression schemas are not supported.
+Other JSON configuration requires its own feature declaration. Implicit defaults do not
 contain opaque configuration and do not need to be converted to explicit Unit patches.
 This is export permission, not a replacement for ConfigValidator. Do not declare credentials,
 host paths or arbitrary implementation graphs portable. Feature fields that contain text

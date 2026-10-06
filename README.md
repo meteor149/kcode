@@ -154,6 +154,8 @@ SDK 73 imports ordered external Bundle archives with verified embedded code into
 
 SDK 74 imports and exports complete committed Profile archives with frozen layers and exact code. Native file actions consume owned temporary files; imports create isolated drafts and rebuild target-host deployment locks only after code verification. See [committed archives](docs/profile-archives.md).
 
+JSON theme configuration is portable through exact-release export review, with explicit color roles and bounded design fields; hidden invalid values are rejected. See the [theme module](plugins/ui-theme/README.md).
+
 Publish Bundle archives with `:plugins:profiles:packProfileBundle` and a JSON request. The shared native writer generates manifests and verifies code containers without execution; see [publishing](docs/profile-bundle-publishing.md).
 
 SDK 72 exposes revision-checked portable Profile import/export through the neutral management client. Import creates an isolated draft with frozen Bundle/package intent; activation remains explicit. The optional Profile screen uses native file pickers for import/export. Export reviews committed/historical configuration against the generation's verified package metadata. Goal, Web Search and Localization declare portable configuration rules; other unreviewed values remain denied.

@@ -13,6 +13,22 @@ import kotlin.test.assertNull
 
 class ProfileExportSchemaTest {
     @Test
+    fun boundedHexColorsDenyArbitraryStringsAndUnknownFormats() {
+        val schema = parse("""{"formatVersion":1,"fields":{"config":{"json":{"type":"string","maxLength":9,"format":"hex-color"}}}}""")
+        for (color in listOf("#123abc", "#Ff123456")) {
+            val value = JsonPrimitive(color)
+            assertEquals(value, schema.review(input(value)))
+        }
+        for (color in listOf("red", "secret", "#12345", "#1234567", "#GG123456", "#123456789", "#123456\n")) {
+            assertNull(schema.review(input(JsonPrimitive(color))))
+        }
+        for (rule in listOf("""{"type":"string","maxLength":9,"format":"regex"}""",
+            """{"type":"number","minimum":0,"maximum":1,"format":"hex-color"}""")) {
+            assertFailsWith<IllegalArgumentException> { parse("""{"formatVersion":1,"fields":{"config":{"json":$rule}}}""") }
+        }
+    }
+
+    @Test
     fun boundedNumbersPreserveDecimalsAndDenyStringsOverflowAndInvalidBounds() {
         val schema = parse("""{"formatVersion":1,"fields":{"config":{"json":{"type":"object","properties":{"temperature":{"type":"number","minimum":0,"maximum":2},"concurrency":{"type":"integer","minimum":1,"maximum":64}}}}}}""")
         val value = Json.parseToJsonElement("""{"temperature":0.25,"concurrency":64}""")

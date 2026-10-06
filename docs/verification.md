@@ -5,6 +5,25 @@ source/package compatibility, not successful activation, platform authorization 
 Record the exact source commit, targets, test counts and relevant limitations in the topic guide.
 Do not include credentials, device identifiers or private data in committed evidence.
 
+## Reviewed theme configuration export
+
+The exact UI theme release declares bounded JSON roles/fields in its profile-export schema.
+The private review dialect supports only the fixed hex-color string format, preserving
+RGB/ARGB data and rejecting arbitrary text, invalid color lengths and unknown formats.
+ProfileExportSchemaTest checks these outcomes without changing exported SDK ABI 76.
+
+profile-theme-export-and-acceptance-validation.log passed all 83 Profiles tests and both
+NativeProfileExportSchemaTest cases. The actual packaged native composition activates JSON
+colors, extended colors, spacing/radius/size/glass/overlay/fontScale, preserves the frozen
+recipe through JSON and complete archive export, and denies invalid color strings, unknown
+roles and out-of-range spacing hidden under later valid overrides. The same suite's separate
+acceptance-verifier test failed on its saved-selection assumption; the build therefore failed.
+
+profile-theme-export-and-acceptance-final-validation.log passed the corrected backend verifier,
+two theme tests, desktop compilation and Android assembly. Unchanged successful Profile/schema
+cases were not repeated. These logs remain ignored local evidence. No selected-file native
+roundtrip or physical Android schema test was performed in this phase.
+
 ## Desktop acceptance launcher and verifier
 
 The explicit platform-desktop profileDesktopAcceptance task creates an isolated native host
