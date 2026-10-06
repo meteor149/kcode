@@ -1,5 +1,29 @@
 # Desktop platform and Profile startup
 
+## Interactive native acceptance
+
+Run `gradlew.bat :plugins:platform-desktop:profileDesktopAcceptance` with the appropriate
+`-PcordisSource=...` checkout. This explicit task opens the shipped application root/settings
+with its real packaged Profile contribution; ordinary unit tests never open this window.
+It prints a fresh isolated `PROFILE_ACCEPTANCE_HOME` and retains that directory for review.
+No user `.kcode` data is read or modified.
+
+In Settings / Profiles (the initial product language can be Chinese), select committed `native`.
+Use the native Save dialogs to export `native.kcode-profile.json` and `native.kprofile` into
+the printed directory. Use native Open dialogs to import those selected files as `desktop-json`
+and `desktop-archive`, respectively. Do not activate either draft. Close the test window after
+completing the exchange. Passing requires `PROFILE_ACCEPTANCE_PASSED` and Gradle success;
+closing early or cancelling the required file exchange fails acceptance.
+
+The launcher disables Compose's process-exit shortcut, allowing post-window checks and host
+closure to execute. Checks preserve the initial generation and saved selection (which may be
+null), compare JSON/archive documents to reviewed intent, validate archive payloads through
+Cordis, and require both verified draft imports without commits. The backend verifier test
+covers incomplete/wrong files and a complete API-generated exchange. That test does not prove
+dialog gestures or selection, and its result must not be reported as native UI acceptance.
+The initial interactive attempt was interrupted before exchange and produced no passing marker;
+its pre-fix Gradle success is not valid acceptance evidence.
+
 This module supplies verified JAR loading, native package preparation and SDK host adapters.
 `createDesktopKoogChatRuntime` accepts `profileId` and `homeDirectory` (default `.kcode`).
 An explicit Profile ID takes precedence over saved selection and the `native` template.

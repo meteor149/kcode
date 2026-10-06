@@ -5,6 +5,26 @@ source/package compatibility, not successful activation, platform authorization 
 Record the exact source commit, targets, test counts and relevant limitations in the topic guide.
 Do not include credentials, device identifiers or private data in committed evidence.
 
+## Desktop acceptance launcher and verifier
+
+The explicit platform-desktop profileDesktopAcceptance task creates an isolated native host
+and renders the shipped root/settings/Profile contribution. It requires selected JSON and
+complete archive exports/imports, verifies artifacts and unchanged generation/selection after
+window closure, then closes the host. Compose exitProcessOnExit is false so closure cannot
+skip checks and return a false Gradle success. Initial saved selection may legitimately be null.
+
+The initial live attempt was interrupted by physical Escape before file exchange. Its old
+launcher terminated before checks, so profile-desktop-native-acceptance.log is not a passing
+acceptance result and contains no PROFILE_ACCEPTANCE_PASSED marker. Computer Use was not
+resumed. Real native file interaction remains outstanding.
+
+ProfileDesktopAcceptanceVerifierTest uses API-produced artifacts to check missing JSON,
+missing archive, missing/partial imports, complete verified exchange and changed JSON. The
+initial test exposed the incorrect non-null selection assumption; the final corrected case
+passed in profile-theme-export-and-acceptance-final-validation.log alongside native app builds.
+This is backend verifier evidence, not native dialog acceptance. Direct window-close behavior
+with the revised launcher still needs interactive evidence.
+
 ## Synchronous generation handoff rejection
 
 The retained-runner reproduction failed both new cases before the fix: startResponse threw

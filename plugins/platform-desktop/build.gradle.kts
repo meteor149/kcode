@@ -21,6 +21,7 @@ dependencies {
     runtimeOnly(compose.desktop.currentOs)
     testImplementation(project(":plugins:default-ui-api"))
     testImplementation(project(":plugins:ui-profiles"))
+    testImplementation(project(":plugins:profile-recovery-ui"))
     testImplementation("org.jetbrains.compose.material3:material3:1.8.2")
     testImplementation(project(":plugins:markdown"))
     testImplementation(project(":plugins:agent-loop"))
@@ -129,3 +130,12 @@ sourceSets.main {
     resources.srcDir(rootProject.layout.buildDirectory.dir("bundled"))
 }
 tasks.processResources { dependsOn(":stageBundledPlugins") }
+
+// Explicit interactive acceptance; never starts a window during ordinary unit tests.
+tasks.register<JavaExec>("profileDesktopAcceptance") {
+    group = "verification"
+    description = "Open an isolated native Profile host and verify selected-file JSON/archive round trips on close"
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("ai.meteor.kcode.plugin.ProfileDesktopAcceptance")
+}
