@@ -76,6 +76,7 @@ jobs:
           ./gradlew :apps:androidApp:assembleRelease
           -PreleaseVersion="$RELEASE_VERSION"
           -PreleaseVersionCode="$RELEASE_VERSION_CODE"
+          --refresh-dependencies
           --stacktrace
       - name: Verify and stage APK
         shell: bash
@@ -140,6 +141,7 @@ jobs:
         run: >-
           ./gradlew :apps:desktopApp:${{ matrix.task }}
           -PreleaseVersion="$RELEASE_VERSION"
+          --refresh-dependencies
           --stacktrace
       - name: Upload desktop package
         uses: actions/upload-artifact@v7
